@@ -1,0 +1,53 @@
+# Build outputs
+/build/
+/out/
+/bin/
+/obj/
+*.o
+*.obj
+*.lo
+*.la
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+*.exe
+*.pdb
+*.ilk
+
+# CMake files
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+compile_commands.json
+
+# IDE / Editor
+.vscode/
+.idea/
+*.iml
+.DS_Store
+Thumbs.db
+
+# Logs / temp
+*.log
+*.tmp
+*.swp
+*.swo
+
+# Coverage / analysis
+lcov.info
+*.gcno
+*.gcda
+*.profraw
+*.profdata
+
+# Generated jars/stubs
+rt.jar
+/stubs/**/*.class
+
+# Local runtime artifacts
+*.pid
+*.lock
+
