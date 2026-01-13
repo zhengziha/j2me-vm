@@ -1,0 +1,3 @@
+/Users/zhengzihang/my-src/j2me-vm/build/CMakeFiles/j2me-vm.dir
+/Users/zhengzihang/my-src/j2me-vm/build/CMakeFiles/edit_cache.dir
+/Users/zhengzihang/my-src/j2me-vm/build/CMakeFiles/rebuild_cache.dir

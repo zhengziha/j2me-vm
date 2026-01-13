@@ -1,0 +1,1 @@
+public class Point { public int x; public int y; public Point() { x = 10; y = 20; } public void print() { System.out.println(x + y); } public static void main(String[] args) { Point p = new Point(); p.print(); } }
