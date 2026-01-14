@@ -1,4 +1,5 @@
 #include "JarLoader.hpp"
+#include "../core/Logger.hpp"
 #include <iostream>
 
 namespace j2me {
@@ -15,7 +16,7 @@ bool JarLoader::load(const std::string& path) {
     int error = 0;
     archive = zip_open(path.c_str(), ZIP_RDONLY, &error);
     if (!archive) {
-        std::cerr << "Failed to open JAR: " << path << " Error code: " << error << std::endl;
+        LOG_ERROR("Failed to open JAR: " + path + " Error code: " + std::to_string(error));
         return false;
     }
     jarPath = path;

@@ -1,0 +1,2 @@
+This is a test resource file for the J2ME emulator.
+It should be loaded successfully by the ResourceTest application.

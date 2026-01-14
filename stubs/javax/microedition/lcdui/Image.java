@@ -23,6 +23,6 @@ public class Image {
     
     private static native int createImageNative(String name);
     
-    public int getWidth() { return 100; } // Mock
-    public int getHeight() { return 100; } // Mock
+    public native int getWidth();
+    public native int getHeight();
 }

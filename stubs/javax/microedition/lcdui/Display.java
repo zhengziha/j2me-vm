@@ -2,14 +2,12 @@ package javax.microedition.lcdui;
 import javax.microedition.midlet.MIDlet;
 
 public class Display {
-    private static Display instance;
     private Displayable current;
 
     private Display() {}
 
     public static Display getDisplay(MIDlet m) {
-        if (instance == null) instance = new Display();
-        return instance;
+        return new Display();
     }
 
     public void setCurrent(Displayable nextDisplayable) {

@@ -3,6 +3,7 @@
 #include "ClassParser.hpp"
 #include "HeapManager.hpp"
 #include "NativeRegistry.hpp"
+#include "Logger.hpp"
 #include <iostream>
 
 namespace j2me {
@@ -25,14 +26,17 @@ std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& classNam
     
     // Check if file exists
     if (!jarLoader.hasFile(path)) {
-        // Check system loader if available
-        if (systemLoader && systemLoader->hasFile(path)) {
-             auto data = systemLoader->getFile(path);
+        // Check stub loader if available
+        if (stubLoader && stubLoader->hasFile(path)) {
+             LOG_DEBUG("[Interpreter] Loading " + className + " from stub loader");
+             auto data = stubLoader->getFile(path);
              if (data) {
                  try {
                      ClassParser parser;
                      auto rawFile = parser.parse(*data);
                      auto javaClass = std::make_shared<JavaClass>(rawFile);
+                     
+                     LOG_DEBUG("[Interpreter] Parsed " + className + " from stub, fields=" + std::to_string(rawFile->fields.size()));
                      
                      if (rawFile->super_class != 0) {
                          auto superInfo = std::dynamic_pointer_cast<ConstantClass>(rawFile->constant_pool[rawFile->super_class]);
@@ -52,7 +56,7 @@ std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& classNam
                      loadedClasses[className] = javaClass;
                      return javaClass;
                  } catch (const std::exception& e) {
-                     std::cerr << "Failed to parse system class " << className << ": " << e.what() << std::endl;
+                     LOG_ERROR("Failed to parse stub class " + className + ": " + e.what());
                  }
              }
         }
@@ -62,6 +66,7 @@ std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& classNam
              // Return a dummy ClassFile for Object so we stop recursion
              auto dummy = std::make_shared<ClassFile>();
              dummy->this_class = 0; // Invalid, but we won't read it
+             
              // We need to construct a minimal valid JavaClass
              auto javaClass = std::make_shared<JavaClass>(dummy);
              javaClass->name = "java/lang/Object";
@@ -102,13 +107,161 @@ std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& classNam
              loadedClasses[className] = javaClass;
              return javaClass;
         }
+
+        // Mock java/lang/StringBuilder to ensure we use our Native implementation
+        if (className == "java/lang/StringBuilder") {
+             auto dummy = std::make_shared<ClassFile>();
+             auto javaClass = std::make_shared<JavaClass>(dummy);
+             javaClass->name = "java/lang/StringBuilder";
+             javaClass->instanceSize = 0; // We use fields vector dynamically
+             
+             // Helper to add method
+             auto addMethod = [&](const std::string& name, const std::string& desc) {
+                 MethodInfo m;
+                 m.access_flags = 0x0101; // ACC_PUBLIC | ACC_NATIVE
+                 
+                 auto nameConst = std::make_shared<ConstantUtf8>(); nameConst->tag = CONSTANT_Utf8; nameConst->bytes = name;
+                 dummy->constant_pool.push_back(nameConst);
+                 m.name_index = dummy->constant_pool.size() - 1;
+                 
+                 auto descConst = std::make_shared<ConstantUtf8>(); descConst->tag = CONSTANT_Utf8; descConst->bytes = desc;
+                 dummy->constant_pool.push_back(descConst);
+                 m.descriptor_index = dummy->constant_pool.size() - 1;
+                 
+                 dummy->methods.push_back(m);
+             };
+
+             addMethod("<init>", "()V");
+             addMethod("append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;");
+             addMethod("append", "(I)Ljava/lang/StringBuilder;");
+             addMethod("append", "(Ljava/lang/Object;)Ljava/lang/StringBuilder;");
+             addMethod("toString", "()Ljava/lang/String;");
+
+             loadedClasses[className] = javaClass;
+             return javaClass;
+        }
+
+        // Mock java/io/InputStream for resource loading
+        if (className == "java/io/InputStream") {
+             auto dummy = std::make_shared<ClassFile>();
+             auto javaClass = std::make_shared<JavaClass>(dummy);
+             javaClass->name = "java/io/InputStream";
+             javaClass->instanceSize = 1; // One field for native stream ID
+             
+             // Helper to add method
+             auto addMethod = [&](const std::string& name, const std::string& desc) {
+                 MethodInfo m;
+                 m.access_flags = 0x0101; // ACC_PUBLIC | ACC_NATIVE
+                 
+                 auto nameConst = std::make_shared<ConstantUtf8>(); nameConst->tag = CONSTANT_Utf8; nameConst->bytes = name;
+                 dummy->constant_pool.push_back(nameConst);
+                 m.name_index = dummy->constant_pool.size() - 1;
+                 
+                 auto descConst = std::make_shared<ConstantUtf8>(); descConst->tag = CONSTANT_Utf8; descConst->bytes = desc;
+                 dummy->constant_pool.push_back(descConst);
+                 m.descriptor_index = dummy->constant_pool.size() - 1;
+                 
+                 dummy->methods.push_back(m);
+             };
+
+             addMethod("read", "()I");
+             addMethod("read", "([B)I");
+             addMethod("close", "()V");
+
+             loadedClasses[className] = javaClass;
+             return javaClass;
+        }
+
+        // Mock java/lang/String for string operations
+        if (className == "java/lang/String") {
+             auto dummy = std::make_shared<ClassFile>();
+             auto javaClass = std::make_shared<JavaClass>(dummy);
+             javaClass->name = "java/lang/String";
+             javaClass->instanceSize = 3; // Three fields: value, offset, count
+             
+             // Helper to add field
+             auto addField = [&](const std::string& name, const std::string& desc, uint16_t access_flags) {
+                 FieldInfo f;
+                 f.access_flags = access_flags;
+                 
+                 auto nameConst = std::make_shared<ConstantUtf8>(); nameConst->tag = CONSTANT_Utf8; nameConst->bytes = name;
+                 dummy->constant_pool.push_back(nameConst);
+                 f.name_index = dummy->constant_pool.size() - 1;
+                 
+                 auto descConst = std::make_shared<ConstantUtf8>(); descConst->tag = CONSTANT_Utf8; descConst->bytes = desc;
+                 dummy->constant_pool.push_back(descConst);
+                 f.descriptor_index = dummy->constant_pool.size() - 1;
+                 
+                 dummy->fields.push_back(f);
+                 LOG_DEBUG("[Mock String] Added field: " + name + " desc=" + desc + " total fields=" + std::to_string(dummy->fields.size()));
+             };
+             
+             // Add fields
+             addField("value", "[B", 0x0002); // private byte[] value
+             addField("offset", "I", 0x0002); // private int offset
+             addField("count", "I", 0x0002); // private int count
+             
+             // Manually set fieldOffsets since we're not calling link()
+             javaClass->fieldOffsets["value"] = 0;
+             javaClass->fieldOffsets["offset"] = 1;
+             javaClass->fieldOffsets["count"] = 2;
+             
+             LOG_DEBUG("[Mock String] Created mock String class with fieldOffsets size=" + std::to_string(javaClass->fieldOffsets.size()) + " rawFile->fields.size()=" + std::to_string(dummy->fields.size()));
+             
+             // Helper to add method
+             auto addMethod = [&](const std::string& name, const std::string& desc) {
+                 MethodInfo m;
+                 m.access_flags = 0x0101; // ACC_PUBLIC | ACC_NATIVE
+                 
+                 auto nameConst = std::make_shared<ConstantUtf8>(); nameConst->tag = CONSTANT_Utf8; nameConst->bytes = name;
+                 dummy->constant_pool.push_back(nameConst);
+                 m.name_index = dummy->constant_pool.size() - 1;
+                 
+                 auto descConst = std::make_shared<ConstantUtf8>(); descConst->tag = CONSTANT_Utf8; descConst->bytes = desc;
+                 dummy->constant_pool.push_back(descConst);
+                 m.descriptor_index = dummy->constant_pool.size() - 1;
+                 
+                 dummy->methods.push_back(m);
+             };
+
+             addMethod("<init>", "()V");
+             addMethod("getBytes", "()[B");
+
+             loadedClasses[className] = javaClass;
+             return javaClass;
+        }
+
+        // Mock array classes for byte arrays
+        if (className == "[B") {
+             auto dummy = std::make_shared<ClassFile>();
+             auto javaClass = std::make_shared<JavaClass>(dummy);
+             javaClass->name = "[B";
+             javaClass->instanceSize = 0; // Arrays use dynamic field storage
+             
+             loadedClasses[className] = javaClass;
+             return javaClass;
+        }
+
+        // Mock array classes for String arrays
+        if (className == "[Ljava/lang/String;") {
+             auto dummy = std::make_shared<ClassFile>();
+             auto javaClass = std::make_shared<JavaClass>(dummy);
+             javaClass->name = "[Ljava/lang/String;";
+             javaClass->instanceSize = 0; // Arrays use dynamic field storage
+             
+             loadedClasses[className] = javaClass;
+             return javaClass;
+        }
         
-        std::cerr << "Class not found: " << className << std::endl;
-        return nullptr;
+        LOG_ERROR("Class not found: " + className);
+        throw std::runtime_error("Class not found: " + className);
     }
 
     auto data = jarLoader.getFile(path);
-    if (!data) return nullptr;
+    if (!data) {
+        LOG_ERROR("Class not found: " + className);
+        throw std::runtime_error("Class not found: " + className);
+    }
 
     try {
         ClassParser parser;
@@ -143,18 +296,58 @@ std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& classNam
         }
 
         loadedClasses[className] = javaClass;
+        
+        // Load all referenced classes from constant pool (for dependencies)
+        LOG_DEBUG("[Interpreter] Loading dependencies for: " + className);
+        for (const auto& cpEntry : rawFile->constant_pool) {
+            if (cpEntry && cpEntry->tag == CONSTANT_Class) {
+                auto classInfo = std::dynamic_pointer_cast<ConstantClass>(cpEntry);
+                if (classInfo) {
+                    if (classInfo->name_index > 0 && classInfo->name_index <= rawFile->constant_pool.size()) {
+                        auto nameInfo = std::dynamic_pointer_cast<ConstantUtf8>(rawFile->constant_pool[classInfo->name_index - 1]);
+                        if (nameInfo) {
+                            std::string refClassName = nameInfo->bytes;
+                            // Skip self and java/lang/Object (already handled)
+                            // Also skip array types (start with '[')
+                            if (refClassName != className && refClassName != "java/lang/Object" && !refClassName.empty() && refClassName[0] != '[') {
+                                LOG_DEBUG("[Interpreter]   Checking dependency: " + refClassName);
+                                // Only load if not already loaded
+                                if (loadedClasses.find(refClassName) == loadedClasses.end()) {
+                                    try {
+                                        resolveClass(refClassName);
+                                    } catch (const std::exception& e) {
+                                        LOG_ERROR("[Interpreter] Warning: Failed to load dependency " + refClassName + ": " + e.what());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Initialize the class (execute <clinit>)
+        initializeClass(javaClass);
+        
         return javaClass;
     } catch (const std::exception& e) {
-        std::cerr << "Failed to parse class " << className << ": " << e.what() << std::endl;
-        return nullptr;
+        LOG_ERROR("Failed to parse class " + className + ": " + e.what());
+        throw;
     }
 }
 
 std::optional<JavaValue> Interpreter::execute(std::shared_ptr<StackFrame> frame) {
     if (!frame) return std::nullopt;
     
-    // std::cerr << "Entering method: " << frame->methodInfo.name_index << std::endl; 
-    // Need proper name resolution to be useful
+    // Get method name for logging
+    std::string methodName = "<unknown>";
+    if (frame->method.name_index > 0 && frame->method.name_index <= frame->classFile->constant_pool.size()) {
+        auto nameInfo = std::dynamic_pointer_cast<ConstantUtf8>(frame->classFile->constant_pool[frame->method.name_index]);
+        if (nameInfo) {
+            methodName = nameInfo->bytes;
+        }
+    }
+    LOG_DEBUG("[Interpreter] Entering method: " + methodName);
     
     // Code attribute
     // We need to parse it from attributes if not cached
@@ -173,32 +366,82 @@ std::optional<JavaValue> Interpreter::execute(std::shared_ptr<StackFrame> frame)
     
     if (code.empty()) {
         // Native?
-        // std::cerr << "No code attribute (native?)" << std::endl;
+        LOG_DEBUG("[Interpreter] No code attribute (native?) for method: " + methodName);
         return std::nullopt;
     }
 
     util::DataReader codeReader(code);
     
+    LOG_DEBUG("[Interpreter] Starting execution, code size: " + std::to_string(code.size()) + " bytes");
+    
     while (codeReader.tell() < code.size()) {
         try {
             std::optional<JavaValue> ret;
-            if (executeInstruction(frame, codeReader, ret)) {
-                return ret;
+            bool shouldContinue = executeInstruction(frame, codeReader, ret);
+            LOG_DEBUG("[Interpreter] executeInstruction returned: " + std::string(shouldContinue ? "true" : "false") + " at PC " + std::to_string(codeReader.tell()));
+            if (!shouldContinue) {
+                LOG_DEBUG("[Interpreter] Stopping execution (return instruction or error)");
+                if (ret) {
+                    LOG_DEBUG("[Interpreter] Returning value from method");
+                    return ret;
+                }
+                return std::nullopt;
             }
         } catch (const std::exception& e) {
-            std::cerr << "Runtime Exception: " << e.what() << std::endl;
+            LOG_ERROR("Runtime Exception: " + std::string(e.what()));
             // Print stack trace or context
-            std::cerr << "Method context: " << frame->classFile->this_class << std::endl; // Not very helpful without names
+            LOG_DEBUG("Method context: " + std::to_string(frame->classFile->this_class)); // Not very helpful without names
             throw; // Re-throw to propagate
         }
     }
     
+    LOG_DEBUG("[Interpreter] Execution completed normally");
     return std::nullopt;
+}
+
+void Interpreter::initializeClass(std::shared_ptr<JavaClass> cls) {
+    if (cls->initialized) {
+        return;
+    }
+    
+    // Prevent circular initialization
+    if (cls->initializing) {
+        LOG_DEBUG("[Interpreter] Class already being initialized: " + cls->name);
+        return;
+    }
+    
+    cls->initializing = true;
+    LOG_DEBUG("[Interpreter] Initializing class: " + cls->name);
+    
+    // First, initialize superclass if exists
+    if (cls->superClass) {
+        initializeClass(cls->superClass);
+    }
+    
+    // Find and execute <clinit> method
+    for (const auto& method : cls->rawFile->methods) {
+        auto name = std::dynamic_pointer_cast<ConstantUtf8>(cls->rawFile->constant_pool[method.name_index]);
+        if (name && name->bytes == "<clinit>") {
+            LOG_DEBUG("[Interpreter] Executing <clinit> for: " + cls->name);
+            try {
+                auto frame = std::make_shared<StackFrame>(method, cls->rawFile);
+                execute(frame);
+            } catch (const std::exception& e) {
+                LOG_ERROR("[Interpreter] Error executing <clinit> for " + cls->name + ": " + e.what());
+                throw;
+            }
+            break;
+        }
+    }
+    
+    cls->initialized = true;
+    cls->initializing = false;
+    LOG_DEBUG("[Interpreter] Class initialized: " + cls->name);
 }
 
 bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::DataReader& codeReader, std::optional<JavaValue>& returnVal) {
     uint8_t opcode = codeReader.readU1();
-    // std::cerr << "Opcode: 0x" << std::hex << (int)opcode << std::dec << " at PC " << (codeReader.tell()-1) << " Stack: " << frame->stackSize() << std::endl;
+    LOG_DEBUG("[Interpreter] Opcode: 0x" + std::to_string(opcode) + " at PC " + std::to_string(codeReader.tell()-1) + " Stack: " + std::to_string(frame->stackSize()));
     
     switch (opcode) {
         case OP_NOP: break;
@@ -240,7 +483,39 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
                 JavaValue val;
                 val.type = JavaValue::REFERENCE; 
                 val.strVal = strVal->bytes;
-                val.val.ref = nullptr; // Ensure no garbage pointer
+                
+                auto stringCls = resolveClass("java/lang/String");
+                if (stringCls) {
+                    auto stringObj = HeapManager::getInstance().allocate(stringCls);
+                    
+                    auto valueIt = stringCls->fieldOffsets.find("value");
+                    if (valueIt != stringCls->fieldOffsets.end()) {
+                        auto arrayCls = resolveClass("[B");
+                        if (arrayCls) {
+                            auto arrayObj = HeapManager::getInstance().allocate(arrayCls);
+                            arrayObj->fields.resize(strVal->bytes.length());
+                            for (size_t i = 0; i < strVal->bytes.length(); i++) {
+                                arrayObj->fields[i] = strVal->bytes[i];
+                            }
+                            stringObj->fields[valueIt->second] = (int64_t)arrayObj;
+                        }
+                    }
+                    
+                    auto offsetIt = stringCls->fieldOffsets.find("offset");
+                    if (offsetIt != stringCls->fieldOffsets.end()) {
+                        stringObj->fields[offsetIt->second] = 0;
+                    }
+                    
+                    auto countIt = stringCls->fieldOffsets.find("count");
+                    if (countIt != stringCls->fieldOffsets.end()) {
+                        stringObj->fields[countIt->second] = strVal->bytes.length();
+                    }
+                    
+                    val.val.ref = stringObj;
+                } else {
+                    val.val.ref = nullptr;
+                }
+                
                 frame->push(val);
             } else if (auto integer = std::dynamic_pointer_cast<ConstantInteger>(constant)) {
                 JavaValue val; val.type = JavaValue::INT; val.val.i = integer->bytes;
@@ -281,6 +556,7 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
         case OP_ALOAD: { uint8_t idx = codeReader.readU1(); frame->push(frame->getLocal(idx)); break; }
         case OP_ALOAD_0: {
             JavaValue v = frame->getLocal(0);
+            std::cout << "[OP_ALOAD_0] Loading local[0]: type=" << v.type << " ref=" << v.val.ref << std::endl;
             frame->push(v); 
             break;
         }
@@ -425,11 +701,25 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
             break;
         }
 
+        case OP_ARRAYLENGTH: {
+            JavaValue arrRef = frame->pop();
+            if (arrRef.val.ref == nullptr) throw std::runtime_error("NullPointerException");
+            
+            JavaObject* arr = (JavaObject*)arrRef.val.ref;
+            JavaValue val;
+            val.type = JavaValue::INT;
+            val.val.i = arr->fields.size();
+            frame->push(val);
+            break;
+        }
+
         // --- Objects ---
         case OP_NEW: {
             uint16_t index = codeReader.readU2();
             auto classRef = std::dynamic_pointer_cast<ConstantClass>(frame->classFile->constant_pool[index]);
             auto className = std::dynamic_pointer_cast<ConstantUtf8>(frame->classFile->constant_pool[classRef->name_index]);
+            
+            std::cout << "[OP_NEW] Creating instance of: " << className->bytes << std::endl;
             
             auto cls = resolveClass(className->bytes);
             if (!cls) {
@@ -441,6 +731,7 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
             val.type = JavaValue::REFERENCE;
             val.val.ref = obj;
             frame->push(val);
+            std::cout << "[OP_NEW] Created instance at: " << obj << std::endl;
             break;
         }
 
@@ -559,21 +850,38 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
                  auto cls = resolveClass(className->bytes);
                  if (!cls) throw std::runtime_error("Class not found: " + className->bytes);
                  
-                 // Initialize class if needed (skipped for now)
+                 // Initialize class if needed
+                 initializeClass(cls);
                  
                  auto it = cls->staticFields.find(name->bytes);
                  if (it == cls->staticFields.end()) {
                      // Default value 0/null
                      JavaValue val;
-                     val.type = JavaValue::INT; // Or REF, determined by usage context usually, but here we just push 0
-                     val.val.l = 0; 
+                     // For static fields, we need to determine type from descriptor
+                     auto descriptor = std::dynamic_pointer_cast<ConstantUtf8>(frame->classFile->constant_pool[nameAndType->descriptor_index]);
+                     if (descriptor && descriptor->bytes[0] == 'L') {
+                         // Reference type
+                         val.type = JavaValue::REFERENCE;
+                         val.val.ref = nullptr;
+                     } else {
+                         // Primitive type
+                         val.type = JavaValue::INT;
+                         val.val.i = 0;
+                     }
                      frame->push(val);
                  } else {
                      JavaValue val;
-                     // We don't know type easily without parsing descriptor, but we stored as int64_t
-                     val.val.l = it->second;
-                     // Guess type? For now just use LONG as container
-                     val.type = JavaValue::LONG; // Consumers will cast
+                     // Determine type from descriptor
+                     auto descriptor = std::dynamic_pointer_cast<ConstantUtf8>(frame->classFile->constant_pool[nameAndType->descriptor_index]);
+                     if (descriptor && descriptor->bytes[0] == 'L') {
+                         // Reference type
+                         val.type = JavaValue::REFERENCE;
+                         val.val.ref = (void*)it->second;
+                     } else {
+                         // Primitive type
+                         val.type = JavaValue::LONG;
+                         val.val.l = it->second;
+                     }
                      frame->push(val);
                  }
                  break;
@@ -594,9 +902,16 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
                  auto cls = resolveClass(className->bytes);
                  if (!cls) throw std::runtime_error("Class not found: " + className->bytes);
                  
+                 // Initialize class if needed
+                 initializeClass(cls);
+                 
                  JavaValue val = frame->pop();
-                 // Store value
-                 cls->staticFields[name->bytes] = val.val.l; // Store as 64-bit
+                 // Store value - handle different types appropriately
+                 if (val.type == JavaValue::REFERENCE) {
+                     cls->staticFields[name->bytes] = (int64_t)val.val.ref;
+                 } else {
+                     cls->staticFields[name->bytes] = val.val.l;
+                 }
                  break;
             }
             std::cerr << "Unsupported PUTSTATIC index: " << index << std::endl;
@@ -616,34 +931,61 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
 
              bool isStatic = (opcode == OP_INVOKESTATIC);
 
-             // Calculate arg count first
+             std::cout << "[OP_" << (isStatic ? "INVOKESTATIC" : "INVOKESPECIAL") << "] " << className->bytes << "." << name->bytes << descriptor->bytes << std::endl;
+
+             // Calculate arg count from descriptor
+             // Descriptor format: (arg1typearg2type...)returntype
              int argCount = 0;
-             for (char c : descriptor->bytes) {
-                 if (c == 'L') argCount++; // Ref
-                 if (c == 'I') argCount++; // Int
-                 // Ignore array [ and ;
+             bool inArgs = false;
+             size_t i = 0;
+             while (i < descriptor->bytes.length()) {
+                 char c = descriptor->bytes[i];
+                 if (c == '(') {
+                     inArgs = true;
+                     i++;
+                     continue;
+                 }
+                 if (c == ')') {
+                     break;
+                 }
+                 if (inArgs) {
+                     if (c == 'L') {
+                         // Reference type, skip until ';' and count as 1 arg
+                         argCount++;
+                         i++;
+                         while (i < descriptor->bytes.length() && descriptor->bytes[i] != ';') {
+                             i++;
+                         }
+                         // Skip the ';' itself
+                         i++;
+                     } else if (c == '[') {
+                         // Array type, continue to next char to get the element type
+                         i++;
+                     } else {
+                         // Primitive type: I, J, F, D, Z, B, C, S
+                         argCount++;
+                         i++;
+                     }
+                 } else {
+                     i++;
+                 }
              }
-             // Hack for Image.createImage(String) -> (Ljava/lang/String;)I -> 1 arg
-             if (name->bytes == "createImage" || name->bytes == "createImageNative") argCount = 1;
+             
+             std::cout << "[Interpreter] Descriptor: " << descriptor->bytes << ", argCount: " << argCount << std::endl;
              
              if (!isStatic) argCount++; // 'this'
 
-             // Special handling for Object/Canvas constructors (skip them)
-             if (!isStatic && name->bytes == "<init>") {
-                 if (className->bytes == "java/lang/Object" || className->bytes == "javax/microedition/lcdui/Canvas") {
-                     // Pop args and return
-                     for(int i=0; i<argCount; ++i) frame->pop();
-                     break;
-                 }
-             }
+             bool isConstructor = (name->bytes == "<init>");
 
              // Normal method call (Static or Special or Init)
              // Check if native
              auto nativeFunc = NativeRegistry::getInstance().getNative(className->bytes, name->bytes, descriptor->bytes);
              if (nativeFunc) {
+                 std::cout << "[Interpreter] Calling native: " << className->bytes << "." << name->bytes << descriptor->bytes << std::endl;
                  // Native call!
                  nativeFunc(frame);
              } else {
+                 std::cout << "[Interpreter] Calling Java: " << className->bytes << "." << name->bytes << descriptor->bytes << std::endl;
                  // Java method call
                  auto cls = resolveClass(className->bytes);
                  if (!cls) throw std::runtime_error("Class not found: " + className->bytes);
@@ -653,10 +995,50 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
                      auto mName = std::dynamic_pointer_cast<ConstantUtf8>(cls->rawFile->constant_pool[m.name_index]);
                      auto mDesc = std::dynamic_pointer_cast<ConstantUtf8>(cls->rawFile->constant_pool[m.descriptor_index]);
                      if (mName->bytes == name->bytes && mDesc->bytes == descriptor->bytes) {
+                         std::cout << "[Interpreter] Found method, creating new frame with " << argCount << " args" << std::endl;
+                         
+                         // Special handling for java/lang/Object.<init> - it's typically empty
+                         if (cls->name == "java/lang/Object" && name->bytes == "<init>") {
+                             std::cout << "[Interpreter] Skipping java/lang/Object.<init> (no-op)" << std::endl;
+                             found = true;
+                             break;
+                         }
+                         
                          auto newFrame = std::make_shared<StackFrame>(m, cls->rawFile);
                          
-                         for (int i = argCount - 1; i >= 0; i--) {
-                             newFrame->setLocal(i, frame->pop());
+                         // Pop args from stack in reverse order (last arg is on top)
+                         std::vector<JavaValue> args;
+                         for (int i = 0; i < argCount; i++) {
+                             args.push_back(frame->pop());
+                         }
+                         
+                         // Set locals in correct order (first arg at local[0])
+                         for (int i = 0; i < argCount; i++) {
+                             newFrame->setLocal(i, args[argCount - 1 - i]);
+                             std::cout << "[Interpreter] Setting local[" << i << "] type=" << args[argCount - 1 - i].type << " ref=" << args[argCount - 1 - i].val.ref << std::endl;
+                         }
+                         
+                         // For constructors, ensure superclass constructor is called first
+                         if (isConstructor && cls->superClass && cls->superClass->name != "java/lang/Object") {
+                             std::cout << "[Interpreter] Constructor detected, calling superclass constructor first" << std::endl;
+                             // Find and call the superclass no-arg constructor
+                             bool superFound = false;
+                             for (const auto& superMethod : cls->superClass->rawFile->methods) {
+                                 auto superName = std::dynamic_pointer_cast<ConstantUtf8>(cls->superClass->rawFile->constant_pool[superMethod.name_index]);
+                                 auto superDesc = std::dynamic_pointer_cast<ConstantUtf8>(cls->superClass->rawFile->constant_pool[superMethod.descriptor_index]);
+                                 if (superName->bytes == "<init>" && superDesc->bytes == "()V") {
+                                     std::cout << "[Interpreter] Calling superclass constructor: " << cls->superClass->name << ".<init>()V" << std::endl;
+                                     auto superFrame = std::make_shared<StackFrame>(superMethod, cls->superClass->rawFile);
+                                     // Pass 'this' reference to superclass constructor
+                                     superFrame->setLocal(0, newFrame->getLocal(0));
+                                     execute(superFrame);
+                                     superFound = true;
+                                     break;
+                                 }
+                             }
+                             if (!superFound) {
+                                 std::cout << "[Interpreter] Warning: No no-arg constructor found in superclass " << cls->superClass->name << std::endl;
+                             }
                          }
                          
                          auto ret = execute(newFrame);
@@ -711,11 +1093,22 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
                 }
             }
 
+            auto classRef = std::dynamic_pointer_cast<ConstantClass>(frame->classFile->constant_pool[methodRef->class_index]);
+            auto className = std::dynamic_pointer_cast<ConstantUtf8>(frame->classFile->constant_pool[classRef->name_index]);
+            
+            std::cout << "[INVOKEVIRTUAL] Calling " << className->bytes << "." << name->bytes << descriptor->bytes << " with " << argCount << " args" << std::endl;
+            
             std::vector<JavaValue> args;
             for(int i=0; i<argCount; ++i) args.push_back(frame->pop());
             // args[0] is last argument.
             
+            std::cout << "[INVOKEVIRTUAL] Popped " << args.size() << " args" << std::endl;
+            for (size_t i = 0; i < args.size(); i++) {
+                std::cout << "[INVOKEVIRTUAL]   arg[" << i << "] type=" << args[i].type << " ref=" << args[i].val.ref << std::endl;
+            }
+            
             JavaValue obj = frame->pop();
+            std::cout << "[INVOKEVIRTUAL] Popped object ref: " << obj.val.ref << std::endl;
             
             if (obj.val.ref == (void*)0xDEADBEEF) {
                 // System.out.println
@@ -739,6 +1132,8 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
                  
                  JavaObject* javaObj = static_cast<JavaObject*>(obj.val.ref);
                  auto cls = javaObj->cls;
+                 
+                 std::cout << "[INVOKEVIRTUAL] Object class: " << cls->name << std::endl;
                  
                  // Find method
                  bool found = false;
@@ -796,10 +1191,14 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
             break;
         }
         
-        case OP_RETURN: return false; // Stop execution
+        case OP_RETURN: {
+            std::cout << "[OP_RETURN] Returning from method" << std::endl;
+            return false; // Stop execution
+        }
         case OP_IRETURN:
         case OP_ARETURN: {
             returnVal = frame->pop();
+            std::cout << "[OP_IRETURN/OP_ARETURN] Returning value" << std::endl;
             return false;
         }
         

@@ -1,4 +1,5 @@
 #include "ClassParser.hpp"
+#include "Logger.hpp"
 #include <iostream>
 
 namespace j2me {
@@ -141,6 +142,7 @@ void ClassParser::parseInterfaces(util::DataReader& reader, ClassFile& classFile
 
 void ClassParser::parseFields(util::DataReader& reader, ClassFile& classFile) {
     uint16_t count = reader.readU2();
+    LOG_DEBUG("[ClassParser::parseFields] Parsing " + std::to_string(count) + " fields");
     for (int i = 0; i < count; ++i) {
         FieldInfo field;
         field.access_flags = reader.readU2();
@@ -148,6 +150,13 @@ void ClassParser::parseFields(util::DataReader& reader, ClassFile& classFile) {
         field.descriptor_index = reader.readU2();
         parseAttributes(reader, field.attributes);
         classFile.fields.push_back(field);
+        
+        auto nameInfo = std::dynamic_pointer_cast<ConstantUtf8>(classFile.constant_pool[field.name_index]);
+        if (nameInfo) {
+            LOG_DEBUG("[ClassParser::parseFields]   Field " + std::to_string(i) + ": " + nameInfo->bytes + " access_flags=" + std::to_string(field.access_flags));
+        } else {
+            LOG_DEBUG("[ClassParser::parseFields]   Field " + std::to_string(i) + ": name_index=" + std::to_string(field.name_index) + " (null nameInfo)");
+        }
     }
 }
 

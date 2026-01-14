@@ -321,6 +321,102 @@ src/main.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/j2me-vm.dir/build.make CMakeFiles/j2me-vm.dir/src/main.cpp.s
 .PHONY : src/main.cpp.s
 
+src/native/ImageCommon.o: src/native/ImageCommon.cpp.o
+.PHONY : src/native/ImageCommon.o
+
+# target to build an object file
+src/native/ImageCommon.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/j2me-vm.dir/build.make CMakeFiles/j2me-vm.dir/src/native/ImageCommon.cpp.o
+.PHONY : src/native/ImageCommon.cpp.o
+
+src/native/ImageCommon.i: src/native/ImageCommon.cpp.i
+.PHONY : src/native/ImageCommon.i
+
+# target to preprocess a source file
+src/native/ImageCommon.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/j2me-vm.dir/build.make CMakeFiles/j2me-vm.dir/src/native/ImageCommon.cpp.i
+.PHONY : src/native/ImageCommon.cpp.i
+
+src/native/ImageCommon.s: src/native/ImageCommon.cpp.s
+.PHONY : src/native/ImageCommon.s
+
+# target to generate assembly for a file
+src/native/ImageCommon.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/j2me-vm.dir/build.make CMakeFiles/j2me-vm.dir/src/native/ImageCommon.cpp.s
+.PHONY : src/native/ImageCommon.cpp.s
+
+src/native/NativeInputStream.o: src/native/NativeInputStream.cpp.o
+.PHONY : src/native/NativeInputStream.o
+
+# target to build an object file
+src/native/NativeInputStream.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/j2me-vm.dir/build.make CMakeFiles/j2me-vm.dir/src/native/NativeInputStream.cpp.o
+.PHONY : src/native/NativeInputStream.cpp.o
+
+src/native/NativeInputStream.i: src/native/NativeInputStream.cpp.i
+.PHONY : src/native/NativeInputStream.i
+
+# target to preprocess a source file
+src/native/NativeInputStream.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/j2me-vm.dir/build.make CMakeFiles/j2me-vm.dir/src/native/NativeInputStream.cpp.i
+.PHONY : src/native/NativeInputStream.cpp.i
+
+src/native/NativeInputStream.s: src/native/NativeInputStream.cpp.s
+.PHONY : src/native/NativeInputStream.s
+
+# target to generate assembly for a file
+src/native/NativeInputStream.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/j2me-vm.dir/build.make CMakeFiles/j2me-vm.dir/src/native/NativeInputStream.cpp.s
+.PHONY : src/native/NativeInputStream.cpp.s
+
+src/native/java_io_InputStream.o: src/native/java_io_InputStream.cpp.o
+.PHONY : src/native/java_io_InputStream.o
+
+# target to build an object file
+src/native/java_io_InputStream.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/j2me-vm.dir/build.make CMakeFiles/j2me-vm.dir/src/native/java_io_InputStream.cpp.o
+.PHONY : src/native/java_io_InputStream.cpp.o
+
+src/native/java_io_InputStream.i: src/native/java_io_InputStream.cpp.i
+.PHONY : src/native/java_io_InputStream.i
+
+# target to preprocess a source file
+src/native/java_io_InputStream.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/j2me-vm.dir/build.make CMakeFiles/j2me-vm.dir/src/native/java_io_InputStream.cpp.i
+.PHONY : src/native/java_io_InputStream.cpp.i
+
+src/native/java_io_InputStream.s: src/native/java_io_InputStream.cpp.s
+.PHONY : src/native/java_io_InputStream.s
+
+# target to generate assembly for a file
+src/native/java_io_InputStream.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/j2me-vm.dir/build.make CMakeFiles/j2me-vm.dir/src/native/java_io_InputStream.cpp.s
+.PHONY : src/native/java_io_InputStream.cpp.s
+
+src/native/java_io_PrintStream.o: src/native/java_io_PrintStream.cpp.o
+.PHONY : src/native/java_io_PrintStream.o
+
+# target to build an object file
+src/native/java_io_PrintStream.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/j2me-vm.dir/build.make CMakeFiles/j2me-vm.dir/src/native/java_io_PrintStream.cpp.o
+.PHONY : src/native/java_io_PrintStream.cpp.o
+
+src/native/java_io_PrintStream.i: src/native/java_io_PrintStream.cpp.i
+.PHONY : src/native/java_io_PrintStream.i
+
+# target to preprocess a source file
+src/native/java_io_PrintStream.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/j2me-vm.dir/build.make CMakeFiles/j2me-vm.dir/src/native/java_io_PrintStream.cpp.i
+.PHONY : src/native/java_io_PrintStream.cpp.i
+
+src/native/java_io_PrintStream.s: src/native/java_io_PrintStream.cpp.s
+.PHONY : src/native/java_io_PrintStream.s
+
+# target to generate assembly for a file
+src/native/java_io_PrintStream.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/j2me-vm.dir/build.make CMakeFiles/j2me-vm.dir/src/native/java_io_PrintStream.cpp.s
+.PHONY : src/native/java_io_PrintStream.cpp.s
+
 src/native/java_lang_Class.o: src/native/java_lang_Class.cpp.o
 .PHONY : src/native/java_lang_Class.o
 
@@ -369,6 +465,30 @@ src/native/java_lang_Object.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/j2me-vm.dir/build.make CMakeFiles/j2me-vm.dir/src/native/java_lang_Object.cpp.s
 .PHONY : src/native/java_lang_Object.cpp.s
 
+src/native/java_lang_String.o: src/native/java_lang_String.cpp.o
+.PHONY : src/native/java_lang_String.o
+
+# target to build an object file
+src/native/java_lang_String.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/j2me-vm.dir/build.make CMakeFiles/j2me-vm.dir/src/native/java_lang_String.cpp.o
+.PHONY : src/native/java_lang_String.cpp.o
+
+src/native/java_lang_String.i: src/native/java_lang_String.cpp.i
+.PHONY : src/native/java_lang_String.i
+
+# target to preprocess a source file
+src/native/java_lang_String.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/j2me-vm.dir/build.make CMakeFiles/j2me-vm.dir/src/native/java_lang_String.cpp.i
+.PHONY : src/native/java_lang_String.cpp.i
+
+src/native/java_lang_String.s: src/native/java_lang_String.cpp.s
+.PHONY : src/native/java_lang_String.s
+
+# target to generate assembly for a file
+src/native/java_lang_String.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/j2me-vm.dir/build.make CMakeFiles/j2me-vm.dir/src/native/java_lang_String.cpp.s
+.PHONY : src/native/java_lang_String.cpp.s
+
 src/native/javax_microedition_lcdui_Display.o: src/native/javax_microedition_lcdui_Display.cpp.o
 .PHONY : src/native/javax_microedition_lcdui_Display.o
 
@@ -416,6 +536,54 @@ src/native/javax_microedition_lcdui_Graphics.s: src/native/javax_microedition_lc
 src/native/javax_microedition_lcdui_Graphics.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/j2me-vm.dir/build.make CMakeFiles/j2me-vm.dir/src/native/javax_microedition_lcdui_Graphics.cpp.s
 .PHONY : src/native/javax_microedition_lcdui_Graphics.cpp.s
+
+src/native/javax_microedition_lcdui_Image.o: src/native/javax_microedition_lcdui_Image.cpp.o
+.PHONY : src/native/javax_microedition_lcdui_Image.o
+
+# target to build an object file
+src/native/javax_microedition_lcdui_Image.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/j2me-vm.dir/build.make CMakeFiles/j2me-vm.dir/src/native/javax_microedition_lcdui_Image.cpp.o
+.PHONY : src/native/javax_microedition_lcdui_Image.cpp.o
+
+src/native/javax_microedition_lcdui_Image.i: src/native/javax_microedition_lcdui_Image.cpp.i
+.PHONY : src/native/javax_microedition_lcdui_Image.i
+
+# target to preprocess a source file
+src/native/javax_microedition_lcdui_Image.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/j2me-vm.dir/build.make CMakeFiles/j2me-vm.dir/src/native/javax_microedition_lcdui_Image.cpp.i
+.PHONY : src/native/javax_microedition_lcdui_Image.cpp.i
+
+src/native/javax_microedition_lcdui_Image.s: src/native/javax_microedition_lcdui_Image.cpp.s
+.PHONY : src/native/javax_microedition_lcdui_Image.s
+
+# target to generate assembly for a file
+src/native/javax_microedition_lcdui_Image.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/j2me-vm.dir/build.make CMakeFiles/j2me-vm.dir/src/native/javax_microedition_lcdui_Image.cpp.s
+.PHONY : src/native/javax_microedition_lcdui_Image.cpp.s
+
+src/native/javax_microedition_rms_RecordStore.o: src/native/javax_microedition_rms_RecordStore.cpp.o
+.PHONY : src/native/javax_microedition_rms_RecordStore.o
+
+# target to build an object file
+src/native/javax_microedition_rms_RecordStore.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/j2me-vm.dir/build.make CMakeFiles/j2me-vm.dir/src/native/javax_microedition_rms_RecordStore.cpp.o
+.PHONY : src/native/javax_microedition_rms_RecordStore.cpp.o
+
+src/native/javax_microedition_rms_RecordStore.i: src/native/javax_microedition_rms_RecordStore.cpp.i
+.PHONY : src/native/javax_microedition_rms_RecordStore.i
+
+# target to preprocess a source file
+src/native/javax_microedition_rms_RecordStore.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/j2me-vm.dir/build.make CMakeFiles/j2me-vm.dir/src/native/javax_microedition_rms_RecordStore.cpp.i
+.PHONY : src/native/javax_microedition_rms_RecordStore.cpp.i
+
+src/native/javax_microedition_rms_RecordStore.s: src/native/javax_microedition_rms_RecordStore.cpp.s
+.PHONY : src/native/javax_microedition_rms_RecordStore.s
+
+# target to generate assembly for a file
+src/native/javax_microedition_rms_RecordStore.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/j2me-vm.dir/build.make CMakeFiles/j2me-vm.dir/src/native/javax_microedition_rms_RecordStore.cpp.s
+.PHONY : src/native/javax_microedition_rms_RecordStore.cpp.s
 
 src/platform/GraphicsContext.o: src/platform/GraphicsContext.cpp.o
 .PHONY : src/platform/GraphicsContext.o
@@ -474,18 +642,39 @@ help:
 	@echo "... src/main.o"
 	@echo "... src/main.i"
 	@echo "... src/main.s"
+	@echo "... src/native/ImageCommon.o"
+	@echo "... src/native/ImageCommon.i"
+	@echo "... src/native/ImageCommon.s"
+	@echo "... src/native/NativeInputStream.o"
+	@echo "... src/native/NativeInputStream.i"
+	@echo "... src/native/NativeInputStream.s"
+	@echo "... src/native/java_io_InputStream.o"
+	@echo "... src/native/java_io_InputStream.i"
+	@echo "... src/native/java_io_InputStream.s"
+	@echo "... src/native/java_io_PrintStream.o"
+	@echo "... src/native/java_io_PrintStream.i"
+	@echo "... src/native/java_io_PrintStream.s"
 	@echo "... src/native/java_lang_Class.o"
 	@echo "... src/native/java_lang_Class.i"
 	@echo "... src/native/java_lang_Class.s"
 	@echo "... src/native/java_lang_Object.o"
 	@echo "... src/native/java_lang_Object.i"
 	@echo "... src/native/java_lang_Object.s"
+	@echo "... src/native/java_lang_String.o"
+	@echo "... src/native/java_lang_String.i"
+	@echo "... src/native/java_lang_String.s"
 	@echo "... src/native/javax_microedition_lcdui_Display.o"
 	@echo "... src/native/javax_microedition_lcdui_Display.i"
 	@echo "... src/native/javax_microedition_lcdui_Display.s"
 	@echo "... src/native/javax_microedition_lcdui_Graphics.o"
 	@echo "... src/native/javax_microedition_lcdui_Graphics.i"
 	@echo "... src/native/javax_microedition_lcdui_Graphics.s"
+	@echo "... src/native/javax_microedition_lcdui_Image.o"
+	@echo "... src/native/javax_microedition_lcdui_Image.i"
+	@echo "... src/native/javax_microedition_lcdui_Image.s"
+	@echo "... src/native/javax_microedition_rms_RecordStore.o"
+	@echo "... src/native/javax_microedition_rms_RecordStore.i"
+	@echo "... src/native/javax_microedition_rms_RecordStore.s"
 	@echo "... src/platform/GraphicsContext.o"
 	@echo "... src/platform/GraphicsContext.i"
 	@echo "... src/platform/GraphicsContext.s"
