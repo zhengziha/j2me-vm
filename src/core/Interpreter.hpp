@@ -19,15 +19,17 @@ public:
     std::optional<JavaValue> execute(std::shared_ptr<StackFrame> frame);
     std::shared_ptr<JavaClass> resolveClass(const std::string& className);
     
-    void setSystemLoader(std::shared_ptr<j2me::loader::JarLoader> loader) { systemLoader = loader; }
+    void setStubLoader(std::shared_ptr<j2me::loader::JarLoader> loader) { stubLoader = loader; }
 
 private:
     j2me::loader::JarLoader& jarLoader;
-    std::shared_ptr<j2me::loader::JarLoader> systemLoader;
+    std::shared_ptr<j2me::loader::JarLoader> stubLoader;
     std::map<std::string, std::shared_ptr<JavaClass>> loadedClasses;
 
     bool executeInstruction(std::shared_ptr<StackFrame> frame, util::DataReader& codeReader, std::optional<JavaValue>& returnVal);
-    // std::shared_ptr<JavaClass> resolveClass(const std::string& className); // Made public
+    
+    // Execute static initializer for a class
+    void initializeClass(std::shared_ptr<JavaClass> cls);
 };
 
 } // namespace core

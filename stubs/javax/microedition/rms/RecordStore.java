@@ -21,49 +21,49 @@ public class RecordStore {
         if (nativePtr == 0) {
             throw new RecordStoreNotOpenException();
         }
-        return addRecordNative(nativePtr, data, offset, numBytes);
+        return addRecordNative(name, data, offset, numBytes);
     }
 
     public byte[] getRecord(int recordId) throws RecordStoreNotOpenException, InvalidRecordIDException, RecordStoreException {
         if (nativePtr == 0) {
             throw new RecordStoreNotOpenException();
         }
-        return getRecordNative(nativePtr, recordId);
+        return getRecordNative(name, recordId);
     }
 
     public void deleteRecord(int recordId) throws RecordStoreNotOpenException, InvalidRecordIDException, RecordStoreException {
         if (nativePtr == 0) {
             throw new RecordStoreNotOpenException();
         }
-        deleteRecordNative(nativePtr, recordId);
+        deleteRecordNative(name, recordId);
     }
 
     public int getNumRecords() throws RecordStoreNotOpenException {
         if (nativePtr == 0) {
             throw new RecordStoreNotOpenException();
         }
-        return getNumRecordsNative(nativePtr);
+        return getNumRecordsNative(name);
     }
 
     public int getSize() throws RecordStoreNotOpenException {
         if (nativePtr == 0) {
             throw new RecordStoreNotOpenException();
         }
-        return getSizeNative(nativePtr);
+        return getSizeNative(name);
     }
 
     public int getSizeAvailable() throws RecordStoreNotOpenException {
         if (nativePtr == 0) {
             throw new RecordStoreNotOpenException();
         }
-        return getSizeAvailableNative(nativePtr);
+        return getSizeAvailableNative(name);
     }
 
     public void closeRecordStore() throws RecordStoreNotOpenException, RecordStoreException {
         if (nativePtr == 0) {
             throw new RecordStoreNotOpenException();
         }
-        closeRecordStoreNative(nativePtr);
+        closeRecordStoreNative(name);
         nativePtr = 0;
     }
 
@@ -76,13 +76,13 @@ public class RecordStore {
     }
 
     private static native int openRecordStoreNative(String name, boolean createIfNecessary);
-    private native int addRecordNative(int ptr, byte[] data, int offset, int numBytes);
-    private native byte[] getRecordNative(int ptr, int recordId);
-    private native void deleteRecordNative(int ptr, int recordId);
-    private native int getNumRecordsNative(int ptr);
-    private native int getSizeNative(int ptr);
-    private native int getSizeAvailableNative(int ptr);
-    private native void closeRecordStoreNative(int ptr);
+    private native int addRecordNative(String name, byte[] data, int offset, int numBytes);
+    private native byte[] getRecordNative(String name, int recordId);
+    private native void deleteRecordNative(String name, int recordId);
+    private native int getNumRecordsNative(String name);
+    private native int getSizeNative(String name);
+    private native int getSizeAvailableNative(String name);
+    private native void closeRecordStoreNative(String name);
     private static native void deleteRecordStoreNative(String name);
     private static native String[] listRecordStoresNative();
 }

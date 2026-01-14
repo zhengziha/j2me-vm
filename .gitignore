@@ -1,5 +1,6 @@
 # Build outputs
 /build/
+build/
 /out/
 /bin/
 /obj/
@@ -51,3 +52,4 @@ rt.jar
 *.pid
 *.lock
 
+build/CMakeFiles/j2me-vm.dir/link.txt

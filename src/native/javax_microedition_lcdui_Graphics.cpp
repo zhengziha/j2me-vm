@@ -1,4 +1,5 @@
 #include "javax_microedition_lcdui_Graphics.hpp"
+#include "ImageCommon.hpp"
 #include "../core/NativeRegistry.hpp"
 #include "../platform/GraphicsContext.hpp"
 #include "../core/StackFrame.hpp"
@@ -9,9 +10,6 @@
 
 namespace j2me {
 namespace natives {
-
-static std::map<int32_t, SDL_Surface*> imageMap;
-static int32_t nextImageId = 1;
 
 void registerGraphicsNatives() {
     auto& registry = j2me::core::NativeRegistry::getInstance();

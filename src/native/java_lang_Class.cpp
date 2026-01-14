@@ -1,6 +1,9 @@
 #include "java_lang_Class.hpp"
 #include "../core/NativeRegistry.hpp"
 #include "../core/StackFrame.hpp"
+#include "../core/HeapManager.hpp"
+#include "../core/Interpreter.hpp"
+#include "../loader/JarLoader.hpp"
 #include <iostream>
 #include <string>
 
@@ -16,6 +19,10 @@ void registerClassNatives() {
             j2me::core::JavaValue nameVal = frame->pop();
             frame->pop(); // this (Class object)
             
+            j2me::core::JavaValue result;
+            result.type = j2me::core::JavaValue::REFERENCE;
+            result.val.ref = nullptr;
+            
             if (nameVal.type == j2me::core::JavaValue::REFERENCE && !nameVal.strVal.empty()) {
                 std::string resName = nameVal.strVal;
                 // Normalize path (if starts with /, remove it)
@@ -23,23 +30,38 @@ void registerClassNatives() {
                 
                 std::cout << "[Class] Loading resource: " << resName << std::endl;
                 
-                // For Phase 4, we just return null or a dummy InputStream
-                // To support it fully, we need to:
-                // 1. Create a java/io/InputStream object (or subclass like ByteArrayInputStream)
-                // 2. Read data from JAR using JarLoader
-                // 3. Store data in the stream object
-                
-                // Returning null for now as placeholder
-                j2me::core::JavaValue nullVal;
-                nullVal.type = j2me::core::JavaValue::REFERENCE;
-                nullVal.val.ref = nullptr;
-                frame->push(nullVal);
-            } else {
-                 j2me::core::JavaValue nullVal;
-                 nullVal.type = j2me::core::JavaValue::REFERENCE;
-                 nullVal.val.ref = nullptr;
-                 frame->push(nullVal);
+                // Get data from JAR
+                auto loader = j2me::core::NativeRegistry::getInstance().getJarLoader();
+                if (loader && loader->hasFile(resName)) {
+                    auto data = loader->getFile(resName);
+                    if (data && !data->empty()) {
+                        // Create NativeInputStream and store in HeapManager
+                        int streamId = j2me::core::HeapManager::getInstance().allocateStream(data->data(), data->size());
+                        
+                        // Create InputStream object
+                        auto inputStreamCls = j2me::core::NativeRegistry::getInstance().getInterpreter()->resolveClass("java/io/InputStream");
+                        if (inputStreamCls) {
+                            j2me::core::JavaObject* inputStreamObj = j2me::core::HeapManager::getInstance().allocate(inputStreamCls);
+                            
+                            // Set nativePtr field to stream ID
+                            if (inputStreamObj->fields.size() > 0) {
+                                inputStreamObj->fields[0] = streamId;
+                            }
+                            
+                            result.val.ref = inputStreamObj;
+                            std::cout << "[Class] Resource loaded successfully, stream ID: " << streamId << std::endl;
+                        } else {
+                            std::cerr << "[Class] Failed to resolve InputStream class" << std::endl;
+                        }
+                    } else {
+                        std::cerr << "[Class] Failed to read resource data" << std::endl;
+                    }
+                } else {
+                    std::cerr << "[Class] Resource not found: " << resName << std::endl;
+                }
             }
+            
+            frame->push(result);
         }
     );
 }

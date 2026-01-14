@@ -25,6 +25,12 @@ public:
     // Static fields storage: name -> value
     std::map<std::string, int64_t> staticFields;
 
+    // Flag to track if static initialization has been done
+    bool initialized = false;
+    
+    // Flag to track if class is currently being initialized (to prevent cycles)
+    bool initializing = false;
+
     JavaClass(std::shared_ptr<ClassFile> file);
     
     // Resolve hierarchy and calculate field offsets

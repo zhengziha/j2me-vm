@@ -1,6 +1,0 @@
-MIDlet-Name: RMSTest
-MIDlet-Version: 1.0
-MIDlet-Vendor: Test
-MIDlet-1: RMSTestMIDlet,,RMSTestMIDlet
-MicroEdition-Profile: MIDP-2.0
-MicroEdition-Configuration: CLDC-1.1

@@ -24,20 +24,25 @@ void JavaClass::link(std::shared_ptr<JavaClass> parent) {
     
     if (parent) {
         offset = parent->instanceSize;
-        // Copy parent field offsets? Not strictly needed if we look up recursively or flatten.
-        // For simplicity, we'll just track our own fields starting from parent's end.
-        // But for fast lookup, we might want a flattened map.
         fieldOffsets = parent->fieldOffsets; 
     }
 
+    std::cout << "[JavaClass::link] Linking class: " << name << " with " << rawFile->fields.size() << " fields" << std::endl;
+    
     for (const auto& field : rawFile->fields) {
-        // Skip static fields for now (they belong to class, not instance)
-        if (field.access_flags & 0x0008) continue; 
-
         auto nameInfo = std::dynamic_pointer_cast<ConstantUtf8>(rawFile->constant_pool[field.name_index]);
-        fieldOffsets[nameInfo->bytes] = offset++;
+        auto descInfo = std::dynamic_pointer_cast<ConstantUtf8>(rawFile->constant_pool[field.descriptor_index]);
+        
+        std::cout << "[JavaClass::link]   Field: " << nameInfo->bytes << " desc=" << descInfo->bytes << " access_flags=" << field.access_flags << std::endl;
+        
+        if (field.access_flags & 0x0008) {
+            staticFields[nameInfo->bytes] = 0;
+        } else {
+            fieldOffsets[nameInfo->bytes] = offset++;
+        }
     }
     instanceSize = offset;
+    std::cout << "[JavaClass::link]   instanceSize=" << instanceSize << " fieldOffsets size=" << fieldOffsets.size() << std::endl;
 }
 
 JavaObject::JavaObject(std::shared_ptr<JavaClass> cls) : cls(cls) {

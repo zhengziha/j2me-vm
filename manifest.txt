@@ -1,6 +1,0 @@
-MIDlet-Name: ResourceTest
-MIDlet-Version: 1.0
-MIDlet-Vendor: Test
-MIDlet-1: ResourceTestMIDlet,,ResourceTestMIDlet
-MicroEdition-Profile: MIDP-2.0
-MicroEdition-Configuration: CLDC-1.1

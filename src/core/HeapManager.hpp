@@ -1,8 +1,11 @@
 #pragma once
 
 #include "RuntimeTypes.hpp"
+#include "../native/NativeInputStream.hpp"
 #include <list>
 #include <memory>
+#include <vector>
+#include <cstdint>
 
 namespace j2me {
 namespace core {
@@ -19,6 +22,11 @@ public:
     
     // Very basic "GC" - just clear everything (for shutdown)
     void clear();
+    
+    // Stream management for NativeInputStream
+    int allocateStream(const uint8_t* data, size_t size);
+    natives::NativeInputStream* getStream(int id);
+    void removeStream(int id);
 
 private:
     HeapManager() = default;
@@ -27,6 +35,10 @@ private:
     // In a real GC, we'd need a more complex structure (e.g., arenas).
     // Using list to avoid pointer invalidation on resize.
     std::list<JavaObject> objects;
+    
+    // Stream storage
+    std::vector<std::unique_ptr<j2me::natives::NativeInputStream>> streams;
+    int nextStreamId = 1;
 };
 
 } // namespace core
