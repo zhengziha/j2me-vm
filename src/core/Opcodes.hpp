@@ -35,6 +35,18 @@ enum Opcode : uint8_t {
     OP_LLOAD_2      = 0x20,
     OP_LLOAD_3      = 0x21,
     
+    OP_FLOAD        = 0x17,
+    OP_FLOAD_0      = 0x22,
+    OP_FLOAD_1      = 0x23,
+    OP_FLOAD_2      = 0x24,
+    OP_FLOAD_3      = 0x25,
+    
+    OP_DLOAD        = 0x18,
+    OP_DLOAD_0      = 0x26,
+    OP_DLOAD_1      = 0x27,
+    OP_DLOAD_2      = 0x28,
+    OP_DLOAD_3      = 0x29,
+    
     OP_ALOAD        = 0x19,
     OP_ALOAD_0      = 0x2a,
     OP_ALOAD_1      = 0x2b,
@@ -55,6 +67,24 @@ enum Opcode : uint8_t {
     OP_ISTORE_1     = 0x3c,
     OP_ISTORE_2     = 0x3d,
     OP_ISTORE_3     = 0x3e,
+    
+    OP_LSTORE       = 0x37,
+    OP_LSTORE_0     = 0x3f,
+    OP_LSTORE_1     = 0x40,
+    OP_LSTORE_2     = 0x41,
+    OP_LSTORE_3     = 0x42,
+    
+    OP_FSTORE       = 0x38,
+    OP_FSTORE_0     = 0x43,
+    OP_FSTORE_1     = 0x44,
+    OP_FSTORE_2     = 0x45,
+    OP_FSTORE_3     = 0x46,
+    
+    OP_DSTORE       = 0x39,
+    OP_DSTORE_0     = 0x47,
+    OP_DSTORE_1     = 0x48,
+    OP_DSTORE_2     = 0x49,
+    OP_DSTORE_3     = 0x4a,
     
     OP_ASTORE       = 0x3a,
     OP_ASTORE_0     = 0x4b,

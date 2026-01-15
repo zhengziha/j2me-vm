@@ -20,16 +20,72 @@
 #include "native/java_lang_String.hpp"
 #include "native/java_io_InputStream.hpp"
 #include "native/java_io_PrintStream.hpp"
+#include <fstream>
+#include <optional>
+
+// Helper function to check if a file is a .class file
+bool isClassFile(const std::string& path) {
+    return path.size() >= 6 && path.substr(path.size() - 6) == ".class";
+}
+
+// Helper function to read a .class file
+std::optional<std::vector<uint8_t>> readClassFile(const std::string& path) {
+    std::ifstream file(path, std::ios::binary);
+    if (!file.is_open()) {
+        return std::nullopt;
+    }
+    
+    file.seekg(0, std::ios::end);
+    size_t size = file.tellg();
+    file.seekg(0, std::ios::beg);
+    
+    std::vector<uint8_t> data(size);
+    if (!file.read(reinterpret_cast<char*>(data.data()), size)) {
+        return std::nullopt;
+    }
+    
+    return data;
+}
+
+// Helper function to check if a class extends MIDlet
+bool isMIDletClass(std::shared_ptr<j2me::core::JavaClass> cls) {
+    if (!cls) return false;
+    
+    // Walk up the class hierarchy
+    auto current = cls;
+    while (current) {
+        if (current->name == "javax/microedition/midlet/MIDlet") {
+            return true;
+        }
+        current = current->superClass;
+    }
+    return false;
+}
+
+// Helper function to check if a class has a main method
+bool hasMainMethod(std::shared_ptr<j2me::core::JavaClass> cls) {
+    if (!cls || !cls->rawFile) return false;
+    
+    for (const auto& method : cls->rawFile->methods) {
+        auto name = std::dynamic_pointer_cast<j2me::core::ConstantUtf8>(cls->rawFile->constant_pool[method.name_index]);
+        auto desc = std::dynamic_pointer_cast<j2me::core::ConstantUtf8>(cls->rawFile->constant_pool[method.descriptor_index]);
+        
+        if (name && desc && name->bytes == "main" && desc->bytes == "([Ljava/lang/String;)V") {
+            return true;
+        }
+    }
+    return false;
+}
 
 int main(int argc, char* argv[]) {
     if (argc < 2) {
-        std::cout << "Usage: j2me-vm [--log-level LEVEL] <path_to_jar>" << std::endl;
+        std::cout << "Usage: j2me-vm [--log-level LEVEL] <path_to_jar_or_class>" << std::endl;
         std::cout << "  LEVEL: debug, info, error, none (default: info)" << std::endl;
         return 1;
     }
 
     // Parse command line arguments
-    std::string jarPath;
+    std::string filePath;
     j2me::core::LogLevel logLevel = j2me::core::LogLevel::INFO;
 
     for (int i = 1; i < argc; i++) {
@@ -49,15 +105,18 @@ int main(int argc, char* argv[]) {
                 return 1;
             }
         } else if (arg[0] != '-') {
-            jarPath = arg;
+            filePath = arg;
         }
     }
 
-    if (jarPath.empty()) {
-        std::cerr << "Error: No JAR file specified" << std::endl;
+    if (filePath.empty()) {
+        std::cerr << "Error: No file specified" << std::endl;
         return 1;
     }
 
+    // Check if it's a .class file
+    bool isClass = isClassFile(filePath);
+    
     // Set log level
     j2me::core::Logger::getInstance().setLevel(logLevel);
 
@@ -74,10 +133,165 @@ int main(int argc, char* argv[]) {
     j2me::natives::registerInputStreamNatives();
 
     LOG_INFO("Starting J2ME VM...");
-    LOG_INFO("Loading JAR: " + jarPath);
+
+    // Handle .class file directly
+    if (isClass) {
+        LOG_INFO("Loading .class file: " + filePath);
+        
+        auto classData = readClassFile(filePath);
+        if (!classData) {
+            LOG_ERROR("Failed to read .class file: " + filePath);
+            return 1;
+        }
+        
+        // Parse the class file
+        j2me::core::ClassParser parser;
+        auto classFile = parser.parse(*classData);
+        LOG_INFO("Successfully parsed class file!");
+        
+        // Create a minimal JarLoader for stub classes
+        auto stubLoader = std::make_shared<j2me::loader::JarLoader>();
+        bool stubsLoaded = false;
+        
+        // Try to load stubs.jar
+        std::vector<std::string> stubPaths;
+        
+        // Find directory of the .class file
+        size_t lastSlash = filePath.find_last_of("/\\");
+        if (lastSlash != std::string::npos) {
+            std::string classDir = filePath.substr(0, lastSlash);
+            stubPaths.push_back(classDir + "/stubs/stubs.jar");
+            stubPaths.push_back(classDir + "/../stubs/stubs.jar");
+        }
+        
+        stubPaths.push_back("/Users/zhengzihang/my-src/j2me-vm/stubs/stubs.jar");
+        stubPaths.push_back("stubs/stubs.jar");
+        stubPaths.push_back("../stubs/stubs.jar");
+        
+        for (const auto& path : stubPaths) {
+            LOG_DEBUG("Trying stubs path: " + path);
+            if (stubLoader->load(path)) {
+                LOG_INFO("Loaded stub classes (stubs.jar)");
+                stubsLoaded = true;
+                break;
+            }
+        }
+        
+        if (!stubsLoaded) {
+            LOG_ERROR("Warning: stubs.jar not found. Stub classes might be missing.");
+        }
+        
+        // Create interpreter
+        j2me::core::Interpreter interpreter(*stubLoader);
+        interpreter.setStubLoader(stubLoader);
+        j2me::core::NativeRegistry::getInstance().setInterpreter(&interpreter);
+        
+        // Get class name from file path
+        std::string className = filePath;
+        
+        LOG_DEBUG("Original file path: " + className);
+        
+        // Remove .class extension first
+        if (className.length() >= 6 && className.substr(className.length() - 6) == ".class") {
+            className = className.substr(0, className.length() - 6);
+        }
+        
+        LOG_DEBUG("After removing .class: " + className);
+        
+        // Find the last directory separator
+        size_t lastSep = className.find_last_of("/\\");
+        if (lastSep != std::string::npos) {
+            // Extract part after last separator
+            className = className.substr(lastSep + 1);
+        }
+        
+        LOG_DEBUG("After extracting filename: " + className);
+        
+        // Replace . with / for package names
+        std::replace(className.begin(), className.end(), '.', '/');
+        
+        LOG_DEBUG("Resolved class name: " + className);
+        
+        // Create JavaClass from parsed class file
+        auto javaClass = std::make_shared<j2me::core::JavaClass>(classFile);
+        
+        // Link the class
+        if (classFile->super_class != 0) {
+            auto superInfo = std::dynamic_pointer_cast<j2me::core::ConstantClass>(classFile->constant_pool[classFile->super_class]);
+            auto superNameInfo = std::dynamic_pointer_cast<j2me::core::ConstantUtf8>(classFile->constant_pool[superInfo->name_index]);
+            std::string superName = superNameInfo->bytes;
+            
+            if (superName != "java/lang/Object") {
+                auto superClass = interpreter.resolveClass(superName);
+                javaClass->link(superClass);
+            } else {
+                javaClass->link(nullptr);
+            }
+        } else {
+            javaClass->link(nullptr);
+        }
+        
+        // Register the class with the interpreter
+        interpreter.registerClass(className, javaClass);
+        LOG_INFO("Registered class: " + className);
+        
+        // Check if it's a MIDlet or has main method
+        bool isMIDlet = isMIDletClass(javaClass);
+        bool hasMain = hasMainMethod(javaClass);
+        
+        LOG_INFO("Class: " + className);
+        LOG_INFO("Is MIDlet: " + std::string(isMIDlet ? "yes" : "no"));
+        LOG_INFO("Has main method: " + std::string(hasMain ? "yes" : "no"));
+        
+        // If it has main method and is not a MIDlet, run main and exit
+        if (hasMain && !isMIDlet) {
+            LOG_INFO("Running main method (headless mode)...");
+            
+            // Find and execute main method
+            for (const auto& method : javaClass->rawFile->methods) {
+                auto name = std::dynamic_pointer_cast<j2me::core::ConstantUtf8>(javaClass->rawFile->constant_pool[method.name_index]);
+                auto desc = std::dynamic_pointer_cast<j2me::core::ConstantUtf8>(javaClass->rawFile->constant_pool[method.descriptor_index]);
+                
+                if (name && desc && name->bytes == "main" && desc->bytes == "([Ljava/lang/String;)V") {
+                    auto frame = std::make_shared<j2me::core::StackFrame>(method, javaClass->rawFile);
+                    
+                    // Create String array for args (empty for now)
+                    auto arrayCls = interpreter.resolveClass("[Ljava/lang/String;");
+                    if (arrayCls) {
+                        auto arrayObj = j2me::core::HeapManager::getInstance().allocate(arrayCls);
+                        arrayObj->fields.resize(0); // Empty array
+                        
+                        j2me::core::JavaValue vArgs;
+                        vArgs.type = j2me::core::JavaValue::REFERENCE;
+                        vArgs.val.ref = arrayObj;
+                        frame->setLocal(0, vArgs);
+                    }
+                    
+                    interpreter.execute(frame);
+                    LOG_INFO("main method completed.");
+                    return 0;
+                }
+            }
+            
+            LOG_ERROR("main method not found!");
+            return 1;
+        }
+        
+        // If it's a MIDlet, we need to run it with GUI
+        if (isMIDlet) {
+            LOG_INFO("Running MIDlet (GUI mode)...");
+            // Fall through to the GUI code below
+        } else {
+            LOG_ERROR("Class is not a MIDlet and has no main method. Cannot run.");
+            return 1;
+        }
+    }
+    
+    // For .jar files or MIDlets, continue with the existing GUI code
+    LOG_INFO("Loading JAR: " + filePath);
 
     j2me::loader::JarLoader loader;
-    if (!loader.load(jarPath)) {
+    if (!loader.load(filePath)) {
         LOG_ERROR("Failed to load JAR file.");
         return 1;
     }
@@ -202,11 +416,11 @@ int main(int argc, char* argv[]) {
     std::vector<std::string> stubPaths;
     
     // First, try to find stubs.jar relative to the JAR file
-    if (!jarPath.empty()) {
+    if (!filePath.empty()) {
         // Find the last '/' or '\' to get the directory
-        size_t lastSlash = jarPath.find_last_of("/\\");
+        size_t lastSlash = filePath.find_last_of("/\\");
         if (lastSlash != std::string::npos) {
-            std::string jarDir = jarPath.substr(0, lastSlash);
+            std::string jarDir = filePath.substr(0, lastSlash);
             
             // Try stubs/stubs.jar relative to JAR directory
             std::string path1 = jarDir + "/stubs/stubs.jar";

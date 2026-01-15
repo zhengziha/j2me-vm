@@ -530,9 +530,11 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
                 frame->push(val);
             } else if (auto integer = std::dynamic_pointer_cast<ConstantInteger>(constant)) {
                 JavaValue val; val.type = JavaValue::INT; val.val.i = integer->bytes;
+                std::cerr << "[LDC] Loading int constant #" << index << ": " << integer->bytes << ", type=" << val.type << std::endl;
                 frame->push(val);
             } else if (auto flt = std::dynamic_pointer_cast<ConstantFloat>(constant)) {
                 JavaValue val; val.type = JavaValue::FLOAT; val.val.f = flt->bytes;
+                std::cerr << "[LDC] Loading float constant #" << index << ": " << flt->bytes << ", type=" << val.type << std::endl;
                 frame->push(val);
             } else {
                  std::cerr << "Unsupported LDC type at index " << (int)index << std::endl;
@@ -633,6 +635,42 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
              break;
         }
         
+        case OP_FLOAD: { uint8_t idx = codeReader.readU1(); frame->push(frame->getLocal(idx)); break; }
+        case OP_FLOAD_0: {
+             frame->push(frame->getLocal(0));
+             break;
+        }
+        case OP_FLOAD_1: {
+             frame->push(frame->getLocal(1));
+             break;
+        }
+        case OP_FLOAD_2: {
+             frame->push(frame->getLocal(2));
+             break;
+        }
+        case OP_FLOAD_3: {
+             frame->push(frame->getLocal(3));
+             break;
+        }
+        
+        case OP_DLOAD: { uint8_t idx = codeReader.readU1(); frame->push(frame->getLocal(idx)); break; }
+        case OP_DLOAD_0: {
+             frame->push(frame->getLocal(0));
+             break;
+        }
+        case OP_DLOAD_1: {
+             frame->push(frame->getLocal(1));
+             break;
+        }
+        case OP_DLOAD_2: {
+             frame->push(frame->getLocal(2));
+             break;
+        }
+        case OP_DLOAD_3: {
+             frame->push(frame->getLocal(3));
+             break;
+        }
+        
         case OP_ALOAD: { uint8_t idx = codeReader.readU1(); frame->push(frame->getLocal(idx)); break; }
         case OP_ALOAD_0: {
             JavaValue v = frame->getLocal(0);
@@ -656,6 +694,72 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
         case OP_ASTORE_1: frame->setLocal(1, frame->pop()); break;
         case OP_ASTORE_2: frame->setLocal(2, frame->pop()); break;
         case OP_ASTORE_3: frame->setLocal(3, frame->pop()); break;
+        
+        // --- Wide Stores (for long, float, double) ---
+        // For now, we'll implement LSTORE, FSTORE, DSTORE using the same pattern
+        case OP_LSTORE: {
+            uint8_t idx = codeReader.readU1();
+            frame->setLocal(idx, frame->pop());
+            break;
+        }
+        case OP_LSTORE_0: {
+            frame->setLocal(0, frame->pop());
+            break;
+        }
+        case OP_LSTORE_1: {
+            frame->setLocal(1, frame->pop());
+            break;
+        }
+        case OP_LSTORE_2: {
+            frame->setLocal(2, frame->pop());
+            break;
+        }
+        case OP_LSTORE_3: {
+            frame->setLocal(3, frame->pop());
+            break;
+        }
+        case OP_FSTORE: {
+            uint8_t idx = codeReader.readU1();
+            frame->setLocal(idx, frame->pop());
+            break;
+        }
+        case OP_FSTORE_0: {
+            frame->setLocal(0, frame->pop());
+            break;
+        }
+        case OP_FSTORE_1: {
+            frame->setLocal(1, frame->pop());
+            break;
+        }
+        case OP_FSTORE_2: {
+            frame->setLocal(2, frame->pop());
+            break;
+        }
+        case OP_FSTORE_3: {
+            frame->setLocal(3, frame->pop());
+            break;
+        }
+        case OP_DSTORE: {
+            uint8_t idx = codeReader.readU1();
+            frame->setLocal(idx, frame->pop());
+            break;
+        }
+        case OP_DSTORE_0: {
+            frame->setLocal(0, frame->pop());
+            break;
+        }
+        case OP_DSTORE_1: {
+            frame->setLocal(1, frame->pop());
+            break;
+        }
+        case OP_DSTORE_2: {
+            frame->setLocal(2, frame->pop());
+            break;
+        }
+        case OP_DSTORE_3: {
+            frame->setLocal(3, frame->pop());
+            break;
+        }
         
         // --- Stack ---
         case OP_POP: frame->pop(); break;
@@ -1609,6 +1713,11 @@ bool Interpreter::isValidClassName(const std::string& name) {
     }
     // Everything else is invalid
     return false;
+}
+
+void Interpreter::registerClass(const std::string& className, std::shared_ptr<JavaClass> cls) {
+    loadedClasses[className] = cls;
+    LOG_DEBUG("[Interpreter] Registered class: " + className);
 }
 
 } // namespace core

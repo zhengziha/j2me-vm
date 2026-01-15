@@ -19,6 +19,9 @@ public:
     std::optional<JavaValue> execute(std::shared_ptr<StackFrame> frame);
     std::shared_ptr<JavaClass> resolveClass(const std::string& className);
     
+    // Directly register a class (useful for .class files loaded directly)
+    void registerClass(const std::string& className, std::shared_ptr<JavaClass> cls);
+    
     void setStubLoader(std::shared_ptr<j2me::loader::JarLoader> loader) { stubLoader = loader; }
 
 private:
