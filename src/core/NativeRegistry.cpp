@@ -156,6 +156,86 @@ NativeRegistry::NativeRegistry() {
         frame->push(thisVal);
     });
 
+    // java/lang/StringBuilder.append(J)Ljava/lang/StringBuilder;
+    registerNative("java/lang/StringBuilder", "append", "(J)Ljava/lang/StringBuilder;", [](std::shared_ptr<StackFrame> frame) {
+        std::cerr << "Native StringBuilder.append(long)" << std::endl;
+        JavaValue longVal = frame->pop();
+        JavaValue thisVal = frame->pop();
+        JavaObject* thisObj = (JavaObject*)thisVal.val.ref;
+        
+        if (thisObj && !thisObj->fields.empty()) {
+            std::string* str = (std::string*)thisObj->fields[0];
+            if (str) {
+                str->append(std::to_string(longVal.val.l));
+            }
+        }
+        frame->push(thisVal);
+    });
+
+    // java/lang/StringBuilder.append(C)Ljava/lang/StringBuilder;
+    registerNative("java/lang/StringBuilder", "append", "(C)Ljava/lang/StringBuilder;", [](std::shared_ptr<StackFrame> frame) {
+        std::cerr << "Native StringBuilder.append(char)" << std::endl;
+        JavaValue charVal = frame->pop();
+        JavaValue thisVal = frame->pop();
+        JavaObject* thisObj = (JavaObject*)thisVal.val.ref;
+        
+        if (thisObj && !thisObj->fields.empty()) {
+            std::string* str = (std::string*)thisObj->fields[0];
+            if (str) {
+                str->push_back((char)charVal.val.i);
+            }
+        }
+        frame->push(thisVal);
+    });
+
+    // java/lang/StringBuilder.append(Z)Ljava/lang/StringBuilder;
+    registerNative("java/lang/StringBuilder", "append", "(Z)Ljava/lang/StringBuilder;", [](std::shared_ptr<StackFrame> frame) {
+        std::cerr << "Native StringBuilder.append(boolean)" << std::endl;
+        JavaValue boolVal = frame->pop();
+        JavaValue thisVal = frame->pop();
+        JavaObject* thisObj = (JavaObject*)thisVal.val.ref;
+        
+        if (thisObj && !thisObj->fields.empty()) {
+            std::string* str = (std::string*)thisObj->fields[0];
+            if (str) {
+                str->append(boolVal.val.i ? "true" : "false");
+            }
+        }
+        frame->push(thisVal);
+    });
+
+    // java/lang/StringBuilder.append(F)Ljava/lang/StringBuilder;
+    registerNative("java/lang/StringBuilder", "append", "(F)Ljava/lang/StringBuilder;", [](std::shared_ptr<StackFrame> frame) {
+        std::cerr << "Native StringBuilder.append(float)" << std::endl;
+        JavaValue floatVal = frame->pop();
+        JavaValue thisVal = frame->pop();
+        JavaObject* thisObj = (JavaObject*)thisVal.val.ref;
+        
+        if (thisObj && !thisObj->fields.empty()) {
+            std::string* str = (std::string*)thisObj->fields[0];
+            if (str) {
+                str->append(std::to_string(floatVal.val.f));
+            }
+        }
+        frame->push(thisVal);
+    });
+
+    // java/lang/StringBuilder.append(D)Ljava/lang/StringBuilder;
+    registerNative("java/lang/StringBuilder", "append", "(D)Ljava/lang/StringBuilder;", [](std::shared_ptr<StackFrame> frame) {
+        std::cerr << "Native StringBuilder.append(double)" << std::endl;
+        JavaValue doubleVal = frame->pop();
+        JavaValue thisVal = frame->pop();
+        JavaObject* thisObj = (JavaObject*)thisVal.val.ref;
+        
+        if (thisObj && !thisObj->fields.empty()) {
+            std::string* str = (std::string*)thisObj->fields[0];
+            if (str) {
+                str->append(std::to_string(doubleVal.val.d));
+            }
+        }
+        frame->push(thisVal);
+    });
+
     // java/lang/StringBuilder.append(Ljava/lang/Object;)Ljava/lang/StringBuilder;
     registerNative("java/lang/StringBuilder", "append", "(Ljava/lang/Object;)Ljava/lang/StringBuilder;", [](std::shared_ptr<StackFrame> frame) {
         JavaValue objVal = frame->pop();
@@ -232,6 +312,7 @@ NativeRegistry::NativeRegistry() {
                     }
                     
                     ret.val.ref = stringObj;
+                    ret.strVal = *str;
                 }
             }
         }

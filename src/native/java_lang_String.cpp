@@ -66,6 +66,28 @@ void registerStringNatives() {
         }
     );
 
+    // java/lang/String.valueOf(J)Ljava/lang/String;
+    registry.registerNative("java/lang/String", "valueOf", "(J)Ljava/lang/String;",
+        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+            j2me::core::JavaValue longVal = frame->pop();
+            
+            j2me::core::JavaValue result;
+            result.type = j2me::core::JavaValue::REFERENCE;
+            result.val.ref = nullptr;
+            
+            long value = longVal.val.l;
+            auto interpreter = j2me::core::NativeRegistry::getInstance().getInterpreter();
+            auto stringCls = interpreter->resolveClass("java/lang/String");
+            if (stringCls) {
+                auto stringObj = j2me::core::HeapManager::getInstance().allocate(stringCls);
+                result.val.ref = stringObj;
+                result.strVal = std::to_string(value);
+            }
+            
+            frame->push(result);
+        }
+    );
+
     // java/lang/String.<init>([B)V
     registry.registerNative("java/lang/String", "<init>", "([B)V",
         [](std::shared_ptr<j2me::core::StackFrame> frame) {

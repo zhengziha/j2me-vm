@@ -30,6 +30,9 @@ private:
     
     // Execute static initializer for a class
     void initializeClass(std::shared_ptr<JavaClass> cls);
+    
+    // Validate that a string is actually a class name, not a descriptor
+    bool isValidClassName(const std::string& name);
 };
 
 } // namespace core

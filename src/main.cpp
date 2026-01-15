@@ -2,6 +2,8 @@
 #include <SDL2/SDL.h>
 #include <algorithm> // for std::replace
 #include <string>
+#include <vector>
+#include <sys/stat.h>
 #include "loader/JarLoader.hpp"
 #include "core/ClassParser.hpp"
 #include "core/Interpreter.hpp"
@@ -194,9 +196,51 @@ int main(int argc, char* argv[]) {
 
     // Load stub classes (stubs.jar)
     auto stubLoader = std::make_shared<j2me::loader::JarLoader>();
-    if (stubLoader->load("stubs/stubs.jar") || stubLoader->load("../stubs/stubs.jar")) {
-        LOG_INFO("Loaded stub classes (stubs.jar)");
-    } else {
+    bool stubsLoaded = false;
+    
+    // Try multiple possible paths for stubs.jar
+    std::vector<std::string> stubPaths;
+    
+    // First, try to find stubs.jar relative to the JAR file
+    if (!jarPath.empty()) {
+        // Find the last '/' or '\' to get the directory
+        size_t lastSlash = jarPath.find_last_of("/\\");
+        if (lastSlash != std::string::npos) {
+            std::string jarDir = jarPath.substr(0, lastSlash);
+            
+            // Try stubs/stubs.jar relative to JAR directory
+            std::string path1 = jarDir + "/stubs/stubs.jar";
+            stubPaths.push_back(path1);
+            LOG_DEBUG("Trying stubs path (relative to JAR): " + path1);
+            
+            // Try ../stubs/stubs.jar relative to JAR directory
+            std::string path2 = jarDir + "/../stubs/stubs.jar";
+            stubPaths.push_back(path2);
+            LOG_DEBUG("Trying stubs path (relative to JAR parent): " + path2);
+        }
+    }
+    
+    // Try absolute path
+    std::string absPath = "/Users/zhengzihang/my-src/j2me-vm/stubs/stubs.jar";
+    stubPaths.push_back(absPath);
+    LOG_DEBUG("Trying stubs path (absolute): " + absPath);
+    
+    // Try relative paths
+    stubPaths.push_back("stubs/stubs.jar");
+    stubPaths.push_back("../stubs/stubs.jar");
+    
+    for (const auto& path : stubPaths) {
+        LOG_INFO("Trying stubs path: " + path);
+        if (stubLoader->load(path)) {
+            LOG_INFO("Loaded stub classes (stubs.jar)");
+            stubsLoaded = true;
+            break;
+        } else {
+            LOG_INFO("Failed to load stubs from: " + path);
+        }
+    }
+    
+    if (!stubsLoaded) {
         LOG_ERROR("Warning: stubs.jar not found. Stub classes might be missing.");
     }
 

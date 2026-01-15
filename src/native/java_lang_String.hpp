@@ -4,6 +4,7 @@ namespace j2me {
 namespace natives {
 
 void registerStringNatives();
+void registerStringBuilderNatives();
 
 }
 }

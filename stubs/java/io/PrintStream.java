@@ -1,8 +1,7 @@
 package java.io;
 
 public class PrintStream {
-    public PrintStream() {
-    }
+    private native void printlnNative(String s);
     
     public void println(String s) {
         printlnNative(s);
@@ -12,18 +11,23 @@ public class PrintStream {
         printlnNative(String.valueOf(i));
     }
     
+    public void println(long l) {
+        printlnNative(String.valueOf(l));
+    }
+    
+    public void println(float f) {
+        printlnNative(String.valueOf(f));
+    }
+    
+    public void println(double d) {
+        printlnNative(String.valueOf(d));
+    }
+    
+    public void println(char c) {
+        printlnNative(String.valueOf(c));
+    }
+    
     public void println(boolean b) {
-        printlnNative(b ? "true" : "false");
+        printlnNative(String.valueOf(b));
     }
-    
-    public void print(String s) {
-        printNative(s);
-    }
-    
-    public void print(int i) {
-        printNative(String.valueOf(i));
-    }
-    
-    private native void printlnNative(String s);
-    private native void printNative(String s);
 }
