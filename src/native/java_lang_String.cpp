@@ -9,6 +9,88 @@
 namespace j2me {
 namespace natives {
 
+j2me::core::JavaObject* createJavaString(j2me::core::Interpreter* interpreter, const std::string& str) {
+    if (!interpreter) return nullptr;
+    
+    auto stringCls = interpreter->resolveClass("java/lang/String");
+    if (!stringCls) return nullptr;
+    
+    auto stringObj = j2me::core::HeapManager::getInstance().allocate(stringCls);
+    
+    // Create char array for value
+    // We try [C first (standard), then [B (fallback)
+    auto arrayCls = interpreter->resolveClass("[C");
+    if (!arrayCls) arrayCls = interpreter->resolveClass("[B");
+    
+    if (arrayCls) {
+        auto arrayObj = j2me::core::HeapManager::getInstance().allocate(arrayCls);
+        arrayObj->fields.resize(str.length());
+        for (size_t i = 0; i < str.length(); i++) {
+            arrayObj->fields[i] = (uint16_t)(uint8_t)str[i]; 
+        }
+        
+        // Set value field
+        auto valueIt = stringCls->fieldOffsets.find("value");
+        if (valueIt != stringCls->fieldOffsets.end()) {
+            stringObj->fields[valueIt->second] = (int64_t)arrayObj;
+        }
+        
+        // Set count field (if exists)
+        auto countIt = stringCls->fieldOffsets.find("count");
+        if (countIt != stringCls->fieldOffsets.end()) {
+             stringObj->fields[countIt->second] = str.length();
+        }
+        
+        // Set offset field (if exists)
+        auto offsetIt = stringCls->fieldOffsets.find("offset");
+        if (offsetIt != stringCls->fieldOffsets.end()) {
+             stringObj->fields[offsetIt->second] = 0;
+        }
+    }
+    
+    return stringObj;
+}
+
+std::string getJavaString(j2me::core::JavaObject* strObj) {
+    if (!strObj || !strObj->cls) return "";
+    
+    // Try to get from value field
+    auto valueIt = strObj->cls->fieldOffsets.find("value");
+    if (valueIt != strObj->cls->fieldOffsets.end()) {
+        int64_t arrayRef = strObj->fields[valueIt->second];
+        if (arrayRef != 0) {
+            auto arrayObj = (j2me::core::JavaObject*)arrayRef;
+            if (!arrayObj) return "";
+            
+            // Handle offset and count if they exist
+            size_t offset = 0;
+            size_t count = arrayObj->fields.size();
+            
+            auto offsetIt = strObj->cls->fieldOffsets.find("offset");
+            if (offsetIt != strObj->cls->fieldOffsets.end()) {
+                offset = (size_t)strObj->fields[offsetIt->second];
+            }
+            
+            auto countIt = strObj->cls->fieldOffsets.find("count");
+            if (countIt != strObj->cls->fieldOffsets.end()) {
+                count = (size_t)strObj->fields[countIt->second];
+            }
+            
+            std::string res;
+            if (offset < arrayObj->fields.size()) {
+                size_t actualCount = std::min(count, arrayObj->fields.size() - offset);
+                res.reserve(actualCount);
+                for (size_t i = 0; i < actualCount; i++) {
+                    res += (char)arrayObj->fields[offset + i];
+                }
+            }
+            return res;
+        }
+    }
+    
+    return "";
+}
+
 void registerStringNatives() {
     auto& registry = j2me::core::NativeRegistry::getInstance();
 

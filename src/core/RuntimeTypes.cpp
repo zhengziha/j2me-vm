@@ -1,4 +1,5 @@
 #include "RuntimeTypes.hpp"
+#include "Logger.hpp"
 #include <iostream>
 
 namespace j2me {
@@ -11,7 +12,7 @@ JavaClass::JavaClass(std::shared_ptr<ClassFile> file) : rawFile(file) {
     // Extract class name from constant pool
     auto classInfo = std::dynamic_pointer_cast<ConstantClass>(file->constant_pool[file->this_class]);
     if (!classInfo) {
-        std::cerr << "Invalid this_class index" << std::endl;
+        LOG_ERROR("Invalid this_class index");
         return;
     }
     auto nameInfo = std::dynamic_pointer_cast<ConstantUtf8>(file->constant_pool[classInfo->name_index]);
@@ -27,13 +28,13 @@ void JavaClass::link(std::shared_ptr<JavaClass> parent) {
         fieldOffsets = parent->fieldOffsets; 
     }
 
-    std::cout << "[JavaClass::link] Linking class: " << name << " with " << rawFile->fields.size() << " fields" << std::endl;
+    LOG_DEBUG("[JavaClass::link] Linking class: " + name + " with " + std::to_string(rawFile->fields.size()) + " fields");
     
     for (const auto& field : rawFile->fields) {
         auto nameInfo = std::dynamic_pointer_cast<ConstantUtf8>(rawFile->constant_pool[field.name_index]);
         auto descInfo = std::dynamic_pointer_cast<ConstantUtf8>(rawFile->constant_pool[field.descriptor_index]);
         
-        std::cout << "[JavaClass::link]   Field: " << nameInfo->bytes << " desc=" << descInfo->bytes << " access_flags=" << field.access_flags << std::endl;
+        LOG_DEBUG("[JavaClass::link]   Field: " + nameInfo->bytes + " desc=" + descInfo->bytes + " access_flags=" + std::to_string(field.access_flags));
         
         if (field.access_flags & 0x0008) {
             staticFields[nameInfo->bytes] = 0;
@@ -42,11 +43,13 @@ void JavaClass::link(std::shared_ptr<JavaClass> parent) {
         }
     }
     instanceSize = offset;
-    std::cout << "[JavaClass::link]   instanceSize=" << instanceSize << " fieldOffsets size=" << fieldOffsets.size() << std::endl;
+    LOG_DEBUG("[JavaClass::link]   instanceSize=" + std::to_string(instanceSize) + " fieldOffsets size=" + std::to_string(fieldOffsets.size()));
 }
 
 JavaObject::JavaObject(std::shared_ptr<JavaClass> cls) : cls(cls) {
-    fields.resize(cls->instanceSize);
+    if (cls) {
+        fields.resize(cls->instanceSize);
+    }
 }
 
 } // namespace core

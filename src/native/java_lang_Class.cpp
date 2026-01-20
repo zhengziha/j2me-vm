@@ -4,6 +4,7 @@
 #include "../core/HeapManager.hpp"
 #include "../core/Interpreter.hpp"
 #include "../loader/JarLoader.hpp"
+#include "java_lang_String.hpp"
 #include <iostream>
 #include <string>
 
@@ -17,16 +18,51 @@ void registerClassNatives() {
     registry.registerNative("java/lang/Class", "getResourceAsStream", "(Ljava/lang/String;)Ljava/io/InputStream;", 
         [](std::shared_ptr<j2me::core::StackFrame> frame) {
             j2me::core::JavaValue nameVal = frame->pop();
-            frame->pop(); // this (Class object)
+            j2me::core::JavaValue thisVal = frame->pop(); // this (Class object)
             
             j2me::core::JavaValue result;
             result.type = j2me::core::JavaValue::REFERENCE;
             result.val.ref = nullptr;
             
-            if (nameVal.type == j2me::core::JavaValue::REFERENCE && !nameVal.strVal.empty()) {
-                std::string resName = nameVal.strVal;
+            std::string resName;
+            if (nameVal.type == j2me::core::JavaValue::REFERENCE) {
+                if (!nameVal.strVal.empty()) {
+                    resName = nameVal.strVal;
+                } else if (nameVal.val.ref != nullptr) {
+                    resName = getJavaString((j2me::core::JavaObject*)nameVal.val.ref);
+                }
+            }
+            
+            if (!resName.empty()) {
                 // Normalize path (if starts with /, remove it)
-                if (resName.size() > 0 && resName[0] == '/') resName = resName.substr(1);
+                if (resName.size() > 0 && resName[0] == '/') {
+                    resName = resName.substr(1);
+                } else {
+                    // Relative path: prepend package of this class
+                    // We need to get the name of the class this Class object represents
+                    if (thisVal.val.ref != nullptr) {
+                        j2me::core::JavaObject* classObj = (j2me::core::JavaObject*)thisVal.val.ref;
+                        auto nameIt = classObj->cls->fieldOffsets.find("name");
+                        if (nameIt != classObj->cls->fieldOffsets.end()) {
+                            int64_t nameRef = classObj->fields[nameIt->second];
+                            if (nameRef != 0) {
+                                std::string className = getJavaString((j2me::core::JavaObject*)nameRef);
+                                // className is like "java.lang.String"
+                                // Convert to path "java/lang/String"
+                                for (auto& c : className) {
+                                    if (c == '.') c = '/';
+                                }
+                                // Remove class name, keep package
+                                auto lastSlash = className.find_last_of('/');
+                                if (lastSlash != std::string::npos) {
+                                    resName = className.substr(0, lastSlash + 1) + resName;
+                                } else {
+                                    // Default package, no prefix needed (unless strictly required?)
+                                }
+                            }
+                        }
+                    }
+                }
                 
                 std::cout << "[Class] Loading resource: " << resName << std::endl;
                 

@@ -5,6 +5,11 @@
 #include "NativeRegistry.hpp"
 #include "Logger.hpp"
 #include <iostream>
+#include <cmath>
+#include <cstring>
+#include <algorithm>
+#include <functional>
+#include <vector>
 
 namespace j2me {
 namespace core {
@@ -26,17 +31,17 @@ std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& classNam
     
     // Check if file exists
     if (!jarLoader.hasFile(path)) {
-        // Check stub loader if available
-        if (stubLoader && stubLoader->hasFile(path)) {
-             LOG_DEBUG("[Interpreter] Loading " + className + " from stub loader");
-             auto data = stubLoader->getFile(path);
+        // Check library loader if available
+        if (libraryLoader && libraryLoader->hasFile(path)) {
+             LOG_DEBUG("[Interpreter] Loading " + className + " from library loader");
+             auto data = libraryLoader->getFile(path);
              if (data) {
                  try {
                      ClassParser parser;
                      auto rawFile = parser.parse(*data);
                      auto javaClass = std::make_shared<JavaClass>(rawFile);
                      
-                     LOG_DEBUG("[Interpreter] Parsed " + className + " from stub, fields=" + std::to_string(rawFile->fields.size()));
+                     LOG_DEBUG("[Interpreter] Parsed " + className + " from library, fields=" + std::to_string(rawFile->fields.size()));
                      
                      if (rawFile->super_class != 0) {
                          auto superInfo = std::dynamic_pointer_cast<ConstantClass>(rawFile->constant_pool[rawFile->super_class]);
@@ -56,7 +61,7 @@ std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& classNam
                      loadedClasses[className] = javaClass;
                      return javaClass;
                  } catch (const std::exception& e) {
-                     LOG_ERROR("Failed to parse stub class " + className + ": " + e.what());
+                     LOG_ERROR("Failed to parse library class " + className + ": " + e.what());
                  }
              }
         }
@@ -231,22 +236,11 @@ std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& classNam
              return javaClass;
         }
 
-        // Mock array classes for byte arrays
-        if (className == "[B") {
+        // Generic array class handling
+        if (className.length() > 0 && className[0] == '[') {
              auto dummy = std::make_shared<ClassFile>();
              auto javaClass = std::make_shared<JavaClass>(dummy);
-             javaClass->name = "[B";
-             javaClass->instanceSize = 0; // Arrays use dynamic field storage
-             
-             loadedClasses[className] = javaClass;
-             return javaClass;
-        }
-
-        // Mock array classes for String arrays
-        if (className == "[Ljava/lang/String;") {
-             auto dummy = std::make_shared<ClassFile>();
-             auto javaClass = std::make_shared<JavaClass>(dummy);
-             javaClass->name = "[Ljava/lang/String;";
+             javaClass->name = className;
              javaClass->instanceSize = 0; // Arrays use dynamic field storage
              
              loadedClasses[className] = javaClass;
@@ -400,9 +394,7 @@ std::optional<JavaValue> Interpreter::execute(std::shared_ptr<StackFrame> frame)
             }
         } catch (const std::exception& e) {
             LOG_ERROR("Runtime Exception: " + std::string(e.what()));
-            // Print stack trace or context
-            LOG_DEBUG("Method context: " + std::to_string(frame->classFile->this_class)); // Not very helpful without names
-            throw; // Re-throw to propagate
+            throw;
         }
     }
     
@@ -472,6 +464,11 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
         case OP_ICONST_5:  { JavaValue v; v.type = JavaValue::INT; v.val.i = 5; frame->push(v); break; }
         case OP_LCONST_0:  { JavaValue v; v.type = JavaValue::LONG; v.val.l = 0; frame->push(v); break; }
         case OP_LCONST_1:  { JavaValue v; v.type = JavaValue::LONG; v.val.l = 1; frame->push(v); break; }
+        case OP_FCONST_0:  { JavaValue v; v.type = JavaValue::FLOAT; v.val.f = 0.0f; frame->push(v); break; }
+        case OP_FCONST_1:  { JavaValue v; v.type = JavaValue::FLOAT; v.val.f = 1.0f; frame->push(v); break; }
+        case OP_FCONST_2:  { JavaValue v; v.type = JavaValue::FLOAT; v.val.f = 2.0f; frame->push(v); break; }
+        case OP_DCONST_0:  { JavaValue v; v.type = JavaValue::DOUBLE; v.val.d = 0.0; frame->push(v); break; }
+        case OP_DCONST_1:  { JavaValue v; v.type = JavaValue::DOUBLE; v.val.d = 1.0; frame->push(v); break; }
         
         case OP_BIPUSH: {
             int8_t byteVal = (int8_t)codeReader.readU1();
@@ -536,8 +533,23 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
                 JavaValue val; val.type = JavaValue::FLOAT; val.val.f = flt->bytes;
                 std::cerr << "[LDC] Loading float constant #" << index << ": " << flt->bytes << ", type=" << val.type << std::endl;
                 frame->push(val);
+            } else if (auto clsConst = std::dynamic_pointer_cast<ConstantClass>(constant)) {
+                auto nameInfo = std::dynamic_pointer_cast<ConstantUtf8>(frame->classFile->constant_pool[clsConst->name_index]);
+                resolveClass(nameInfo->bytes);
+                
+                auto classCls = resolveClass("java/lang/Class");
+                JavaValue val;
+                val.type = JavaValue::REFERENCE;
+                if (classCls) {
+                    val.val.ref = HeapManager::getInstance().allocate(classCls);
+                } else {
+                    val.val.ref = nullptr;
+                }
+                frame->push(val);
             } else {
                  std::cerr << "Unsupported LDC type at index " << (int)index << std::endl;
+                 // Push dummy to avoid stack underflow
+                 frame->push(JavaValue{JavaValue::INT, { .i = 0 }});
             }
             break;
         }
@@ -590,8 +602,22 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
             } else if (auto flt = std::dynamic_pointer_cast<ConstantFloat>(constant)) {
                 JavaValue val; val.type = JavaValue::FLOAT; val.val.f = flt->bytes;
                 frame->push(val);
+            } else if (auto clsConst = std::dynamic_pointer_cast<ConstantClass>(constant)) {
+                auto nameInfo = std::dynamic_pointer_cast<ConstantUtf8>(frame->classFile->constant_pool[clsConst->name_index]);
+                resolveClass(nameInfo->bytes);
+                
+                auto classCls = resolveClass("java/lang/Class");
+                JavaValue val;
+                val.type = JavaValue::REFERENCE;
+                if (classCls) {
+                    val.val.ref = HeapManager::getInstance().allocate(classCls);
+                } else {
+                    val.val.ref = nullptr;
+                }
+                frame->push(val);
             } else {
                  std::cerr << "Unsupported LDC_W type at index " << (int)index << std::endl;
+                 frame->push(JavaValue{JavaValue::INT, { .i = 0 }});
             }
             break;
         }
@@ -682,6 +708,8 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
         case OP_ALOAD_2: frame->push(frame->getLocal(2)); break;
         case OP_ALOAD_3: frame->push(frame->getLocal(3)); break;
 
+
+
         // --- Stores ---
         case OP_ISTORE: { uint8_t idx = codeReader.readU1(); frame->setLocal(idx, frame->pop()); break; }
         case OP_ISTORE_0: frame->setLocal(0, frame->pop()); break;
@@ -763,6 +791,13 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
         
         // --- Stack ---
         case OP_POP: frame->pop(); break;
+        case OP_POP2: {
+            JavaValue v = frame->pop();
+            if (v.type != JavaValue::LONG && v.type != JavaValue::DOUBLE) {
+                frame->pop();
+            }
+            break;
+        }
         case OP_DUP: frame->push(frame->peek()); break;
         case OP_DUP_X1: {
             JavaValue v1 = frame->pop();
@@ -770,6 +805,105 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
             frame->push(v1);
             frame->push(v2);
             frame->push(v1);
+            break;
+        }
+        case OP_DUP_X2: {
+            JavaValue v1 = frame->pop();
+            JavaValue v2 = frame->pop();
+            if (v2.type == JavaValue::LONG || v2.type == JavaValue::DOUBLE) {
+                // Form 2: v1, v2(long) -> v1, v2, v1
+                frame->push(v1);
+                frame->push(v2);
+                frame->push(v1);
+            } else {
+                // Form 1: v1, v2, v3 -> v1, v2, v3, v1
+                JavaValue v3 = frame->pop();
+                frame->push(v1);
+                frame->push(v3);
+                frame->push(v2);
+                frame->push(v1);
+            }
+            break;
+        }
+        case OP_DUP2: {
+            JavaValue v1 = frame->pop();
+            if (v1.type == JavaValue::LONG || v1.type == JavaValue::DOUBLE) {
+                frame->push(v1);
+                frame->push(v1);
+            } else {
+                JavaValue v2 = frame->pop();
+                frame->push(v2);
+                frame->push(v1);
+                frame->push(v2);
+                frame->push(v1);
+            }
+            break;
+        }
+        case OP_DUP2_X1: {
+            JavaValue v1 = frame->pop();
+            if (v1.type == JavaValue::LONG || v1.type == JavaValue::DOUBLE) {
+                // Form 2: v1(long), v2 -> v1, v2, v1
+                JavaValue v2 = frame->pop();
+                frame->push(v1);
+                frame->push(v2);
+                frame->push(v1);
+            } else {
+                // Form 1: v1, v2, v3 -> v2, v1, v3, v2, v1
+                JavaValue v2 = frame->pop();
+                JavaValue v3 = frame->pop();
+                frame->push(v2);
+                frame->push(v1);
+                frame->push(v3);
+                frame->push(v2);
+                frame->push(v1);
+            }
+            break;
+        }
+        case OP_DUP2_X2: {
+            JavaValue v1 = frame->pop();
+            if (v1.type == JavaValue::LONG || v1.type == JavaValue::DOUBLE) {
+                JavaValue v2 = frame->pop();
+                if (v2.type == JavaValue::LONG || v2.type == JavaValue::DOUBLE) {
+                     // Form 4: v1(long), v2(long) -> v1, v2, v1
+                     frame->push(v1);
+                     frame->push(v2);
+                     frame->push(v1);
+                } else {
+                     // Form 2: v1(long), v2, v3 -> v1, v2, v3, v1
+                     JavaValue v3 = frame->pop();
+                     frame->push(v1);
+                     frame->push(v3);
+                     frame->push(v2);
+                     frame->push(v1);
+                }
+            } else {
+                JavaValue v2 = frame->pop();
+                JavaValue v3 = frame->pop();
+                if (v3.type == JavaValue::LONG || v3.type == JavaValue::DOUBLE) {
+                    // Form 3: v1, v2, v3(long) -> v2, v1, v3, v2, v1
+                    frame->push(v2);
+                    frame->push(v1);
+                    frame->push(v3);
+                    frame->push(v2);
+                    frame->push(v1);
+                } else {
+                    // Form 1: v1, v2, v3, v4 -> v2, v1, v4, v3, v2, v1
+                    JavaValue v4 = frame->pop();
+                    frame->push(v2);
+                    frame->push(v1);
+                    frame->push(v4);
+                    frame->push(v3);
+                    frame->push(v2);
+                    frame->push(v1);
+                }
+            }
+            break;
+        }
+        case OP_SWAP: {
+            JavaValue v1 = frame->pop();
+            JavaValue v2 = frame->pop();
+            frame->push(v1);
+            frame->push(v2);
             break;
         }
 
@@ -781,11 +915,53 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
             frame->push(res);
             break;
         }
+        case OP_LADD: {
+            int64_t v2 = frame->pop().val.l;
+            int64_t v1 = frame->pop().val.l;
+            JavaValue res; res.type = JavaValue::LONG; res.val.l = v1 + v2;
+            frame->push(res);
+            break;
+        }
+        case OP_FADD: {
+            float v2 = frame->pop().val.f;
+            float v1 = frame->pop().val.f;
+            JavaValue res; res.type = JavaValue::FLOAT; res.val.f = v1 + v2;
+            frame->push(res);
+            break;
+        }
+        case OP_DADD: {
+            double v2 = frame->pop().val.d;
+            double v1 = frame->pop().val.d;
+            JavaValue res; res.type = JavaValue::DOUBLE; res.val.d = v1 + v2;
+            frame->push(res);
+            break;
+        }
 
         case OP_ISUB: {
             int32_t v2 = frame->pop().val.i;
             int32_t v1 = frame->pop().val.i;
             JavaValue res; res.type = JavaValue::INT; res.val.i = v1 - v2;
+            frame->push(res);
+            break;
+        }
+        case OP_LSUB: {
+            int64_t v2 = frame->pop().val.l;
+            int64_t v1 = frame->pop().val.l;
+            JavaValue res; res.type = JavaValue::LONG; res.val.l = v1 - v2;
+            frame->push(res);
+            break;
+        }
+        case OP_FSUB: {
+            float v2 = frame->pop().val.f;
+            float v1 = frame->pop().val.f;
+            JavaValue res; res.type = JavaValue::FLOAT; res.val.f = v1 - v2;
+            frame->push(res);
+            break;
+        }
+        case OP_DSUB: {
+            double v2 = frame->pop().val.d;
+            double v1 = frame->pop().val.d;
+            JavaValue res; res.type = JavaValue::DOUBLE; res.val.d = v1 - v2;
             frame->push(res);
             break;
         }
@@ -797,11 +973,55 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
             frame->push(res);
             break;
         }
+        case OP_LMUL: {
+            int64_t v2 = frame->pop().val.l;
+            int64_t v1 = frame->pop().val.l;
+            JavaValue res; res.type = JavaValue::LONG; res.val.l = v1 * v2;
+            frame->push(res);
+            break;
+        }
+        case OP_FMUL: {
+            float v2 = frame->pop().val.f;
+            float v1 = frame->pop().val.f;
+            JavaValue res; res.type = JavaValue::FLOAT; res.val.f = v1 * v2;
+            frame->push(res);
+            break;
+        }
+        case OP_DMUL: {
+            double v2 = frame->pop().val.d;
+            double v1 = frame->pop().val.d;
+            JavaValue res; res.type = JavaValue::DOUBLE; res.val.d = v1 * v2;
+            frame->push(res);
+            break;
+        }
 
         case OP_IDIV: {
             int32_t v2 = frame->pop().val.i;
             int32_t v1 = frame->pop().val.i;
+            if (v2 == 0) throw std::runtime_error("ArithmeticException: / by zero");
             JavaValue res; res.type = JavaValue::INT; res.val.i = v1 / v2;
+            frame->push(res);
+            break;
+        }
+        case OP_LDIV: {
+            int64_t v2 = frame->pop().val.l;
+            int64_t v1 = frame->pop().val.l;
+            if (v2 == 0) throw std::runtime_error("ArithmeticException: / by zero");
+            JavaValue res; res.type = JavaValue::LONG; res.val.l = v1 / v2;
+            frame->push(res);
+            break;
+        }
+        case OP_FDIV: {
+            float v2 = frame->pop().val.f;
+            float v1 = frame->pop().val.f;
+            JavaValue res; res.type = JavaValue::FLOAT; res.val.f = v1 / v2;
+            frame->push(res);
+            break;
+        }
+        case OP_DDIV: {
+            double v2 = frame->pop().val.d;
+            double v1 = frame->pop().val.d;
+            JavaValue res; res.type = JavaValue::DOUBLE; res.val.d = v1 / v2;
             frame->push(res);
             break;
         }
@@ -809,7 +1029,30 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
         case OP_IREM: {
             int32_t v2 = frame->pop().val.i;
             int32_t v1 = frame->pop().val.i;
+            if (v2 == 0) throw std::runtime_error("ArithmeticException: / by zero");
             JavaValue res; res.type = JavaValue::INT; res.val.i = v1 % v2;
+            frame->push(res);
+            break;
+        }
+        case OP_LREM: {
+            int64_t v2 = frame->pop().val.l;
+            int64_t v1 = frame->pop().val.l;
+            if (v2 == 0) throw std::runtime_error("ArithmeticException: / by zero");
+            JavaValue res; res.type = JavaValue::LONG; res.val.l = v1 % v2;
+            frame->push(res);
+            break;
+        }
+        case OP_FREM: {
+            float v2 = frame->pop().val.f;
+            float v1 = frame->pop().val.f;
+            JavaValue res; res.type = JavaValue::FLOAT; res.val.f = std::fmod(v1, v2);
+            frame->push(res);
+            break;
+        }
+        case OP_DREM: {
+            double v2 = frame->pop().val.d;
+            double v1 = frame->pop().val.d;
+            JavaValue res; res.type = JavaValue::DOUBLE; res.val.d = std::fmod(v1, v2);
             frame->push(res);
             break;
         }
@@ -820,11 +1063,36 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
             frame->push(res);
             break;
         }
+        case OP_LNEG: {
+            int64_t v1 = frame->pop().val.l;
+            JavaValue res; res.type = JavaValue::LONG; res.val.l = -v1;
+            frame->push(res);
+            break;
+        }
+        case OP_FNEG: {
+            float v1 = frame->pop().val.f;
+            JavaValue res; res.type = JavaValue::FLOAT; res.val.f = -v1;
+            frame->push(res);
+            break;
+        }
+        case OP_DNEG: {
+            double v1 = frame->pop().val.d;
+            JavaValue res; res.type = JavaValue::DOUBLE; res.val.d = -v1;
+            frame->push(res);
+            break;
+        }
 
         case OP_ISHL: {
             int32_t v2 = frame->pop().val.i;
             int32_t v1 = frame->pop().val.i;
-            JavaValue res; res.type = JavaValue::INT; res.val.i = v1 << v2;
+            JavaValue res; res.type = JavaValue::INT; res.val.i = v1 << (v2 & 0x1F);
+            frame->push(res);
+            break;
+        }
+        case OP_LSHL: {
+            int32_t v2 = frame->pop().val.i;
+            int64_t v1 = frame->pop().val.l;
+            JavaValue res; res.type = JavaValue::LONG; res.val.l = v1 << (v2 & 0x3F);
             frame->push(res);
             break;
         }
@@ -832,7 +1100,14 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
         case OP_ISHR: {
             int32_t v2 = frame->pop().val.i;
             int32_t v1 = frame->pop().val.i;
-            JavaValue res; res.type = JavaValue::INT; res.val.i = v1 >> v2;
+            JavaValue res; res.type = JavaValue::INT; res.val.i = v1 >> (v2 & 0x1F);
+            frame->push(res);
+            break;
+        }
+        case OP_LSHR: {
+            int32_t v2 = frame->pop().val.i;
+            int64_t v1 = frame->pop().val.l;
+            JavaValue res; res.type = JavaValue::LONG; res.val.l = v1 >> (v2 & 0x3F);
             frame->push(res);
             break;
         }
@@ -840,7 +1115,14 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
         case OP_IUSHR: {
             int32_t v2 = frame->pop().val.i;
             int32_t v1 = frame->pop().val.i;
-            JavaValue res; res.type = JavaValue::INT; res.val.i = (uint32_t)v1 >> v2;
+            JavaValue res; res.type = JavaValue::INT; res.val.i = (uint32_t)v1 >> (v2 & 0x1F);
+            frame->push(res);
+            break;
+        }
+        case OP_LUSHR: {
+            int32_t v2 = frame->pop().val.i;
+            int64_t v1 = frame->pop().val.l;
+            JavaValue res; res.type = JavaValue::LONG; res.val.l = (uint64_t)v1 >> (v2 & 0x3F);
             frame->push(res);
             break;
         }
@@ -852,6 +1134,13 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
             frame->push(res);
             break;
         }
+        case OP_LAND: {
+            int64_t v2 = frame->pop().val.l;
+            int64_t v1 = frame->pop().val.l;
+            JavaValue res; res.type = JavaValue::LONG; res.val.l = v1 & v2;
+            frame->push(res);
+            break;
+        }
 
         case OP_IOR: {
             int32_t v2 = frame->pop().val.i;
@@ -860,11 +1149,173 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
             frame->push(res);
             break;
         }
+        case OP_LOR: {
+            int64_t v2 = frame->pop().val.l;
+            int64_t v1 = frame->pop().val.l;
+            JavaValue res; res.type = JavaValue::LONG; res.val.l = v1 | v2;
+            frame->push(res);
+            break;
+        }
 
         case OP_IXOR: {
             int32_t v2 = frame->pop().val.i;
             int32_t v1 = frame->pop().val.i;
             JavaValue res; res.type = JavaValue::INT; res.val.i = v1 ^ v2;
+            frame->push(res);
+            break;
+        }
+        case OP_LXOR: {
+            int64_t v2 = frame->pop().val.l;
+            int64_t v1 = frame->pop().val.l;
+            JavaValue res; res.type = JavaValue::LONG; res.val.l = v1 ^ v2;
+            frame->push(res);
+            break;
+        }
+
+        // --- Conversions ---
+        case OP_I2L: {
+            int32_t v = frame->pop().val.i;
+            JavaValue res; res.type = JavaValue::LONG; res.val.l = (int64_t)v;
+            frame->push(res);
+            break;
+        }
+        case OP_I2F: {
+            int32_t v = frame->pop().val.i;
+            JavaValue res; res.type = JavaValue::FLOAT; res.val.f = (float)v;
+            frame->push(res);
+            break;
+        }
+        case OP_I2D: {
+            int32_t v = frame->pop().val.i;
+            JavaValue res; res.type = JavaValue::DOUBLE; res.val.d = (double)v;
+            frame->push(res);
+            break;
+        }
+        case OP_L2I: {
+            int64_t v = frame->pop().val.l;
+            JavaValue res; res.type = JavaValue::INT; res.val.i = (int32_t)v;
+            frame->push(res);
+            break;
+        }
+        case OP_L2F: {
+            int64_t v = frame->pop().val.l;
+            JavaValue res; res.type = JavaValue::FLOAT; res.val.f = (float)v;
+            frame->push(res);
+            break;
+        }
+        case OP_L2D: {
+            int64_t v = frame->pop().val.l;
+            JavaValue res; res.type = JavaValue::DOUBLE; res.val.d = (double)v;
+            frame->push(res);
+            break;
+        }
+        case OP_F2I: {
+            float v = frame->pop().val.f;
+            JavaValue res; res.type = JavaValue::INT; res.val.i = (int32_t)v;
+            frame->push(res);
+            break;
+        }
+        case OP_F2L: {
+            float v = frame->pop().val.f;
+            JavaValue res; res.type = JavaValue::LONG; res.val.l = (int64_t)v;
+            frame->push(res);
+            break;
+        }
+        case OP_F2D: {
+            float v = frame->pop().val.f;
+            JavaValue res; res.type = JavaValue::DOUBLE; res.val.d = (double)v;
+            frame->push(res);
+            break;
+        }
+        case OP_D2I: {
+            double v = frame->pop().val.d;
+            JavaValue res; res.type = JavaValue::INT; res.val.i = (int32_t)v;
+            frame->push(res);
+            break;
+        }
+        case OP_D2L: {
+            double v = frame->pop().val.d;
+            JavaValue res; res.type = JavaValue::LONG; res.val.l = (int64_t)v;
+            frame->push(res);
+            break;
+        }
+        case OP_D2F: {
+            double v = frame->pop().val.d;
+            JavaValue res; res.type = JavaValue::FLOAT; res.val.f = (float)v;
+            frame->push(res);
+            break;
+        }
+        case OP_I2B: {
+            int32_t v = frame->pop().val.i;
+            JavaValue res; res.type = JavaValue::INT; res.val.i = (int8_t)v;
+            frame->push(res);
+            break;
+        }
+        case OP_I2C: {
+            int32_t v = frame->pop().val.i;
+            JavaValue res; res.type = JavaValue::INT; res.val.i = (uint16_t)v;
+            frame->push(res);
+            break;
+        }
+        case OP_I2S: {
+            int32_t v = frame->pop().val.i;
+            JavaValue res; res.type = JavaValue::INT; res.val.i = (int16_t)v;
+            frame->push(res);
+            break;
+        }
+
+        // --- Comparisons ---
+        case OP_LCMP: {
+            int64_t v2 = frame->pop().val.l;
+            int64_t v1 = frame->pop().val.l;
+            JavaValue res; res.type = JavaValue::INT;
+            if (v1 > v2) res.val.i = 1;
+            else if (v1 < v2) res.val.i = -1;
+            else res.val.i = 0;
+            frame->push(res);
+            break;
+        }
+        case OP_FCMPL: {
+            float v2 = frame->pop().val.f;
+            float v1 = frame->pop().val.f;
+            JavaValue res; res.type = JavaValue::INT;
+            if (std::isnan(v1) || std::isnan(v2)) res.val.i = -1;
+            else if (v1 > v2) res.val.i = 1;
+            else if (v1 < v2) res.val.i = -1;
+            else res.val.i = 0;
+            frame->push(res);
+            break;
+        }
+        case OP_FCMPG: {
+            float v2 = frame->pop().val.f;
+            float v1 = frame->pop().val.f;
+            JavaValue res; res.type = JavaValue::INT;
+            if (std::isnan(v1) || std::isnan(v2)) res.val.i = 1;
+            else if (v1 > v2) res.val.i = 1;
+            else if (v1 < v2) res.val.i = -1;
+            else res.val.i = 0;
+            frame->push(res);
+            break;
+        }
+        case OP_DCMPL: {
+            double v2 = frame->pop().val.d;
+            double v1 = frame->pop().val.d;
+            JavaValue res; res.type = JavaValue::INT;
+            if (std::isnan(v1) || std::isnan(v2)) res.val.i = -1;
+            else if (v1 > v2) res.val.i = 1;
+            else if (v1 < v2) res.val.i = -1;
+            else res.val.i = 0;
+            frame->push(res);
+            break;
+        }
+        case OP_DCMPG: {
+            double v2 = frame->pop().val.d;
+            double v1 = frame->pop().val.d;
+            JavaValue res; res.type = JavaValue::INT;
+            if (std::isnan(v1) || std::isnan(v2)) res.val.i = 1;
+            else if (v1 > v2) res.val.i = 1;
+            else if (v1 < v2) res.val.i = -1;
+            else res.val.i = 0;
             frame->push(res);
             break;
         }
@@ -926,6 +1377,24 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
              }
              break;
         }
+        case OP_IF_ICMPEQ: {
+             int16_t offset = (int16_t)codeReader.readU2();
+             int32_t val2 = frame->pop().val.i;
+             int32_t val1 = frame->pop().val.i;
+             if (val1 == val2) {
+                 codeReader.seek(codeReader.tell() + offset - 3); 
+             }
+             break;
+        }
+        case OP_IF_ICMPNE: {
+             int16_t offset = (int16_t)codeReader.readU2();
+             int32_t val2 = frame->pop().val.i;
+             int32_t val1 = frame->pop().val.i;
+             if (val1 != val2) {
+                 codeReader.seek(codeReader.tell() + offset - 3); 
+             }
+             break;
+        }
         case OP_IF_ICMPLT: {
              int16_t offset = (int16_t)codeReader.readU2();
              int32_t val2 = frame->pop().val.i;
@@ -962,6 +1431,24 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
              }
              break;
         }
+        case OP_IF_ACMPEQ: {
+             int16_t offset = (int16_t)codeReader.readU2();
+             JavaValue val2 = frame->pop();
+             JavaValue val1 = frame->pop();
+             if (val1.val.ref == val2.val.ref) {
+                 codeReader.seek(codeReader.tell() + offset - 3); 
+             }
+             break;
+        }
+        case OP_IF_ACMPNE: {
+             int16_t offset = (int16_t)codeReader.readU2();
+             JavaValue val2 = frame->pop();
+             JavaValue val1 = frame->pop();
+             if (val1.val.ref != val2.val.ref) {
+                 codeReader.seek(codeReader.tell() + offset - 3); 
+             }
+             break;
+        }
         case OP_IFNULL: {
              int16_t offset = (int16_t)codeReader.readU2();
              JavaValue val = frame->pop();
@@ -977,6 +1464,52 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
                  codeReader.seek(codeReader.tell() + offset - 3); 
              }
              break;
+        }
+
+        case OP_TABLESWITCH: {
+            size_t pc = codeReader.tell() - 1;
+            size_t padding = (4 - (pc + 1) % 4) % 4;
+            for (size_t i = 0; i < padding; i++) codeReader.readU1();
+            
+            int32_t defaultOffset = (int32_t)codeReader.readU4();
+            int32_t low = (int32_t)codeReader.readU4();
+            int32_t high = (int32_t)codeReader.readU4();
+            
+            int32_t index = frame->pop().val.i;
+            
+            if (index < low || index > high) {
+                codeReader.seek(pc + defaultOffset);
+            } else {
+                size_t jumpTableStart = codeReader.tell();
+                size_t entryOffset = (index - low) * 4;
+                codeReader.seek(jumpTableStart + entryOffset);
+                int32_t offset = (int32_t)codeReader.readU4();
+                codeReader.seek(pc + offset);
+            }
+            break;
+        }
+        
+        case OP_LOOKUPSWITCH: {
+            size_t pc = codeReader.tell() - 1;
+            size_t padding = (4 - (pc + 1) % 4) % 4;
+            for (size_t i = 0; i < padding; i++) codeReader.readU1();
+            
+            int32_t defaultOffset = (int32_t)codeReader.readU4();
+            int32_t npairs = (int32_t)codeReader.readU4();
+            
+            int32_t key = frame->pop().val.i;
+            int32_t targetOffset = defaultOffset;
+            
+            for (int i = 0; i < npairs; i++) {
+                int32_t match = (int32_t)codeReader.readU4();
+                int32_t offset = (int32_t)codeReader.readU4();
+                if (match == key) {
+                    targetOffset = offset;
+                    break;
+                }
+            }
+            codeReader.seek(pc + targetOffset);
+            break;
         }
 
         case OP_GOTO: {
@@ -1061,6 +1594,88 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
             arr->fields[index] = val.val.i;
             break;
         }
+
+        case OP_AASTORE: {
+            JavaValue val = frame->pop();
+            int32_t index = frame->pop().val.i;
+            JavaValue arrRef = frame->pop();
+            if (arrRef.val.ref == nullptr) throw std::runtime_error("NullPointerException");
+            
+            JavaObject* arr = (JavaObject*)arrRef.val.ref;
+            if (index < 0 || index >= arr->fields.size()) throw std::runtime_error("ArrayIndexOutOfBoundsException");
+            
+            arr->fields[index] = (int64_t)val.val.ref;
+            break;
+        }
+
+        case OP_LASTORE: {
+            JavaValue val = frame->pop();
+            int32_t index = frame->pop().val.i;
+            JavaValue arrRef = frame->pop();
+            if (arrRef.val.ref == nullptr) throw std::runtime_error("NullPointerException");
+            
+            JavaObject* arr = (JavaObject*)arrRef.val.ref;
+            if (index < 0 || index >= arr->fields.size()) throw std::runtime_error("ArrayIndexOutOfBoundsException");
+            
+            arr->fields[index] = val.val.l;
+            break;
+        }
+
+        case OP_FASTORE: {
+            JavaValue val = frame->pop();
+            int32_t index = frame->pop().val.i;
+            JavaValue arrRef = frame->pop();
+            if (arrRef.val.ref == nullptr) throw std::runtime_error("NullPointerException");
+            
+            JavaObject* arr = (JavaObject*)arrRef.val.ref;
+            if (index < 0 || index >= arr->fields.size()) throw std::runtime_error("ArrayIndexOutOfBoundsException");
+            
+            int32_t bits;
+            memcpy(&bits, &val.val.f, sizeof(float));
+            arr->fields[index] = bits;
+            break;
+        }
+
+        case OP_DASTORE: {
+            JavaValue val = frame->pop();
+            int32_t index = frame->pop().val.i;
+            JavaValue arrRef = frame->pop();
+            if (arrRef.val.ref == nullptr) throw std::runtime_error("NullPointerException");
+            
+            JavaObject* arr = (JavaObject*)arrRef.val.ref;
+            if (index < 0 || index >= arr->fields.size()) throw std::runtime_error("ArrayIndexOutOfBoundsException");
+            
+            int64_t bits;
+            memcpy(&bits, &val.val.d, sizeof(double));
+            arr->fields[index] = bits;
+            break;
+        }
+
+        case OP_BASTORE: {
+            JavaValue val = frame->pop();
+            int32_t index = frame->pop().val.i;
+            JavaValue arrRef = frame->pop();
+            if (arrRef.val.ref == nullptr) throw std::runtime_error("NullPointerException");
+            
+            JavaObject* arr = (JavaObject*)arrRef.val.ref;
+            if (index < 0 || index >= arr->fields.size()) throw std::runtime_error("ArrayIndexOutOfBoundsException");
+            
+            arr->fields[index] = val.val.i;
+            break;
+        }
+
+        case OP_SASTORE: {
+            JavaValue val = frame->pop();
+            int32_t index = frame->pop().val.i;
+            JavaValue arrRef = frame->pop();
+            if (arrRef.val.ref == nullptr) throw std::runtime_error("NullPointerException");
+            
+            JavaObject* arr = (JavaObject*)arrRef.val.ref;
+            if (index < 0 || index >= arr->fields.size()) throw std::runtime_error("ArrayIndexOutOfBoundsException");
+            
+            arr->fields[index] = val.val.i;
+            break;
+        }
         
         case OP_IALOAD: {
             int32_t index = frame->pop().val.i;
@@ -1087,7 +1702,99 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
             
             JavaValue val;
             val.type = JavaValue::INT;
-            val.val.i = (int32_t)arr->fields[index];
+            val.val.i = (uint16_t)arr->fields[index];
+            frame->push(val);
+            break;
+        }
+
+        case OP_LALOAD: {
+            int32_t index = frame->pop().val.i;
+            JavaValue arrayRef = frame->pop();
+            if (arrayRef.val.ref == nullptr) {
+                throw std::runtime_error("NullPointerException");
+            }
+            JavaObject* arrayObj = (JavaObject*)arrayRef.val.ref;
+            if (index < 0 || index >= arrayObj->fields.size()) {
+                throw std::runtime_error("ArrayIndexOutOfBoundsException");
+            }
+            JavaValue val; val.type = JavaValue::LONG; val.val.l = arrayObj->fields[index];
+            frame->push(val);
+            break;
+        }
+        case OP_FALOAD: {
+            int32_t index = frame->pop().val.i;
+            JavaValue arrayRef = frame->pop();
+            if (arrayRef.val.ref == nullptr) {
+                throw std::runtime_error("NullPointerException");
+            }
+            JavaObject* arrayObj = (JavaObject*)arrayRef.val.ref;
+            if (index < 0 || index >= arrayObj->fields.size()) {
+                throw std::runtime_error("ArrayIndexOutOfBoundsException");
+            }
+            // Float is stored as bits in int64 field
+            JavaValue val; val.type = JavaValue::FLOAT; 
+            // Reinterpret bits
+            int32_t bits = (int32_t)arrayObj->fields[index];
+            memcpy(&val.val.f, &bits, sizeof(float));
+            frame->push(val);
+            break;
+        }
+        case OP_DALOAD: {
+            int32_t index = frame->pop().val.i;
+            JavaValue arrayRef = frame->pop();
+            if (arrayRef.val.ref == nullptr) {
+                throw std::runtime_error("NullPointerException");
+            }
+            JavaObject* arrayObj = (JavaObject*)arrayRef.val.ref;
+            if (index < 0 || index >= arrayObj->fields.size()) {
+                throw std::runtime_error("ArrayIndexOutOfBoundsException");
+            }
+            JavaValue val; val.type = JavaValue::DOUBLE; 
+            double d;
+            memcpy(&d, &arrayObj->fields[index], sizeof(double));
+            val.val.d = d;
+            frame->push(val);
+            break;
+        }
+        case OP_AALOAD: {
+            int32_t index = frame->pop().val.i;
+            JavaValue arrayRef = frame->pop();
+            if (arrayRef.val.ref == nullptr) {
+                throw std::runtime_error("NullPointerException");
+            }
+            JavaObject* arrayObj = (JavaObject*)arrayRef.val.ref;
+            if (index < 0 || index >= arrayObj->fields.size()) {
+                throw std::runtime_error("ArrayIndexOutOfBoundsException");
+            }
+            JavaValue val; val.type = JavaValue::REFERENCE; val.val.ref = (void*)arrayObj->fields[index];
+            frame->push(val);
+            break;
+        }
+        case OP_BALOAD: {
+            int32_t index = frame->pop().val.i;
+            JavaValue arrayRef = frame->pop();
+            if (arrayRef.val.ref == nullptr) {
+                throw std::runtime_error("NullPointerException");
+            }
+            JavaObject* arrayObj = (JavaObject*)arrayRef.val.ref;
+            if (index < 0 || index >= arrayObj->fields.size()) {
+                throw std::runtime_error("ArrayIndexOutOfBoundsException");
+            }
+            JavaValue val; val.type = JavaValue::INT; val.val.i = (int8_t)arrayObj->fields[index];
+            frame->push(val);
+            break;
+        }
+        case OP_SALOAD: {
+            int32_t index = frame->pop().val.i;
+            JavaValue arrayRef = frame->pop();
+            if (arrayRef.val.ref == nullptr) {
+                throw std::runtime_error("NullPointerException");
+            }
+            JavaObject* arrayObj = (JavaObject*)arrayRef.val.ref;
+            if (index < 0 || index >= arrayObj->fields.size()) {
+                throw std::runtime_error("ArrayIndexOutOfBoundsException");
+            }
+            JavaValue val; val.type = JavaValue::INT; val.val.i = (int16_t)arrayObj->fields[index];
             frame->push(val);
             break;
         }
@@ -1128,6 +1835,75 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
             val.val.ref = obj;
             frame->push(val);
             std::cout << "[OP_NEW] Created instance at: " << obj << std::endl;
+            break;
+        }
+
+        case OP_CHECKCAST: {
+            uint16_t index = codeReader.readU2();
+            auto classRef = std::dynamic_pointer_cast<ConstantClass>(frame->classFile->constant_pool[index]);
+            auto className = std::dynamic_pointer_cast<ConstantUtf8>(frame->classFile->constant_pool[classRef->name_index]);
+            
+            JavaValue objVal = frame->peek();
+            if (objVal.val.ref == nullptr) {
+                break;
+            }
+            
+            JavaObject* obj = static_cast<JavaObject*>(objVal.val.ref);
+            if (!obj->cls) {
+                 // Array
+                 if (className->bytes == "java/lang/Object") break;
+                 // Simple name check for arrays
+                 // TODO: Better array check
+                 break; 
+            }
+            
+            bool found = false;
+            std::shared_ptr<JavaClass> current = obj->cls;
+            while (current) {
+                if (current->name == className->bytes) {
+                    found = true;
+                    break;
+                }
+                current = current->superClass;
+            }
+            
+            if (!found) {
+                // Also check interfaces?
+                // For now, just throw if not found
+                // Actually, let's log and throw
+                LOG_ERROR("ClassCastException: " + obj->cls->name + " cannot be cast to " + className->bytes);
+                throw std::runtime_error("ClassCastException: " + obj->cls->name + " to " + className->bytes);
+            }
+            break;
+        }
+
+        case OP_INSTANCEOF: {
+            uint16_t index = codeReader.readU2();
+            auto classRef = std::dynamic_pointer_cast<ConstantClass>(frame->classFile->constant_pool[index]);
+            auto className = std::dynamic_pointer_cast<ConstantUtf8>(frame->classFile->constant_pool[classRef->name_index]);
+            
+            JavaValue objVal = frame->pop();
+            if (objVal.val.ref == nullptr) {
+                frame->push(JavaValue{JavaValue::INT, {.i = 0}});
+                break;
+            }
+            
+            JavaObject* obj = static_cast<JavaObject*>(objVal.val.ref);
+            bool isInstance = false;
+            
+            if (!obj->cls) {
+                 if (className->bytes == "java/lang/Object") isInstance = true;
+            } else {
+                 std::shared_ptr<JavaClass> current = obj->cls;
+                 while (current) {
+                     if (current->name == className->bytes) {
+                         isInstance = true;
+                         break;
+                     }
+                     current = current->superClass;
+                 }
+            }
+            frame->push(JavaValue{JavaValue::INT, {.i = isInstance ? 1 : 0}});
             break;
         }
 
@@ -1405,27 +2181,33 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
 
              bool isConstructor = (name->bytes == "<init>");
 
-             // Normal method call (Static or Special or Init)
-             // Check if native
-             auto nativeFunc = NativeRegistry::getInstance().getNative(className->bytes, name->bytes, descriptor->bytes);
-             if (nativeFunc) {
-                 std::cout << "[Interpreter] Calling native: " << className->bytes << "." << name->bytes << descriptor->bytes << std::endl;
-                 // Native call!
-                 nativeFunc(frame);
-             } else {
-                 std::cout << "[Interpreter] Calling Java: " << className->bytes << "." << name->bytes << descriptor->bytes << std::endl;
-                 // Java method call
-                 auto cls = resolveClass(className->bytes);
-                 if (!cls) throw std::runtime_error("Class not found: " + className->bytes);
+             // Resolve class first
+             auto cls = resolveClass(className->bytes);
+             if (!cls) throw std::runtime_error("Class not found: " + className->bytes);
 
-                 bool found = false;
-                 for (const auto& m : cls->rawFile->methods) {
-                     auto mName = std::dynamic_pointer_cast<ConstantUtf8>(cls->rawFile->constant_pool[m.name_index]);
-                     auto mDesc = std::dynamic_pointer_cast<ConstantUtf8>(cls->rawFile->constant_pool[m.descriptor_index]);
-                     if (mName->bytes == name->bytes && mDesc->bytes == descriptor->bytes) {
-                         std::cout << "[Interpreter] Found method, creating new frame with " << argCount << " args" << std::endl;
+             // Find method
+             bool found = false;
+             for (const auto& m : cls->rawFile->methods) {
+                 auto mName = std::dynamic_pointer_cast<ConstantUtf8>(cls->rawFile->constant_pool[m.name_index]);
+                 auto mDesc = std::dynamic_pointer_cast<ConstantUtf8>(cls->rawFile->constant_pool[m.descriptor_index]);
+                 
+                 if (mName->bytes == name->bytes && mDesc->bytes == descriptor->bytes) {
+                     std::cout << "[Interpreter] Found method: " << className->bytes << "." << name->bytes << descriptor->bytes << " flags=" << std::hex << m.access_flags << std::dec << std::endl;
+                     
+                     if (m.access_flags & 0x0100) { // ACC_NATIVE
+                         std::cout << "[Interpreter] Native method call" << std::endl;
+                         auto nativeFunc = NativeRegistry::getInstance().getNative(className->bytes, name->bytes, descriptor->bytes);
+                         if (nativeFunc) {
+                             nativeFunc(frame);
+                         } else {
+                             std::cerr << "UnsatisfiedLinkError: " << className->bytes << "." << name->bytes << descriptor->bytes << std::endl;
+                             throw std::runtime_error("UnsatisfiedLinkError: " + className->bytes + "." + name->bytes + descriptor->bytes);
+                         }
+                     } else {
+                         // Java method call
+                         std::cout << "[Interpreter] Java method call, creating frame with " << argCount << " args" << std::endl;
                          
-                         // Special handling for java/lang/Object.<init> - it's typically empty
+                         // Special handling for java/lang/Object.<init>
                          if (cls->name == "java/lang/Object" && name->bytes == "<init>") {
                              std::cout << "[Interpreter] Skipping java/lang/Object.<init> (no-op)" << std::endl;
                              found = true;
@@ -1434,56 +2216,65 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
                          
                          auto newFrame = std::make_shared<StackFrame>(m, cls->rawFile);
                          
-                         // Pop args from stack in reverse order (last arg is on top)
+                         // Pop args from stack in reverse order
                          std::vector<JavaValue> args;
                          for (int i = 0; i < argCount; i++) {
                              args.push_back(frame->pop());
                          }
                          
-                         // Set locals in correct order (first arg at local[0])
-                         for (int i = 0; i < argCount; i++) {
-                             newFrame->setLocal(i, args[argCount - 1 - i]);
-                             std::cout << "[Interpreter] Setting local[" << i << "] type=" << args[argCount - 1 - i].type << " ref=" << args[argCount - 1 - i].val.ref << std::endl;
-                         }
+                         // Set locals
+                        int localIndex = 0;
+                        for (int i = 0; i < argCount; i++) {
+                            JavaValue& val = args[argCount - 1 - i];
+                            newFrame->setLocal(localIndex, val);
+                            localIndex++;
+                            if (val.type == JavaValue::LONG || val.type == JavaValue::DOUBLE) {
+                                localIndex++;
+                            }
+                        }
                          
-                         // For constructors, ensure superclass constructor is called first
+                         // Constructor super call handling (same as before)
                          if (isConstructor && cls->superClass && cls->superClass->name != "java/lang/Object") {
-                             std::cout << "[Interpreter] Constructor detected, calling superclass constructor first" << std::endl;
-                             // Find and call the superclass no-arg constructor
                              bool superFound = false;
                              for (const auto& superMethod : cls->superClass->rawFile->methods) {
                                  auto superName = std::dynamic_pointer_cast<ConstantUtf8>(cls->superClass->rawFile->constant_pool[superMethod.name_index]);
                                  auto superDesc = std::dynamic_pointer_cast<ConstantUtf8>(cls->superClass->rawFile->constant_pool[superMethod.descriptor_index]);
                                  if (superName->bytes == "<init>" && superDesc->bytes == "()V") {
-                                     std::cout << "[Interpreter] Calling superclass constructor: " << cls->superClass->name << ".<init>()V" << std::endl;
                                      auto superFrame = std::make_shared<StackFrame>(superMethod, cls->superClass->rawFile);
-                                     // Pass 'this' reference to superclass constructor
                                      superFrame->setLocal(0, newFrame->getLocal(0));
                                      execute(superFrame);
                                      superFound = true;
                                      break;
                                  }
                              }
-                             if (!superFound) {
-                                 std::cout << "[Interpreter] Warning: No no-arg constructor found in superclass " << cls->superClass->name << std::endl;
-                             }
                          }
                          
                          auto ret = execute(newFrame);
                          
-                         // Push return value if any
                          if (descriptor->bytes.back() != 'V') {
                              if (ret) {
                                  frame->push(*ret);
                              }
                          }
-                         
-                         found = true;
-                         break;
                      }
+                     found = true;
+                     break;
                  }
-                 if (!found) std::cerr << "Method not found: " << className->bytes << "." << name->bytes << std::endl;
              }
+             
+             if (!found) {
+                 // Check if it's a native method NOT in class file (e.g. system hooks)
+                 // This is fallback for methods not in rt.jar but registered
+                 auto nativeFunc = NativeRegistry::getInstance().getNative(className->bytes, name->bytes, descriptor->bytes);
+                 if (nativeFunc) {
+                      std::cout << "[Interpreter] Calling registered native (not in class): " << className->bytes << "." << name->bytes << std::endl;
+                      nativeFunc(frame);
+                 } else {
+                      std::cerr << "Method not found: " << className->bytes << "." << name->bytes << std::endl;
+                      throw std::runtime_error("Method not found: " + className->bytes + "." + name->bytes);
+                 }
+             }
+
              break;
         }
 
@@ -1529,19 +2320,13 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
                 throw std::runtime_error("Invalid class name in INVOKEVIRTUAL: " + className->bytes);
             }
             
-            std::cout << "[INVOKEVIRTUAL] Calling " << className->bytes << "." << name->bytes << descriptor->bytes << " with " << argCount << " args" << std::endl;
+            // std::cout << "[INVOKEVIRTUAL] Calling " << className->bytes << "." << name->bytes << descriptor->bytes << " with " << argCount << " args" << std::endl;
             
             std::vector<JavaValue> args;
             for(int i=0; i<argCount; ++i) args.push_back(frame->pop());
             // args[0] is last argument.
             
-            std::cout << "[INVOKEVIRTUAL] Popped " << args.size() << " args" << std::endl;
-            for (size_t i = 0; i < args.size(); i++) {
-                std::cout << "[INVOKEVIRTUAL]   arg[" << i << "] type=" << args[i].type << " ref=" << args[i].val.ref << std::endl;
-            }
-            
             JavaValue obj = frame->pop();
-            std::cout << "[INVOKEVIRTUAL] Popped object ref: " << obj.val.ref << std::endl;
             
             if (obj.val.ref == (void*)0xDEADBEEF) {
                 // System.out.println
@@ -1570,68 +2355,237 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
                  
                  // Find method
                  bool found = false;
-                 // Need to look up method in class hierarchy!
-                 // For now just current class.
-                 
-                 for (const auto& m : cls->rawFile->methods) {
-                     auto mName = std::dynamic_pointer_cast<ConstantUtf8>(cls->rawFile->constant_pool[m.name_index]);
-                     auto mDesc = std::dynamic_pointer_cast<ConstantUtf8>(cls->rawFile->constant_pool[m.descriptor_index]);
-                     if (mName->bytes == name->bytes && mDesc->bytes == descriptor->bytes) {
-                         // std::cerr << "Invoke " << cls->name << "." << name->bytes << descriptor->bytes << " Flags: " << std::hex << m.access_flags << std::dec << std::endl;
+                 std::shared_ptr<JavaClass> currentClass = cls;
+
+                 while (currentClass != nullptr) {
+                     for (const auto& m : currentClass->rawFile->methods) {
+                         auto mName = std::dynamic_pointer_cast<ConstantUtf8>(currentClass->rawFile->constant_pool[m.name_index]);
+                         auto mDesc = std::dynamic_pointer_cast<ConstantUtf8>(currentClass->rawFile->constant_pool[m.descriptor_index]);
                          
-                         // Check if native
-                         // FORCE Native for StringBuffer to avoid mixed Java/Native issues with mock class
-                         if ((m.access_flags & 0x0100) || cls->name == "java/lang/StringBuffer") { // ACC_NATIVE
+                         if (mName->bytes == name->bytes && mDesc->bytes == descriptor->bytes) {
+                             // Check if native
+                             std::cout << "[INVOKEVIRTUAL] Method flags: " << std::hex << m.access_flags << std::dec << std::endl;
+                             // FORCE Native for StringBuffer to avoid mixed Java/Native issues with mock class
+                             if ((m.access_flags & 0x0100) || currentClass->name == "java/lang/StringBuffer") { // ACC_NATIVE
+                                 // Restore stack for native call
+                                 frame->push(obj);
+                                 for (int i = argCount - 1; i >= 0; i--) {
+                                     frame->push(args[i]);
+                                 }
+                                 
+                                 auto nativeFunc = NativeRegistry::getInstance().getNative(currentClass->name, name->bytes, descriptor->bytes);
+                                 if (nativeFunc) {
+                                     nativeFunc(frame);
+                                 } else {
+                                     std::cerr << "UnsatisfiedLinkError (virtual): " << currentClass->name << "." << name->bytes << descriptor->bytes << std::endl;
+                                 }
+                             } else {
+                                 auto newFrame = std::make_shared<StackFrame>(m, currentClass->rawFile);
+                                 newFrame->setLocal(0, obj); // this
+                                 
+                                 // Args are popped in reverse: last arg is at args[0]
+                                // setLocal(1) should be first arg.
+                                // args[argCount-1] is first arg.
+                                int localIndex = 1;
+                                for(int i=0; i<argCount; ++i) {
+                                    JavaValue& val = args[argCount - 1 - i];
+                                    newFrame->setLocal(localIndex, val);
+                                    localIndex++;
+                                    if (val.type == JavaValue::LONG || val.type == JavaValue::DOUBLE) {
+                                        localIndex++;
+                                    }
+                                }
+                                 
+                                 auto ret = execute(newFrame);
+                                 
+                                 // Push return value if any
+                                 if (descriptor->bytes.back() != 'V') {
+                                     if (ret) {
+                                         frame->push(*ret);
+                                     }
+                                 }
+                             }
+                             
+                             found = true;
+                             break;
+                         }
+                     }
+                     
+                     if (found) break;
+                     
+                     // Try superclass
+                     if (currentClass->rawFile->super_class == 0) {
+                         currentClass = nullptr;
+                     } else {
+                         auto superClassRef = std::dynamic_pointer_cast<ConstantClass>(currentClass->rawFile->constant_pool[currentClass->rawFile->super_class]);
+                         auto superClassName = std::dynamic_pointer_cast<ConstantUtf8>(currentClass->rawFile->constant_pool[superClassRef->name_index]);
+                         currentClass = resolveClass(superClassName->bytes);
+                     }
+                 }
+                 
+                 if (!found) std::cerr << "Method not found: " << name->bytes << std::endl;
+            }
+            break;
+        }
+        
+        case OP_INVOKEINTERFACE: {
+            uint16_t index = codeReader.readU2();
+            codeReader.readU1(); // count
+            codeReader.readU1(); // 0
+            
+            auto methodRef = std::dynamic_pointer_cast<ConstantRef>(frame->classFile->constant_pool[index]);
+            auto nameAndType = std::dynamic_pointer_cast<ConstantNameAndType>(frame->classFile->constant_pool[methodRef->name_and_type_index]);
+            auto name = std::dynamic_pointer_cast<ConstantUtf8>(frame->classFile->constant_pool[nameAndType->name_index]);
+            auto descriptor = std::dynamic_pointer_cast<ConstantUtf8>(frame->classFile->constant_pool[nameAndType->descriptor_index]);
+            
+            // Calculate arg count
+            int argCount = 0;
+            bool parsingObj = false;
+            for (size_t i = 1; i < descriptor->bytes.length(); ++i) { // Skip '('
+                char c = descriptor->bytes[i];
+                if (c == ')') break;
+                if (parsingObj) {
+                    if (c == ';') parsingObj = false;
+                    continue;
+                }
+                if (c == 'L') {
+                    parsingObj = true;
+                    argCount++;
+                } else if (c == '[') {
+                } else {
+                    argCount++;
+                }
+            }
+
+            auto classRef = std::dynamic_pointer_cast<ConstantClass>(frame->classFile->constant_pool[methodRef->class_index]);
+            auto className = std::dynamic_pointer_cast<ConstantUtf8>(frame->classFile->constant_pool[classRef->name_index]);
+            
+            std::cout << "[INVOKEINTERFACE] Calling " << className->bytes << "." << name->bytes << descriptor->bytes << " with " << argCount << " args" << std::endl;
+            
+            std::vector<JavaValue> args;
+            for(int i=0; i<argCount; ++i) args.push_back(frame->pop());
+            
+            JavaValue obj = frame->pop();
+            if (obj.val.ref == nullptr) throw std::runtime_error("NullPointerException");
+            
+            JavaObject* javaObj = static_cast<JavaObject*>(obj.val.ref);
+            auto cls = javaObj->cls;
+            
+             // Find method in object class
+             bool found = false;
+             std::shared_ptr<JavaClass> currentClass = cls;
+
+             while (currentClass != nullptr) {
+                 for (const auto& m : currentClass->rawFile->methods) {
+                     auto mName = std::dynamic_pointer_cast<ConstantUtf8>(currentClass->rawFile->constant_pool[m.name_index]);
+                     auto mDesc = std::dynamic_pointer_cast<ConstantUtf8>(currentClass->rawFile->constant_pool[m.descriptor_index]);
+                     
+                     if (mName->bytes == name->bytes && mDesc->bytes == descriptor->bytes) {
+                        if (m.access_flags & 0x0100) { // ACC_NATIVE
                              // Restore stack for native call
                              frame->push(obj);
                              for (int i = argCount - 1; i >= 0; i--) {
                                  frame->push(args[i]);
                              }
                              
-                             auto nativeFunc = NativeRegistry::getInstance().getNative(cls->name, name->bytes, descriptor->bytes);
+                             auto nativeFunc = NativeRegistry::getInstance().getNative(currentClass->name, name->bytes, descriptor->bytes);
                              if (nativeFunc) {
                                  nativeFunc(frame);
                              } else {
-                                 std::cerr << "UnsatisfiedLinkError (virtual): " << cls->name << "." << name->bytes << descriptor->bytes << std::endl;
+                                 std::cerr << "UnsatisfiedLinkError (interface): " << currentClass->name << "." << name->bytes << descriptor->bytes << std::endl;
                              }
-                         } else {
-                             auto newFrame = std::make_shared<StackFrame>(m, cls->rawFile);
-                             newFrame->setLocal(0, obj); // this
-                             
-                             // Args are popped in reverse: last arg is at args[0]
-                             // setLocal(1) should be first arg.
-                             // args[argCount-1] is first arg.
-                             for(int i=0; i<argCount; ++i) {
-                                 newFrame->setLocal(i+1, args[argCount - 1 - i]);
-                             }
-                             
-                             auto ret = execute(newFrame);
-                             
-                             // Push return value if any
-                             if (descriptor->bytes.back() != 'V') {
-                                 if (ret) {
-                                     frame->push(*ret);
-                                 }
-                             }
-                         }
-                         
+                        } else {
+                            auto newFrame = std::make_shared<StackFrame>(m, currentClass->rawFile);
+                            newFrame->setLocal(0, obj); // this
+                            
+                            int localIndex = 1;
+                            for(int i=0; i<argCount; ++i) {
+                                JavaValue& val = args[argCount - 1 - i];
+                                newFrame->setLocal(localIndex, val);
+                                localIndex++;
+                                if (val.type == JavaValue::LONG || val.type == JavaValue::DOUBLE) {
+                                    localIndex++;
+                                }
+                            }
+                            
+                            auto ret = execute(newFrame);
+                            
+                            if (descriptor->bytes.back() != 'V') {
+                                if (ret) {
+                                    frame->push(*ret);
+                                }
+                            }
+                        }
                          found = true;
                          break;
                      }
                  }
-                 if (!found) std::cerr << "Method not found: " << name->bytes << std::endl;
+                 if (found) break;
+                 
+                 // Try superclass
+                 if (currentClass->rawFile->super_class == 0) {
+                     currentClass = nullptr;
+                 } else {
+                     auto superClassRef = std::dynamic_pointer_cast<ConstantClass>(currentClass->rawFile->constant_pool[currentClass->rawFile->super_class]);
+                     auto superClassName = std::dynamic_pointer_cast<ConstantUtf8>(currentClass->rawFile->constant_pool[superClassRef->name_index]);
+                     currentClass = resolveClass(superClassName->bytes);
+                 }
+             }
+             if (!found) std::cerr << "Interface Method not found: " << name->bytes << std::endl;
+             break;
+        }
+
+        case OP_MULTIANEWARRAY: {
+            uint16_t index = codeReader.readU2();
+            uint8_t dimensions = codeReader.readU1();
+            
+            std::vector<int32_t> counts;
+            for (int i = 0; i < dimensions; i++) {
+                counts.push_back(frame->pop().val.i);
             }
+            std::reverse(counts.begin(), counts.end());
+            
+            // Helper lambda for recursive creation
+            std::function<JavaObject*(int)> createArray;
+            createArray = [&](int dimIndex) -> JavaObject* {
+                if (dimIndex >= dimensions) return nullptr;
+                
+                int32_t count = counts[dimIndex];
+                if (count < 0) throw std::runtime_error("NegativeArraySizeException");
+                
+                auto arrayObj = HeapManager::getInstance().allocate(nullptr);
+                arrayObj->fields.resize(count, 0);
+                
+                if (dimIndex < dimensions - 1) {
+                    for (int i = 0; i < count; i++) {
+                         JavaObject* subArray = createArray(dimIndex + 1);
+                         arrayObj->fields[i] = (int64_t)subArray;
+                    }
+                }
+                
+                return arrayObj;
+            };
+            
+            JavaObject* result = createArray(0);
+            
+            JavaValue val;
+            val.type = JavaValue::REFERENCE;
+            val.val.ref = result;
+            frame->push(val);
             break;
         }
-        
+
         case OP_RETURN: {
-            std::cout << "[OP_RETURN] Returning from method" << std::endl;
+            // std::cout << "[OP_RETURN] Returning from method" << std::endl;
             return false; // Stop execution
         }
         case OP_IRETURN:
-        case OP_ARETURN: {
+        case OP_ARETURN:
+        case OP_LRETURN:
+        case OP_FRETURN:
+        case OP_DRETURN: {
             returnVal = frame->pop();
-            std::cout << "[OP_IRETURN/OP_ARETURN] Returning value" << std::endl;
+            // std::cout << "[OP_IRETURN/OP_ARETURN/etc] Returning value" << std::endl;
             return false;
         }
         

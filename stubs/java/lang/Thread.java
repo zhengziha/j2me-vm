@@ -35,20 +35,11 @@ public class Thread implements Runnable {
         return new Thread();
     }
 
-    public static void sleep(long millis) throws InterruptedException {
-        try {
-            Thread.sleep(millis, 0);
-        } catch (InterruptedException e) {
-            throw e;
-        }
-    }
+    public static native void sleep(long millis) throws InterruptedException;
 
     public static void sleep(long millis, int nanos) throws InterruptedException {
-        try {
-            java.lang.Thread.sleep(millis, nanos);
-        } catch (InterruptedException e) {
-            throw e;
-        }
+        // Ignore nanos for now
+        sleep(millis);
     }
 
     public boolean isAlive() {

@@ -20,5 +20,18 @@ public class MainTest {
         System.out.println("double: " + d);
         System.out.println("char: " + c);
         System.out.println("boolean: " + bool);
+
+        if (b == 127) System.out.println("byte test passed");
+        if (s == 32767) System.out.println("short test passed");
+        if (i == 2147483647) System.out.println("int test passed");
+        if (l == 9223372036854775807L) System.out.println("long test passed");
+        if (f == 3.14159f) System.out.println("float test passed");
+        if (d == 2.71828) System.out.println("double test passed");
+        if (c == 'A') System.out.println("char test passed");
+        if (bool == true) System.out.println("boolean test passed");
+
+        if (1+1==2){
+            System.out.println("1+1=2 test passed");
+        }
     }
 }

@@ -71,6 +71,48 @@ void registerGraphicsNatives() {
         }
     );
 
+    // javax/microedition/lcdui/Image.createRGBImageNative([IIIZ)I
+    registry.registerNative("javax/microedition/lcdui/Image", "createRGBImageNative", "([IIIZ)I", 
+        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+            bool processAlpha = frame->pop().val.i != 0;
+            int height = frame->pop().val.i;
+            int width = frame->pop().val.i;
+            j2me::core::JavaValue rgbVal = frame->pop();
+            
+            int32_t imgId = 0;
+            
+            if (width > 0 && height > 0 && rgbVal.type == j2me::core::JavaValue::REFERENCE && rgbVal.val.ref != nullptr) {
+                j2me::core::JavaObject* rgbArray = (j2me::core::JavaObject*)rgbVal.val.ref;
+                // Note: Array elements are stored in fields for int[] as well in this VM implementation
+                if (rgbArray->fields.size() >= (size_t)(width * height)) {
+                    SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, SDL_PIXELFORMAT_ARGB8888);
+                    if (surface) {
+                        SDL_LockSurface(surface);
+                        uint32_t* pixels = (uint32_t*)surface->pixels;
+                        for(int i=0; i<width*height; i++) {
+                            // Fields are int64_t, cast to uint32_t
+                            uint32_t argb = (uint32_t)rgbArray->fields[i];
+                            if (!processAlpha) {
+                                argb |= 0xFF000000;
+                            }
+                            pixels[i] = argb;
+                        }
+                        SDL_UnlockSurface(surface);
+                        
+                        imgId = nextImageId++;
+                        imageMap[imgId] = surface;
+                        std::cout << "[Image] Created RGB Image, ID: " << imgId << " Size: " << width << "x" << height << std::endl;
+                    }
+                }
+            }
+            
+            j2me::core::JavaValue ret;
+            ret.type = j2me::core::JavaValue::INT;
+            ret.val.i = imgId;
+            frame->push(ret);
+        }
+    );
+
     // javax/microedition/lcdui/Graphics.drawImage(Ljavax/microedition/lcdui/Image;III)V
     registry.registerNative("javax/microedition/lcdui/Graphics", "drawImage", "(Ljavax/microedition/lcdui/Image;III)V", 
         [](std::shared_ptr<j2me::core::StackFrame> frame) {

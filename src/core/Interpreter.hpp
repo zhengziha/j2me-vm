@@ -22,11 +22,11 @@ public:
     // Directly register a class (useful for .class files loaded directly)
     void registerClass(const std::string& className, std::shared_ptr<JavaClass> cls);
     
-    void setStubLoader(std::shared_ptr<j2me::loader::JarLoader> loader) { stubLoader = loader; }
+    void setLibraryLoader(std::shared_ptr<j2me::loader::JarLoader> loader) { libraryLoader = loader; }
 
 private:
     j2me::loader::JarLoader& jarLoader;
-    std::shared_ptr<j2me::loader::JarLoader> stubLoader;
+    std::shared_ptr<j2me::loader::JarLoader> libraryLoader;
     std::map<std::string, std::shared_ptr<JavaClass>> loadedClasses;
 
     bool executeInstruction(std::shared_ptr<StackFrame> frame, util::DataReader& codeReader, std::optional<JavaValue>& returnVal);

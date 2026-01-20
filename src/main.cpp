@@ -20,6 +20,8 @@
 #include "native/java_lang_String.hpp"
 #include "native/java_io_InputStream.hpp"
 #include "native/java_io_PrintStream.hpp"
+#include "native/java_lang_System.hpp"
+#include "native/java_lang_Thread.hpp"
 #include <fstream>
 #include <optional>
 
@@ -131,6 +133,7 @@ int main(int argc, char* argv[]) {
     j2me::natives::registerPrintStreamNatives();
     j2me::natives::registerSystemNatives();
     j2me::natives::registerInputStreamNatives();
+    j2me::natives::registerThreadNatives();
 
     LOG_INFO("Starting J2ME VM...");
 
@@ -149,41 +152,41 @@ int main(int argc, char* argv[]) {
         auto classFile = parser.parse(*classData);
         LOG_INFO("Successfully parsed class file!");
         
-        // Create a minimal JarLoader for stub classes
-        auto stubLoader = std::make_shared<j2me::loader::JarLoader>();
-        bool stubsLoaded = false;
+        // Create a minimal JarLoader for library classes
+        auto libraryLoader = std::make_shared<j2me::loader::JarLoader>();
+        bool libraryLoaded = false;
         
-        // Try to load stubs.jar
-        std::vector<std::string> stubPaths;
+        // Try to load rt.jar
+        std::vector<std::string> libraryPaths;
         
         // Find directory of the .class file
         size_t lastSlash = filePath.find_last_of("/\\");
         if (lastSlash != std::string::npos) {
             std::string classDir = filePath.substr(0, lastSlash);
-            stubPaths.push_back(classDir + "/stubs/stubs.jar");
-            stubPaths.push_back(classDir + "/../stubs/stubs.jar");
+            // libraryPaths.push_back(classDir + "/stubs/rt.jar");
+            // libraryPaths.push_back(classDir + "/../stubs/rt.jar");
         }
         
-        stubPaths.push_back("/Users/zhengzihang/my-src/j2me-vm/stubs/stubs.jar");
-        stubPaths.push_back("stubs/stubs.jar");
-        stubPaths.push_back("../stubs/stubs.jar");
+        libraryPaths.push_back("/Users/zhengzihang/my-src/j2me-vm/stubs/rt.jar");
+        libraryPaths.push_back("stubs/rt.jar");
+        libraryPaths.push_back("../stubs/rt.jar");
         
-        for (const auto& path : stubPaths) {
-            LOG_DEBUG("Trying stubs path: " + path);
-            if (stubLoader->load(path)) {
-                LOG_INFO("Loaded stub classes (stubs.jar)");
-                stubsLoaded = true;
+        for (const auto& path : libraryPaths) {
+            LOG_DEBUG("Trying library path: " + path);
+            if (libraryLoader->load(path)) {
+                LOG_INFO("Loaded library classes (rt.jar)");
+                libraryLoaded = true;
                 break;
             }
         }
         
-        if (!stubsLoaded) {
-            LOG_ERROR("Warning: stubs.jar not found. Stub classes might be missing.");
+        if (!libraryLoaded) {
+            LOG_ERROR("Warning: rt.jar not found. Library classes might be missing.");
         }
         
         // Create interpreter
-        j2me::core::Interpreter interpreter(*stubLoader);
-        interpreter.setStubLoader(stubLoader);
+        j2me::core::Interpreter interpreter(*libraryLoader);
+        interpreter.setLibraryLoader(libraryLoader);
         j2me::core::NativeRegistry::getInstance().setInterpreter(&interpreter);
         
         // Get class name from file path
@@ -408,59 +411,59 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    // Load stub classes (stubs.jar)
-    auto stubLoader = std::make_shared<j2me::loader::JarLoader>();
-    bool stubsLoaded = false;
+    // Load library classes (rt.jar)
+    auto libraryLoader = std::make_shared<j2me::loader::JarLoader>();
+    bool libraryLoaded = false;
     
-    // Try multiple possible paths for stubs.jar
-    std::vector<std::string> stubPaths;
+    // Try multiple possible paths for rt.jar
+    std::vector<std::string> libraryPaths;
     
-    // First, try to find stubs.jar relative to the JAR file
+    // First, try to find rt.jar relative to the JAR file
     if (!filePath.empty()) {
         // Find the last '/' or '\' to get the directory
         size_t lastSlash = filePath.find_last_of("/\\");
         if (lastSlash != std::string::npos) {
             std::string jarDir = filePath.substr(0, lastSlash);
             
-            // Try stubs/stubs.jar relative to JAR directory
-            std::string path1 = jarDir + "/stubs/stubs.jar";
-            stubPaths.push_back(path1);
-            LOG_DEBUG("Trying stubs path (relative to JAR): " + path1);
+            // Try stubs/rt.jar relative to JAR directory
+            std::string path1 = jarDir + "/stubs/rt.jar";
+            libraryPaths.push_back(path1);
+            LOG_DEBUG("Trying library path (relative to JAR): " + path1);
             
-            // Try ../stubs/stubs.jar relative to JAR directory
-            std::string path2 = jarDir + "/../stubs/stubs.jar";
-            stubPaths.push_back(path2);
-            LOG_DEBUG("Trying stubs path (relative to JAR parent): " + path2);
+            // Try ../stubs/rt.jar relative to JAR directory
+            std::string path2 = jarDir + "/../stubs/rt.jar";
+            libraryPaths.push_back(path2);
+            LOG_DEBUG("Trying library path (relative to JAR parent): " + path2);
         }
     }
     
     // Try absolute path
-    std::string absPath = "/Users/zhengzihang/my-src/j2me-vm/stubs/stubs.jar";
-    stubPaths.push_back(absPath);
-    LOG_DEBUG("Trying stubs path (absolute): " + absPath);
+    std::string absPath = "/Users/zhengzihang/my-src/j2me-vm/stubs/rt.jar";
+    libraryPaths.push_back(absPath);
+    LOG_DEBUG("Trying library path (absolute): " + absPath);
     
     // Try relative paths
-    stubPaths.push_back("stubs/stubs.jar");
-    stubPaths.push_back("../stubs/stubs.jar");
+    libraryPaths.push_back("stubs/rt.jar");
+    libraryPaths.push_back("../stubs/rt.jar");
     
-    for (const auto& path : stubPaths) {
-        LOG_INFO("Trying stubs path: " + path);
-        if (stubLoader->load(path)) {
-            LOG_INFO("Loaded stub classes (stubs.jar)");
-            stubsLoaded = true;
+    for (const auto& path : libraryPaths) {
+        LOG_INFO("Trying library path: " + path);
+        if (libraryLoader->load(path)) {
+            LOG_INFO("Loaded library classes (rt.jar)");
+            libraryLoaded = true;
             break;
         } else {
-            LOG_INFO("Failed to load stubs from: " + path);
+            LOG_INFO("Failed to load library from: " + path);
         }
     }
     
-    if (!stubsLoaded) {
-        LOG_ERROR("Warning: stubs.jar not found. Stub classes might be missing.");
+    if (!libraryLoaded) {
+        LOG_ERROR("Warning: rt.jar not found. Library classes might be missing.");
     }
 
     std::shared_ptr<j2me::core::JavaObject> midletInstance;
     j2me::core::Interpreter interpreter(loader);
-    interpreter.setStubLoader(stubLoader);
+    interpreter.setLibraryLoader(libraryLoader);
     j2me::core::NativeRegistry::getInstance().setInterpreter(&interpreter);
 
     if (loader.hasFile(mainClassName)) {

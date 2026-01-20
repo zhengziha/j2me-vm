@@ -1,33 +1,39 @@
 package java.io;
 
 public class ByteArrayInputStream extends InputStream {
-    private byte[] buf;
-    private int pos;
-    private int count;
+    protected byte buf[];
+    protected int pos;
+    protected int mark = 0;
+    protected int count;
 
-    public ByteArrayInputStream(byte[] buf) {
+    public ByteArrayInputStream(byte buf[]) {
         this.buf = buf;
         this.pos = 0;
         this.count = buf.length;
     }
 
-    public ByteArrayInputStream(byte[] buf, int offset, int length) {
+    public ByteArrayInputStream(byte buf[], int offset, int length) {
         this.buf = buf;
         this.pos = offset;
         this.count = Math.min(offset + length, buf.length);
+        this.mark = offset;
     }
 
-    public int read() {
+    public synchronized int read() {
         return (pos < count) ? (buf[pos++] & 0xff) : -1;
     }
 
-    public int read(byte[] b, int off, int len) {
+    public synchronized int read(byte b[], int off, int len) {
+        if (b == null) {
+            throw new NullPointerException();
+        } else if (off < 0 || len < 0 || len > b.length - off) {
+            throw new IndexOutOfBoundsException();
+        }
         if (pos >= count) {
             return -1;
         }
-        int avail = count - pos;
-        if (len > avail) {
-            len = avail;
+        if (pos + len > count) {
+            len = count - pos;
         }
         if (len <= 0) {
             return 0;
@@ -37,23 +43,33 @@ public class ByteArrayInputStream extends InputStream {
         return len;
     }
 
-    public long skip(long n) {
-        if (pos >= count) {
-            return 0;
+    public synchronized long skip(long n) {
+        if (pos + n > count) {
+            n = count - pos;
         }
-        int avail = count - pos;
-        if (n > avail) {
-            n = avail;
+        if (n < 0) {
+            return 0;
         }
         pos += n;
         return n;
     }
 
-    public int available() {
+    public synchronized int available() {
         return count - pos;
     }
 
-    public void reset() {
-        pos = 0;
+    public boolean markSupported() {
+        return true;
+    }
+
+    public void mark(int readAheadLimit) {
+        mark = pos;
+    }
+
+    public synchronized void reset() {
+        pos = mark;
+    }
+
+    public void close() throws IOException {
     }
 }

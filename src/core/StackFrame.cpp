@@ -1,5 +1,6 @@
 #include "StackFrame.hpp"
 #include <stdexcept>
+#include <iostream>
 
 namespace j2me {
 namespace core {

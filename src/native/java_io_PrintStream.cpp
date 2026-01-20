@@ -73,19 +73,5 @@ void registerPrintStreamNatives() {
     );
 }
 
-void registerSystemNatives() {
-    auto& registry = j2me::core::NativeRegistry::getInstance();
-
-    // java/lang/System.currentTimeMillisNative()J
-    registry.registerNative("java/lang/System", "currentTimeMillisNative", "()J",
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
-            j2me::core::JavaValue ret;
-            ret.type = j2me::core::JavaValue::LONG;
-            ret.val.l = 0;
-            frame->push(ret);
-        }
-    );
-}
-
 }
 }

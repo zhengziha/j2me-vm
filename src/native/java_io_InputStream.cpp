@@ -17,24 +17,34 @@ void registerInputStreamNatives() {
     // java/io/InputStream.read()I
     registry.registerNative("java/io/InputStream", "read", "()I", 
         [](std::shared_ptr<j2me::core::StackFrame> frame) {
-            j2me::core::JavaValue thisVal = frame->pop();
-            
-            j2me::core::JavaValue result;
-            result.type = j2me::core::JavaValue::INT;
-            result.val.i = -1;
-            
-            if (thisVal.type == j2me::core::JavaValue::REFERENCE && thisVal.val.ref != nullptr) {
-                j2me::core::JavaObject* inputStreamObj = (j2me::core::JavaObject*)thisVal.val.ref;
-                if (inputStreamObj->fields.size() > 0) {
-                    int streamId = (int)inputStreamObj->fields[0];
-                    auto stream = j2me::core::HeapManager::getInstance().getStream(streamId);
-                    if (stream) {
-                        result.val.i = stream->read();
+            try {
+                    std::cerr << "[Native] InputStream.read()I entered. Stack size: " << frame->size() << std::endl;
+                    j2me::core::JavaValue thisVal = frame->pop();
+                    
+                    j2me::core::JavaValue result;
+                    result.type = j2me::core::JavaValue::INT;
+                    result.val.i = -1;
+                    
+                    if (thisVal.type == j2me::core::JavaValue::REFERENCE && thisVal.val.ref != nullptr) {
+                        j2me::core::JavaObject* inputStreamObj = (j2me::core::JavaObject*)thisVal.val.ref;
+                        if (inputStreamObj->fields.size() > 0) {
+                            int streamId = (int)inputStreamObj->fields[0];
+                            std::cout << "[Native] InputStream.read()I streamId: " << streamId << std::endl;
+                            auto stream = j2me::core::HeapManager::getInstance().getStream(streamId);
+                            if (stream) {
+                                result.val.i = stream->read();
+                                std::cout << "[Native] InputStream.read()I result: " << result.val.i << std::endl;
+                            } else {
+                                std::cout << "[Native] InputStream.read()I stream not found for id: " << streamId << std::endl;
+                            }
+                        }
                     }
-                }
+                    
+                    frame->push(result);
+                } catch (const std::exception& e) {
+                std::cerr << "[Native] InputStream.read()I Exception: " << e.what() << std::endl;
+                throw;
             }
-            
-            frame->push(result);
         }
     );
 

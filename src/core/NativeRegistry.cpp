@@ -88,6 +88,54 @@ NativeRegistry::NativeRegistry() {
         frame->push(thisVal);
     });
 
+    // java/lang/StringBuffer.insert(ILjava/lang/String;)Ljava/lang/StringBuffer;
+    registerNative("java/lang/StringBuffer", "insert", "(ILjava/lang/String;)Ljava/lang/StringBuffer;", [](std::shared_ptr<StackFrame> frame) {
+        std::cerr << "Native StringBuffer.insert(int, String)" << std::endl;
+        JavaValue strVal = frame->pop();
+        JavaValue offsetVal = frame->pop();
+        JavaValue thisVal = frame->pop();
+        JavaObject* thisObj = (JavaObject*)thisVal.val.ref;
+
+        if (thisObj && !thisObj->fields.empty()) {
+            std::string* str = (std::string*)thisObj->fields[0];
+            if (str) {
+                int offset = offsetVal.val.i;
+                if (offset < 0) offset = 0;
+                if (offset > str->length()) offset = str->length();
+
+                if (strVal.type == JavaValue::REFERENCE && !strVal.strVal.empty()) {
+                     str->insert(offset, strVal.strVal);
+                } else if (strVal.type == JavaValue::REFERENCE && strVal.val.ref == nullptr) {
+                     str->insert(offset, "null");
+                }
+            }
+        }
+        frame->push(thisVal);
+    });
+
+    // java/lang/StringBuffer.delete(II)Ljava/lang/StringBuffer;
+    registerNative("java/lang/StringBuffer", "delete", "(II)Ljava/lang/StringBuffer;", [](std::shared_ptr<StackFrame> frame) {
+        std::cerr << "Native StringBuffer.delete(int, int)" << std::endl;
+        JavaValue endVal = frame->pop();
+        JavaValue startVal = frame->pop();
+        JavaValue thisVal = frame->pop();
+        JavaObject* thisObj = (JavaObject*)thisVal.val.ref;
+
+        if (thisObj && !thisObj->fields.empty()) {
+            std::string* str = (std::string*)thisObj->fields[0];
+            if (str) {
+                int start = startVal.val.i;
+                int end = endVal.val.i;
+                if (start < 0) start = 0;
+                if (end > str->length()) end = str->length();
+                if (start < end) {
+                    str->erase(start, end - start);
+                }
+            }
+        }
+        frame->push(thisVal);
+    });
+
     // java/lang/StringBuffer.toString()Ljava/lang/String;
     registerNative("java/lang/StringBuffer", "toString", "()Ljava/lang/String;", [](std::shared_ptr<StackFrame> frame) {
         std::cerr << "Native StringBuffer.toString" << std::endl;

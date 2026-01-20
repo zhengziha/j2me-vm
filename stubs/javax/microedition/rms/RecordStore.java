@@ -71,17 +71,73 @@ public class RecordStore {
         deleteRecordStoreNative(recordStoreName);
     }
 
+    public void setRecord(int recordId, byte[] newData, int offset, int numBytes) throws RecordStoreNotOpenException, InvalidRecordIDException, RecordStoreFullException, RecordStoreException {
+        if (nativePtr == 0) {
+            throw new RecordStoreNotOpenException();
+        }
+        setRecordNative(name, recordId, newData, offset, numBytes);
+    }
+
+    public int getRecordSize(int recordId) throws RecordStoreNotOpenException, InvalidRecordIDException, RecordStoreException {
+        if (nativePtr == 0) {
+            throw new RecordStoreNotOpenException();
+        }
+        return getRecordSizeNative(name, recordId);
+    }
+
+    public long getLastModified() throws RecordStoreNotOpenException {
+        if (nativePtr == 0) {
+            throw new RecordStoreNotOpenException();
+        }
+        return getLastModifiedNative(name);
+    }
+
+    public int getVersion() throws RecordStoreNotOpenException {
+        if (nativePtr == 0) {
+            throw new RecordStoreNotOpenException();
+        }
+        return getVersionNative(name);
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void addRecordListener(RecordListener listener) {
+        // TODO: Implement listener support
+    }
+
+    public void removeRecordListener(RecordListener listener) {
+        // TODO: Implement listener support
+    }
+
+    public RecordEnumeration enumerateRecords(RecordFilter filter, RecordComparator comparator, boolean keepUpdated) throws RecordStoreNotOpenException {
+        if (nativePtr == 0) {
+            throw new RecordStoreNotOpenException();
+        }
+        return new RecordEnumerationImpl(this, filter, comparator, keepUpdated);
+    }
+
+    int[] getRecordIds() {
+        return getRecordIdsNative(name);
+    }
+
     public static String[] listRecordStores() {
         return listRecordStoresNative();
     }
 
     private static native int openRecordStoreNative(String name, boolean createIfNecessary);
     private native int addRecordNative(String name, byte[] data, int offset, int numBytes);
+    private native void setRecordNative(String name, int recordId, byte[] data, int offset, int numBytes);
     private native byte[] getRecordNative(String name, int recordId);
     private native void deleteRecordNative(String name, int recordId);
+    private native int[] getRecordIdsNative(String name);
     private native int getNumRecordsNative(String name);
     private native int getSizeNative(String name);
     private native int getSizeAvailableNative(String name);
+    private native int getRecordSizeNative(String name, int recordId);
+    private native long getLastModifiedNative(String name);
+    private native int getVersionNative(String name);
     private native void closeRecordStoreNative(String name);
     private static native void deleteRecordStoreNative(String name);
     private static native String[] listRecordStoresNative();

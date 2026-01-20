@@ -42,6 +42,9 @@ public:
     void push(JavaValue value);
     JavaValue pop();
     JavaValue peek();
+    
+    // Debug helper
+    size_t size() const { return operandStack.size(); }
 
     void setLocal(uint16_t index, JavaValue value);
     JavaValue getLocal(uint16_t index);
