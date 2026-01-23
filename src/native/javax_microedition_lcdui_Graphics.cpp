@@ -76,18 +76,15 @@ void registerGraphicsNatives(j2me::core::NativeRegistry& registry) {
                          if (it != imageMap.end()) {
                              SDL_Surface* srcSurface = it->second;
                              
-                             if (isScreen) {
-                /*
-                static int frameCount = 0;
-                if (frameCount++ % 60 == 0) { 
-                    std::cout << "[Graphics] drawImage ID: " << imgId << " at " << x << "," << y << std::endl;
-                }
-                */
-                j2me::platform::GraphicsContext::getInstance().drawImage(srcSurface, x, y, anchor);
-            } else if (target) {
-                // Draw to offscreen surface
-                j2me::platform::GraphicsContext::getInstance().drawImage(srcSurface, x, y, anchor, target);
-            }
+                             if (!srcSurface) {
+                                 std::cerr << "[Graphics] drawImage: Source surface is NULL for ID " << imgId << std::endl;
+                             } else if (isScreen) {
+                                 // Draw to screen
+                                 j2me::platform::GraphicsContext::getInstance().drawImage(srcSurface, x, y, anchor);
+                             } else if (target) {
+                                 // Draw to offscreen surface
+                                 j2me::platform::GraphicsContext::getInstance().drawImage(srcSurface, x, y, anchor, target);
+                             }
                          } else {
                              std::cerr << "[Graphics] drawImage: Invalid Image ID " << imgId << std::endl;
                          }

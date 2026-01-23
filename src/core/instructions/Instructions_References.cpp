@@ -679,7 +679,22 @@ void Interpreter::initReferences() {
             for(int i=0; i<argCount; ++i) args.push_back(frame->pop());
             
             JavaValue obj = frame->pop();
-            if (obj.val.ref == nullptr) throw std::runtime_error("NullPointerException");
+            if (obj.val.ref == nullptr) {
+                // Determine Interface Name for logging
+                std::string interfaceName = "Unknown";
+                if (methodRef) {
+                    auto classRef = std::dynamic_pointer_cast<ConstantClass>(frame->classFile->constant_pool[methodRef->class_index]);
+                    if (classRef) {
+                         auto className = std::dynamic_pointer_cast<ConstantUtf8>(frame->classFile->constant_pool[classRef->name_index]);
+                         if (className) interfaceName = className->bytes;
+                    }
+                }
+                
+                std::cerr << "[ERROR] NullPointerException in INVOKEINTERFACE: " 
+                          << interfaceName << "." << name->bytes << descriptor->bytes << std::endl;
+                          
+                throw std::runtime_error("NullPointerException");
+            }
             
             JavaObject* javaObj = static_cast<JavaObject*>(obj.val.ref);
             auto cls = javaObj->cls;

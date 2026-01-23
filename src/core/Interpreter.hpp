@@ -12,6 +12,10 @@
 
 
 namespace j2me {
+namespace natives {
+    void registerMediaNatives(j2me::core::NativeRegistry& registry);
+}
+
 namespace core {
 
 class Interpreter {
@@ -38,6 +42,10 @@ private:
     
     // Validate that a string is actually a class name, not a descriptor
     bool isValidClassName(const std::string& name);
+
+    // Make friends for native access
+    friend class j2me::core::NativeRegistry;
+    friend void j2me::natives::registerMediaNatives(j2me::core::NativeRegistry& registry);
 
     using InstructionHandler = std::function<bool(std::shared_ptr<JavaThread>, std::shared_ptr<StackFrame>, util::DataReader&, uint8_t)>;
     std::vector<InstructionHandler> instructionTable;
