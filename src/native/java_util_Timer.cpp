@@ -6,10 +6,10 @@
 namespace j2me {
 namespace natives {
 
-void registerTimerNatives() {
-    auto& registry = j2me::core::NativeRegistry::getInstance();
+void registerTimerNatives(j2me::core::NativeRegistry& registry) {
+    // registry passed as argument
 
-    // java/util/Timer.scheduleNative(Ljava/util/TimerTask;JJ)V
+    // java/util/Timer.scheduleImpl(Ljava/util/TimerTask;J)V
     registry.registerNative("java/util/Timer", "scheduleNative", "(Ljava/util/TimerTask;JJ)V", 
         [](std::shared_ptr<j2me::core::StackFrame> frame) {
             int64_t period = frame->pop().val.l;

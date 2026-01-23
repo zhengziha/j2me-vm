@@ -89,8 +89,7 @@ void loadRecordStore(const std::string& name) {
     file.close();
 }
 
-void registerRecordStoreNatives() {
-    auto& registry = j2me::core::NativeRegistry::getInstance();
+void registerRecordStoreNatives(j2me::core::NativeRegistry& registry) {
     ensureRmsDir();
 
     // Load existing record stores

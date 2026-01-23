@@ -10,8 +10,18 @@
 namespace j2me {
 namespace natives {
 
-void registerThreadNatives() {
-    auto& registry = j2me::core::NativeRegistry::getInstance();
+void registerThreadNatives(j2me::core::NativeRegistry& registry) {
+    // registry passed as argument
+
+    // java/lang/Thread.yield()V
+    registry.registerNative("java/lang/Thread", "yield", "()V", 
+        [&registry](std::shared_ptr<j2me::core::StackFrame> frame) {
+            auto interpreter = registry.getInterpreter();
+            j2me::core::TimerManager::getInstance().tick(interpreter);
+            j2me::core::EventLoop::runSingleStep(interpreter);
+            std::this_thread::yield();
+        }
+    );
 
     // java/lang/Thread.sleep(J)V
     registry.registerNative("java/lang/Thread", "sleep", "(J)V", 

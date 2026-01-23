@@ -33,9 +33,18 @@ public class Image {
     }
 
     public static Image createImage(InputStream stream) throws IOException {
-        // Simplified implementation reading stream to memory
-        // For now return null or implement proper reading
-        return null; 
+        if (stream == null) throw new NullPointerException("InputStream cannot be null");
+        
+        java.io.ByteArrayOutputStream buffer = new java.io.ByteArrayOutputStream();
+        int nRead;
+        byte[] data = new byte[4096];
+        while ((nRead = stream.read(data, 0, data.length)) != -1) {
+            buffer.write(data, 0, nRead);
+        }
+        buffer.flush();
+        byte[] imageData = buffer.toByteArray();
+        
+        return createImage(imageData, 0, imageData.length);
     }
     
     public static Image createRGBImage(int[] rgb, int width, int height, boolean processAlpha) {

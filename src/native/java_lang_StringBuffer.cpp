@@ -17,8 +17,8 @@ namespace natives {
 static std::map<int32_t, std::string> stringBufferMap;
 static int32_t nextStringBufferId = 1;
 
-void registerStringBufferNatives() {
-    auto& registry = j2me::core::NativeRegistry::getInstance();
+void registerStringBufferNatives(j2me::core::NativeRegistry& registry) {
+    // registry passed as argument
 
     // java/lang/StringBuffer.<init>()V
     registry.registerNative("java/lang/StringBuffer", "<init>", "()V", 
@@ -137,6 +137,24 @@ void registerStringBufferNatives() {
                 }
             }
             frame->push(result);
+        }
+    );
+    // java/lang/StringBuffer.init()V (without brackets, for obfuscated code?)
+    registry.registerNative("java/lang/StringBuffer", "init", "()V", 
+        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+            j2me::core::JavaValue thisVal = frame->pop();
+            
+            if (thisVal.type == j2me::core::JavaValue::REFERENCE && thisVal.val.ref != nullptr) {
+                j2me::core::JavaObject* thisObj = (j2me::core::JavaObject*)thisVal.val.ref;
+                
+                int32_t id = nextStringBufferId++;
+                stringBufferMap[id] = "";
+                
+                if (thisObj->fields.size() < 1) {
+                    thisObj->fields.resize(1);
+                }
+                thisObj->fields[0] = id;
+            }
         }
     );
 }

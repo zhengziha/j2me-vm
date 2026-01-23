@@ -4,6 +4,7 @@
 #include "HeapManager.hpp"
 #include "NativeRegistry.hpp"
 #include "Logger.hpp"
+#include "EventLoop.hpp"
 #include <iostream>
 #include <cmath>
 #include <cstring>
@@ -292,47 +293,55 @@ std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& classNam
         loadedClasses[className] = javaClass;
         
         // Load all referenced classes from constant pool (for dependencies)
-        LOG_DEBUG("[Interpreter] Loading dependencies for: " + className);
-        int checkedCount = 0;
-        for (const auto& cpEntry : rawFile->constant_pool) {
-            if (cpEntry && cpEntry->tag == CONSTANT_Class) {
-                auto classInfo = std::dynamic_pointer_cast<ConstantClass>(cpEntry);
-                if (classInfo) {
-                    if (classInfo->name_index > 0 && classInfo->name_index < rawFile->constant_pool.size()) {
-                        auto nameInfo = std::dynamic_pointer_cast<ConstantUtf8>(rawFile->constant_pool[classInfo->name_index]);
-                        if (nameInfo) {
-                            std::string refClassName = nameInfo->bytes;
-                            checkedCount++;
-                            // Skip self and java/lang/Object (already handled)
-                            // Also skip array types (start with '[')
-                            // Also skip invalid class names (descriptors, short names, etc.)
-                            if (refClassName != className && refClassName != "java/lang/Object" && !refClassName.empty() && refClassName[0] != '[') {
-                                // Validate class name before attempting to load
-                                bool valid = isValidClassName(refClassName);
-                                LOG_DEBUG("[Interpreter]   Found class name: " + refClassName + " (valid: " + (valid ? "yes" : "no") + ")");
-                                if (!valid) {
-                                    LOG_DEBUG("[Interpreter]   Skipping invalid class name: " + refClassName);
-                                    continue;
-                                }
-                                LOG_DEBUG("[Interpreter]   Checking dependency: " + refClassName);
-                                // Only load if not already loaded
-                                if (loadedClasses.find(refClassName) == loadedClasses.end()) {
-                                    try {
-                                        resolveClass(refClassName);
-                                    } catch (const std::exception& e) {
-                                        LOG_ERROR("[Interpreter] Warning: Failed to load dependency " + refClassName + ": " + e.what());
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        LOG_DEBUG("[Interpreter] Checked " + std::to_string(checkedCount) + " CONSTANT_Class entries");
+        // LOG_DEBUG("[Interpreter] Loading dependencies for: " + className);
+        // int checkedCount = 0;
+        // for (const auto& cpEntry : rawFile->constant_pool) {
+        //     if (cpEntry && cpEntry->tag == CONSTANT_Class) {
+        //         auto classInfo = std::dynamic_pointer_cast<ConstantClass>(cpEntry);
+        //         if (classInfo) {
+        //             if (classInfo->name_index > 0 && classInfo->name_index < rawFile->constant_pool.size()) {
+        //                 auto nameInfo = std::dynamic_pointer_cast<ConstantUtf8>(rawFile->constant_pool[classInfo->name_index]);
+        //                 if (nameInfo) {
+        //                     std::string refClassName = nameInfo->bytes;
+        //                     checkedCount++;
+        //                     // Skip self and java/lang/Object (already handled)
+        //                     // Also skip array types (start with '[')
+        //                     // Also skip invalid class names (descriptors, short names, etc.)
+        //                     if (refClassName != className && refClassName != "java/lang/Object" && !refClassName.empty() && refClassName[0] != '[') {
+        //                         // Validate class name before attempting to load
+        //                         bool valid = isValidClassName(refClassName);
+        //                         // LOG_DEBUG("[Interpreter]   Found class name: " + refClassName + " (valid: " + (valid ? "yes" : "no") + ")");
+        //                         if (!valid) {
+        //                             // LOG_DEBUG("[Interpreter]   Skipping invalid class name: " + refClassName);
+        //                             continue;
+        //                         }
+        //                         // LOG_DEBUG("[Interpreter]   Checking dependency: " + refClassName);
+        //                         // Only load if not already loaded
+        //                         if (loadedClasses.find(refClassName) == loadedClasses.end()) {
+        //                             try {
+        //                                 resolveClass(refClassName);
+        //                             } catch (const std::exception& e) {
+        //                                 LOG_ERROR("[Interpreter] Warning: Failed to load dependency " + refClassName + ": " + e.what());
+        //                             }
+        //                         }
+        //                     }
+        //                 }
+        //             }
+        //         }
+        //     }
+        // }
+        // LOG_DEBUG("[Interpreter] Checked " + std::to_string(checkedCount) + " CONSTANT_Class entries");
         
         // Initialize the class (execute <clinit>)
-        initializeClass(javaClass);
+        // Initialization should be done on demand (when class is actually used)
+        // But for main class, we might need it. 
+        // Current implementation calls initializeClass inside opcodes.
+        // However, resolveClass is called by opcodes.
+        // So if we remove initializeClass here, we might miss initialization if opcode assumes resolveClass initializes.
+        // Opcodes: OP_NEW -> resolveClass -> initializeClass?
+        // Check OP_NEW.
+        // OP_NEW calls resolveClass. Does NOT call initializeClass explicitly in my previous read?
+        // Let's check OP_NEW again.
         
         return javaClass;
     } catch (const std::exception& e) {
@@ -380,6 +389,12 @@ std::optional<JavaValue> Interpreter::execute(std::shared_ptr<StackFrame> frame)
     LOG_DEBUG("[Interpreter] Starting execution, code size: " + std::to_string(code.size()) + " bytes");
 
     while (codeReader.tell() < code.size()) {
+        // Check for global exit signal
+        if (EventLoop::getInstance().shouldExit()) {
+            LOG_INFO("[Interpreter] VM Exit requested. Stopping execution.");
+            return std::nullopt; // Or throw an exception to unwind stack faster
+        }
+
         try {
             std::optional<JavaValue> ret;
             bool shouldContinue = executeInstruction(frame, codeReader, ret);
@@ -393,7 +408,15 @@ std::optional<JavaValue> Interpreter::execute(std::shared_ptr<StackFrame> frame)
                 return std::nullopt;
             }
         } catch (const std::exception& e) {
-            LOG_ERROR("Runtime Exception in method " + methodName + " at PC " + std::to_string(codeReader.tell()) + ": " + std::string(e.what()));
+            std::string className = "<unknown>";
+            if (frame->classFile->this_class > 0) {
+                 auto classInfo = std::dynamic_pointer_cast<ConstantClass>(frame->classFile->constant_pool[frame->classFile->this_class]);
+                 if (classInfo) {
+                     auto nameInfo = std::dynamic_pointer_cast<ConstantUtf8>(frame->classFile->constant_pool[classInfo->name_index]);
+                     if (nameInfo) className = nameInfo->bytes;
+                 }
+            }
+            LOG_ERROR("Runtime Exception in method " + className + "." + methodName + " at PC " + std::to_string(codeReader.tell()) + ": " + std::string(e.what()));
             throw;
         }
     }
@@ -465,6 +488,18 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
     }
 
     uint8_t opcode = codeReader.readU1();
+    
+    // Debug pal/b execution
+    if (frame->classFile->this_class > 0) {
+        auto clsInfo = std::dynamic_pointer_cast<ConstantClass>(frame->classFile->constant_pool[frame->classFile->this_class]);
+        if (clsInfo) {
+            auto nameInfo = std::dynamic_pointer_cast<ConstantUtf8>(frame->classFile->constant_pool[clsInfo->name_index]);
+            if (nameInfo && nameInfo->bytes == "pal/b") {
+                // std::cout << "[Trace] pal/b PC: " << (codeReader.tell() - 1) << " Op: " << std::hex << (int)opcode << std::dec << std::endl;
+            }
+        }
+    }
+
     // LOG_DEBUG("[Interpreter] Opcode: " + std::to_string((int)opcode) + " at PC " + std::to_string(codeReader.tell()-1) + " Stack: " + std::to_string(frame->stackSize()));
     
     switch (opcode) {
@@ -517,10 +552,11 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
                 if (stringCls) {
                     auto stringObj = HeapManager::getInstance().allocate(stringCls);
                     
-                    auto valueIt = stringCls->fieldOffsets.find("value");
-                if (valueIt != stringCls->fieldOffsets.end()) {
-                    auto arrayCls = resolveClass("[C"); // Prefer [C (char[])
-                    if (!arrayCls) arrayCls = resolveClass("[B"); // Fallback to [B
+                    auto valueIt = stringCls->fieldOffsets.find("value|[C");
+                    if (valueIt == stringCls->fieldOffsets.end()) valueIt = stringCls->fieldOffsets.find("value|[B");
+                    if (valueIt != stringCls->fieldOffsets.end()) {
+                        auto arrayCls = resolveClass("[C"); // Prefer [C (char[])
+                        if (!arrayCls) arrayCls = resolveClass("[B"); // Fallback to [B
                     
                     if (arrayCls) {
                         auto arrayObj = HeapManager::getInstance().allocate(arrayCls);
@@ -532,12 +568,12 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
                     }
                 }
                     
-                    auto offsetIt = stringCls->fieldOffsets.find("offset");
+                    auto offsetIt = stringCls->fieldOffsets.find("offset|I");
                     if (offsetIt != stringCls->fieldOffsets.end()) {
                         stringObj->fields[offsetIt->second] = 0;
                     }
                     
-                    auto countIt = stringCls->fieldOffsets.find("count");
+                    auto countIt = stringCls->fieldOffsets.find("count|I");
                     if (countIt != stringCls->fieldOffsets.end()) {
                         stringObj->fields[countIt->second] = strVal->bytes.length();
                     }
@@ -590,7 +626,7 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
                 if (stringCls) {
                     auto stringObj = HeapManager::getInstance().allocate(stringCls);
                     
-                    auto valueIt = stringCls->fieldOffsets.find("value");
+                    auto valueIt = stringCls->fieldOffsets.find("value|[C");
                     if (valueIt != stringCls->fieldOffsets.end()) {
                         auto arrayCls = resolveClass("[C"); // Prefer [C
                         if (!arrayCls) arrayCls = resolveClass("[B"); // Fallback
@@ -605,12 +641,12 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
                         }
                     }
                     
-                    auto offsetIt = stringCls->fieldOffsets.find("offset");
+                    auto offsetIt = stringCls->fieldOffsets.find("offset|I");
                     if (offsetIt != stringCls->fieldOffsets.end()) {
                         stringObj->fields[offsetIt->second] = 0;
                     }
                     
-                    auto countIt = stringCls->fieldOffsets.find("count");
+                    auto countIt = stringCls->fieldOffsets.find("count|I");
                     if (countIt != stringCls->fieldOffsets.end()) {
                         stringObj->fields[countIt->second] = strVal->bytes.length();
                     }
@@ -1425,6 +1461,7 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
              int16_t offset = (int16_t)codeReader.readU2();
              int32_t val2 = frame->pop().val.i;
              int32_t val1 = frame->pop().val.i;
+             
              if (val1 < val2) {
                  codeReader.seek(codeReader.tell() + offset - 3); 
              }
@@ -1434,6 +1471,7 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
              int16_t offset = (int16_t)codeReader.readU2();
              int32_t val2 = frame->pop().val.i;
              int32_t val1 = frame->pop().val.i;
+
              if (val1 >= val2) {
                  codeReader.seek(codeReader.tell() + offset - 3); 
              }
@@ -1443,6 +1481,7 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
              int16_t offset = (int16_t)codeReader.readU2();
              int32_t val2 = frame->pop().val.i;
              int32_t val1 = frame->pop().val.i;
+
              if (val1 > val2) {
                  codeReader.seek(codeReader.tell() + offset - 3); 
              }
@@ -1452,6 +1491,7 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
              int16_t offset = (int16_t)codeReader.readU2();
              int32_t val2 = frame->pop().val.i;
              int32_t val1 = frame->pop().val.i;
+
              if (val1 <= val2) {
                  codeReader.seek(codeReader.tell() + offset - 3); 
              }
@@ -1855,6 +1895,8 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
                 throw std::runtime_error("Could not find class: " + className->bytes);
             }
             
+            initializeClass(cls);
+            
             JavaObject* obj = HeapManager::getInstance().allocate(cls);
             JavaValue val;
             val.type = JavaValue::REFERENCE;
@@ -1971,9 +2013,10 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
             }
             
             // Look up offset
-            auto it = obj->cls->fieldOffsets.find(name->bytes);
+            std::string key = name->bytes + "|" + descriptor->bytes;
+            auto it = obj->cls->fieldOffsets.find(key);
             if (it == obj->cls->fieldOffsets.end()) {
-                throw std::runtime_error("Field not found: " + name->bytes);
+                throw std::runtime_error("Field not found: " + key);
             }
             
             JavaValue fieldVal;
@@ -2031,9 +2074,10 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
             if (!obj->cls) throw std::runtime_error("Object class is null");
             
             // Look up offset
-            auto it = obj->cls->fieldOffsets.find(name->bytes);
+            std::string key = name->bytes + "|" + descriptor->bytes;
+            auto it = obj->cls->fieldOffsets.find(key);
             if (it == obj->cls->fieldOffsets.end()) {
-                throw std::runtime_error("Field not found: " + name->bytes);
+                throw std::runtime_error("Field not found: " + key);
             }
             
             if (it->second >= obj->fields.size()) {
@@ -2066,14 +2110,6 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
                  auto classRef = std::dynamic_pointer_cast<ConstantClass>(frame->classFile->constant_pool[ref->class_index]);
                  auto className = std::dynamic_pointer_cast<ConstantUtf8>(frame->classFile->constant_pool[classRef->name_index]);
                  
-                 if (className->bytes == "java/lang/System") {
-                     JavaValue val;
-                     val.type = JavaValue::REFERENCE;
-                     val.val.ref = (void*)0xDEADBEEF; 
-                     frame->push(val);
-                     break;
-                 }
-                 
                  // Validate class name before resolving
                  if (!isValidClassName(className->bytes)) {
                      throw std::runtime_error("Invalid class name in GETSTATIC: " + className->bytes);
@@ -2089,12 +2125,12 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
                  // Initialize class if needed
                  initializeClass(cls);
                  
-                 auto it = cls->staticFields.find(name->bytes);
+                 auto descriptor = std::dynamic_pointer_cast<ConstantUtf8>(frame->classFile->constant_pool[nameAndType->descriptor_index]);
+                 auto it = cls->staticFields.find(name->bytes + "|" + descriptor->bytes);
                  if (it == cls->staticFields.end()) {
                      // Default value 0/null
                      JavaValue val;
                      // For static fields, we need to determine type from descriptor
-                     auto descriptor = std::dynamic_pointer_cast<ConstantUtf8>(frame->classFile->constant_pool[nameAndType->descriptor_index]);
                      if (descriptor && descriptor->bytes[0] == 'L') {
                          // Reference type
                          val.type = JavaValue::REFERENCE;
@@ -2134,6 +2170,7 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
                  auto className = std::dynamic_pointer_cast<ConstantUtf8>(frame->classFile->constant_pool[classRef->name_index]);
                  auto nameAndType = std::dynamic_pointer_cast<ConstantNameAndType>(frame->classFile->constant_pool[ref->name_and_type_index]);
                  auto name = std::dynamic_pointer_cast<ConstantUtf8>(frame->classFile->constant_pool[nameAndType->name_index]);
+                 auto descriptor = std::dynamic_pointer_cast<ConstantUtf8>(frame->classFile->constant_pool[nameAndType->descriptor_index]);
                  
                  // Validate class name before resolving
                  if (!isValidClassName(className->bytes)) {
@@ -2148,10 +2185,11 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
                  
                  JavaValue val = frame->pop();
                  // Store value - handle different types appropriately
+                 std::string key = name->bytes + "|" + descriptor->bytes;
                  if (val.type == JavaValue::REFERENCE) {
-                     cls->staticFields[name->bytes] = (int64_t)val.val.ref;
+                     cls->staticFields[key] = (int64_t)val.val.ref;
                  } else {
-                     cls->staticFields[name->bytes] = val.val.l;
+                     cls->staticFields[key] = val.val.l;
                  }
                  break;
             }
@@ -2226,6 +2264,8 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
              // Resolve class first
              auto cls = resolveClass(className->bytes);
              if (!cls) throw std::runtime_error("Class not found: " + className->bytes);
+             
+             if (isStatic) initializeClass(cls);
 
              // Find method
              bool found = false;
@@ -2394,6 +2434,11 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
                  auto cls = javaObj->cls;
                  
                  // std::cout << "[INVOKEVIRTUAL] Object class: " << cls->name << std::endl;
+                /*
+                if (name->bytes == "setFullScreenMode" || name->bytes == "getWidth") {
+                    std::cout << "Debug: Invoking " << name->bytes << " on object of type " << (cls ? cls->name : "null") << std::endl;
+                }
+                */
                  
                  // Find method
                  bool found = false;
@@ -2465,7 +2510,10 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
                      }
                  }
                  
-                 if (!found) std::cerr << "Method not found: " << name->bytes << std::endl;
+                 if (!found) {
+                    std::string msg = "Method not found: " + cls->name + "." + name->bytes + descriptor->bytes;
+                    throw std::runtime_error(msg);
+                }
             }
             break;
         }

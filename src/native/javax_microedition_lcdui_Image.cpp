@@ -13,10 +13,10 @@
 namespace j2me {
 namespace natives {
 
-void registerImageNatives() {
-    auto& registry = j2me::core::NativeRegistry::getInstance();
+void registerImageNatives(j2me::core::NativeRegistry& registry) {
+    // registry passed as argument
 
-    // javax/microedition/lcdui/Image.createImageNative(Ljava/lang/String;)I
+    // javax/microedition/lcdui/Image.createImage(Ljava/io/InputStream;)Ljavax/microedition/lcdui/Image;
     registry.registerNative("javax/microedition/lcdui/Image", "createImageNative", "(Ljava/lang/String;)I", 
         [](std::shared_ptr<j2me::core::StackFrame> frame) {
             j2me::core::JavaValue nameVal = frame->pop(); // name string
@@ -170,6 +170,56 @@ void registerImageNatives() {
         }
     );
 
+    // javax/microedition/lcdui/Image.createRGBImageNative([IIIZ)I
+    registry.registerNative("javax/microedition/lcdui/Image", "createRGBImageNative", "([IIIZ)I", 
+        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+            int processAlpha = frame->pop().val.i;
+            int height = frame->pop().val.i;
+            int width = frame->pop().val.i;
+            j2me::core::JavaValue rgbDataVal = frame->pop();
+            
+            j2me::core::JavaValue result;
+            result.type = j2me::core::JavaValue::INT;
+            result.val.i = 0;
+            
+            if (rgbDataVal.type == j2me::core::JavaValue::REFERENCE && rgbDataVal.val.ref != nullptr) {
+                auto rgbArray = static_cast<j2me::core::JavaObject*>(rgbDataVal.val.ref);
+                
+                // Validate array size
+                if ((int)rgbArray->fields.size() < width * height) {
+                     std::cerr << "ArrayIndexOutOfBoundsException in createRGBImageNative" << std::endl;
+                     frame->push(result);
+                     return;
+                }
+                
+                // Create SDL Surface
+                SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, SDL_PIXELFORMAT_ARGB8888);
+                if (surface) {
+                    SDL_LockSurface(surface);
+                    uint32_t* targetPixels = (uint32_t*)surface->pixels;
+                    
+                    for (int i = 0; i < width * height; i++) {
+                        uint32_t argb = (uint32_t)rgbArray->fields[i];
+                        if (!processAlpha) {
+                            argb |= 0xFF000000; // Set alpha to 255
+                        }
+                        // SDL ARGB8888 matches Java ARGB
+                        targetPixels[i] = argb;
+                    }
+                    
+                    SDL_UnlockSurface(surface);
+                    
+                    int32_t imgId = nextImageId++;
+                    imageMap[imgId] = surface;
+                    result.val.i = imgId;
+                    
+                    std::cout << "[Image] Created RGB Image, ID: " << imgId << " Size: " << width << "x" << height << std::endl;
+                }
+            }
+            frame->push(result);
+        }
+    );
+
     // javax/microedition/lcdui/Image.createMutableImageNative(II)I
     registry.registerNative("javax/microedition/lcdui/Image", "createMutableImageNative", "(II)I", 
         [](std::shared_ptr<j2me::core::StackFrame> frame) {
@@ -288,16 +338,32 @@ void registerImageNatives() {
                         result.val.i = imgId;
                         std::cout << "[Image] Created Immutable Image (from data), ID: " << imgId << " Size: " << w << "x" << h << std::endl;
                     } else {
-                         std::cerr << "Failed to create SDL surface" << std::endl;
+                         std::cerr << "Failed to create SDL surface: " << SDL_GetError() << std::endl;
+                         std::cout << "[Image] Failed to create SDL surface" << std::endl;
                     }
                     
                     stbi_image_free(pixels);
                 } else {
                     std::cerr << "Failed to decode image data" << std::endl;
+                    std::cout << "[Image] Failed to decode image data (stbi_load_from_memory returned null)" << std::endl;
                 }
             } else {
                  std::cerr << "NullPointerException in createImageFromData" << std::endl;
+                 std::cout << "[Image] NullPointerException in createImageFromData" << std::endl;
             }
+            frame->push(result);
+        }
+    );
+
+    // javax/microedition/lcdui/Image.getGraphicsNative(I)I
+    registry.registerNative("javax/microedition/lcdui/Image", "getGraphicsNative", "(I)I", 
+        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+            int32_t imgId = frame->pop().val.i;
+            // For now, return the same ID, assuming 1:1 mapping between Image and Graphics context for offscreen
+            // Real implementation would need a Graphics object tracking this target
+            j2me::core::JavaValue result;
+            result.type = j2me::core::JavaValue::INT;
+            result.val.i = imgId; // Just return image ID as graphics ID
             frame->push(result);
         }
     );

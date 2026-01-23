@@ -18,6 +18,7 @@
 #include "native/javax_microedition_lcdui_Graphics.hpp" 
 #include "native/javax_microedition_lcdui_Display.hpp"
 #include "native/javax_microedition_lcdui_Image.hpp"
+#include "native/javax_microedition_lcdui_game_GameCanvas.hpp"
 #include "native/javax_microedition_rms_RecordStore.hpp"
 #include "native/java_lang_Class.hpp"
 #include "native/java_lang_Object.hpp"
@@ -100,20 +101,8 @@ void runVM(VMConfig config) {
     // Set log level
     j2me::core::Logger::getInstance().setLevel(config.logLevel);
 
-    // Register natives
-    j2me::natives::registerGraphicsNatives();
-    j2me::natives::registerDisplayNatives();
-    j2me::natives::registerImageNatives();
-    j2me::natives::registerRecordStoreNatives();
-    j2me::natives::registerClassNatives();
-    j2me::natives::registerObjectNatives();
-    j2me::natives::registerStringNatives();
-    j2me::natives::registerStringBufferNatives();
-    j2me::natives::registerPrintStreamNatives();
-    j2me::natives::registerSystemNatives();
-    j2me::natives::registerInputStreamNatives();
-    j2me::natives::registerThreadNatives();
-    j2me::natives::registerTimerNatives();
+    // Register natives logic moved to NativeRegistry constructor
+    // which will be called on first access below.
 
     LOG_INFO("Starting J2ME VM Thread...");
 
@@ -337,7 +326,8 @@ void runVM(VMConfig config) {
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     LOG_INFO("VM Thread Exiting...");
-    std::exit(0);
+    j2me::core::NativeRegistry::getInstance().setInterpreter(nullptr);
+    // std::exit(0);
 }
 
 int main(int argc, char* argv[]) {
@@ -524,7 +514,7 @@ int main(int argc, char* argv[]) {
     // Launch VM Thread
     LOG_INFO("Launching VM Thread...");
     std::thread vmThread(runVM, config);
-    vmThread.detach();
+    // vmThread.detach(); // Don't detach!
 
     // Main Thread Event Loop
     LOG_INFO("Entering Main Event Loop (SDL)...");
@@ -536,6 +526,15 @@ int main(int argc, char* argv[]) {
         std::this_thread::sleep_for(std::chrono::milliseconds(16)); // ~60 FPS
     }
     
-    LOG_INFO("Main Thread Exiting...");
+    LOG_INFO("Main Thread Exiting... Waiting for VM Thread to stop.");
+    if (vmThread.joinable()) {
+        vmThread.join();
+    }
+    LOG_INFO("VM Thread Stopped. Cleaning up SDL.");
+
+    SDL_DestroyWindow(window);
+    SDL_Quit();
+    
+    LOG_INFO("Shutdown complete.");
     return 0;
 }

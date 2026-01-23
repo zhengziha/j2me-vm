@@ -37,6 +37,8 @@ public class Thread implements Runnable {
 
     public static native void sleep(long millis) throws InterruptedException;
 
+    public static native void yield();
+
     public static void sleep(long millis, int nanos) throws InterruptedException {
         // Ignore nanos for now
         sleep(millis);

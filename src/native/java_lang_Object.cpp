@@ -9,8 +9,8 @@
 namespace j2me {
 namespace natives {
 
-void registerObjectNatives() {
-    auto& registry = j2me::core::NativeRegistry::getInstance();
+void registerObjectNatives(j2me::core::NativeRegistry& registry) {
+    // registry passed as argument
 
     // java/lang/Object.getClass()Ljava/lang/Class;
     registry.registerNative("java/lang/Object", "getClass", "()Ljava/lang/Class;", 

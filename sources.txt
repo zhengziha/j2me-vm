@@ -124,3 +124,7 @@ stubs/javax/microedition/media/Player.java
 stubs/javax/microedition/media/control/ToneControl.java
 stubs/javax/microedition/media/control/VolumeControl.java
 stubs/javax/microedition/media/Controllable.java
+stubs/javax/wireless/messaging/Message.java
+stubs/javax/wireless/messaging/TextMessage.java
+stubs/javax/wireless/messaging/MessageListener.java
+stubs/javax/wireless/messaging/MessageConnection.java

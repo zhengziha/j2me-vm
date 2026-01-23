@@ -7,10 +7,10 @@
 namespace j2me {
 namespace natives {
 
-void registerPrintStreamNatives() {
-    auto& registry = j2me::core::NativeRegistry::getInstance();
+void registerPrintStreamNatives(j2me::core::NativeRegistry& registry) {
+    // registry passed as argument
 
-    // java/io/PrintStream.printlnNative(Ljava/lang/String;)V
+    // java/io/PrintStream.println(Ljava/lang/String;)V
     registry.registerNative("java/io/PrintStream", "printlnNative", "(Ljava/lang/String;)V",
         [](std::shared_ptr<j2me::core::StackFrame> frame) {
             j2me::core::JavaValue strVal = frame->pop();

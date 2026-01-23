@@ -45,6 +45,28 @@ void EventLoop::pollSDL() {
             if (keyCode != 0) {
                 std::lock_guard<std::mutex> lock(queueMutex);
                 eventQueue.push(keyCode);
+                
+                // Update keyStates (GameCanvas)
+                // Need to map keyCode to GameAction bit
+                // UP=1 -> bit 1 (1<<1 = 2)
+                // DOWN=6 -> bit 6 (1<<6 = 64)
+                // LEFT=2 -> bit 2 (4)
+                // RIGHT=5 -> bit 5 (32)
+                // FIRE=8 -> bit 8 (256)
+                // GAME_A=9 -> bit 9 (512)
+                // GAME_B=10 -> bit 10 (1024)
+                // GAME_C=11 -> bit 11 (2048)
+                // GAME_D=12 -> bit 12 (4096)
+                if (keyCode > 0 && keyCode <= 31) { // Safety check
+                    keyStates |= (1 << keyCode);
+                }
+            }
+        } else if (e.type == SDL_KEYUP) {
+            int keyCode = mapKey(e.key.keysym.sym);
+            if (keyCode != 0) {
+                if (keyCode > 0 && keyCode <= 31) {
+                    keyStates &= ~(1 << keyCode);
+                }
             }
         }
     }
@@ -123,6 +145,9 @@ void EventLoop::render(Interpreter* interpreter) {
                 for (const auto& method : currentCls->rawFile->methods) {
                     auto name = std::dynamic_pointer_cast<j2me::core::ConstantUtf8>(currentCls->rawFile->constant_pool[method.name_index]);
                     if (name->bytes == "paint") {
+                        static int paintCount = 0;
+                        if (paintCount++ % 60 == 0) std::cout << "[EventLoop] Calling paint()" << std::endl;
+
                         auto frame = std::make_shared<j2me::core::StackFrame>(method, currentCls->rawFile);
                         
                         // Push 'this' (Canvas)

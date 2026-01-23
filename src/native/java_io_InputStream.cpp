@@ -11,8 +11,8 @@
 namespace j2me {
 namespace natives {
 
-void registerInputStreamNatives() {
-    auto& registry = j2me::core::NativeRegistry::getInstance();
+void registerInputStreamNatives(j2me::core::NativeRegistry& registry) {
+    // registry passed as argument
 
     // java/io/InputStream.read()I
     registry.registerNative("java/io/InputStream", "read", "()I", 

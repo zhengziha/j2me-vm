@@ -168,4 +168,41 @@ public class String {
         }
         return -1;
     }
+
+    public boolean startsWith(String prefix) {
+        return startsWith(prefix, 0);
+    }
+
+    public boolean startsWith(String prefix, int toffset) {
+        char ta[] = value;
+        int to = offset + toffset;
+        char pa[] = prefix.value;
+        int po = prefix.offset;
+        int pc = prefix.count;
+        // Note: toffset might be near -1>>>1.
+        if ((toffset < 0) || (toffset > count - pc)) {
+            return false;
+        }
+        while (--pc >= 0) {
+            if (ta[to++] != pa[po++]) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    public String trim() {
+        int len = count;
+        int st = 0;
+        int off = offset;      /* avoid getfield opcode */
+        char[] val = value;    /* avoid getfield opcode */
+
+        while ((st < len) && (val[off + st] <= ' ')) {
+            st++;
+        }
+        while ((st < len) && (val[off + len - 1] <= ' ')) {
+            len--;
+        }
+        return ((st > 0) || (len < count)) ? substring(st, len) : this;
+    }
 }

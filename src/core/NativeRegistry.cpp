@@ -2,161 +2,51 @@
 #include "RuntimeTypes.hpp"
 #include "HeapManager.hpp"
 #include "Interpreter.hpp"
+#include "../native/java_lang_Class.hpp"
+#include "../native/java_lang_Thread.hpp"
+#include "../native/java_lang_String.hpp"
+#include "../native/java_lang_StringBuffer.hpp"
+#include "../native/java_lang_System.hpp"
+#include "../native/java_lang_Object.hpp"
+#include "../native/java_io_InputStream.hpp"
+#include "../native/java_io_PrintStream.hpp"
+#include "../native/javax_microedition_lcdui_Graphics.hpp"
+#include "../native/javax_microedition_lcdui_Display.hpp"
+#include "../native/javax_microedition_lcdui_Image.hpp"
+#include "../native/javax_microedition_lcdui_game_GameCanvas.hpp"
+#include "../native/javax_microedition_rms_RecordStore.hpp"
+#include "../native/java_util_Timer.hpp"
+#include "../native/java_lang_Class.hpp"
 #include <iostream>
 
 namespace j2me {
+namespace natives {
+    // Forward declaration to avoid header dependency cycle or just to fix linker
+    // void registerTimerNatives(j2me::core::NativeRegistry& registry); // It is in header
+}
+
 namespace core {
 
 NativeRegistry::NativeRegistry() {
-    // java/lang/StringBuffer.<init>()V
-    registerNative("java/lang/StringBuffer", "<init>", "()V", [](std::shared_ptr<StackFrame> frame) {
-        std::cerr << "Native StringBuffer.<init>" << std::endl;
-        JavaValue thisVal = frame->pop();
-        JavaObject* thisObj = (JavaObject*)thisVal.val.ref;
-        if (thisObj) {
-            std::string* str = new std::string();
-            // Store pointer in first field (ensure size)
-            if (thisObj->fields.size() < 1) thisObj->fields.resize(1);
-            thisObj->fields[0] = (int64_t)str;
-        }
-    });
-
-    // java/lang/StringBuffer.append(Ljava/lang/String;)Ljava/lang/StringBuffer;
-    registerNative("java/lang/StringBuffer", "append", "(Ljava/lang/String;)Ljava/lang/StringBuffer;", [](std::shared_ptr<StackFrame> frame) {
-        std::cerr << "Native StringBuffer.append(String)" << std::endl;
-        JavaValue strVal = frame->pop();
-        JavaValue thisVal = frame->pop();
-        JavaObject* thisObj = (JavaObject*)thisVal.val.ref;
-        
-        if (thisObj && !thisObj->fields.empty()) {
-            std::string* str = (std::string*)thisObj->fields[0];
-            if (str) {
-                if (strVal.type == JavaValue::REFERENCE && !strVal.strVal.empty()) {
-                     str->append(strVal.strVal);
-                } else if (strVal.type == JavaValue::REFERENCE && strVal.val.ref == nullptr) {
-                     str->append("null");
-                }
-            }
-        }
-        frame->push(thisVal); // Return this
-    });
-
-    // java/lang/StringBuffer.append(I)Ljava/lang/StringBuffer;
-    registerNative("java/lang/StringBuffer", "append", "(I)Ljava/lang/StringBuffer;", [](std::shared_ptr<StackFrame> frame) {
-        std::cerr << "Native StringBuffer.append(int)" << std::endl;
-        JavaValue intVal = frame->pop();
-        JavaValue thisVal = frame->pop();
-        JavaObject* thisObj = (JavaObject*)thisVal.val.ref;
-        
-        if (thisObj && !thisObj->fields.empty()) {
-            std::string* str = (std::string*)thisObj->fields[0];
-            if (str) {
-                str->append(std::to_string(intVal.val.i));
-            }
-        }
-        frame->push(thisVal);
-    });
-
-    // java/lang/StringBuffer.append(Ljava/lang/Object;)Ljava/lang/StringBuffer;
-    registerNative("java/lang/StringBuffer", "append", "(Ljava/lang/Object;)Ljava/lang/StringBuffer;", [](std::shared_ptr<StackFrame> frame) {
-        JavaValue objVal = frame->pop();
-        JavaValue thisVal = frame->pop();
-        JavaObject* thisObj = (JavaObject*)thisVal.val.ref;
-        
-        if (thisObj && !thisObj->fields.empty()) {
-            std::string* str = (std::string*)thisObj->fields[0];
-            if (str) {
-                if (objVal.val.ref == nullptr) {
-                    str->append("null");
-                } else {
-                    // Try to use strVal hack if present (e.g. from String)
-                    if (objVal.type == JavaValue::REFERENCE && !objVal.strVal.empty()) {
-                        str->append(objVal.strVal);
-                    } else {
-                         // Default object toString
-                         JavaObject* obj = (JavaObject*)objVal.val.ref;
-                         if (obj) {
-                             std::string name = (obj->cls) ? obj->cls->name : "Object";
-                             str->append(name + "@" + std::to_string((intptr_t)obj));
-                         } else {
-                             str->append("null");
-                         }
-                    }
-                }
-            }
-        }
-        frame->push(thisVal);
-    });
-
-    // java/lang/StringBuffer.insert(ILjava/lang/String;)Ljava/lang/StringBuffer;
-    registerNative("java/lang/StringBuffer", "insert", "(ILjava/lang/String;)Ljava/lang/StringBuffer;", [](std::shared_ptr<StackFrame> frame) {
-        std::cerr << "Native StringBuffer.insert(int, String)" << std::endl;
-        JavaValue strVal = frame->pop();
-        JavaValue offsetVal = frame->pop();
-        JavaValue thisVal = frame->pop();
-        JavaObject* thisObj = (JavaObject*)thisVal.val.ref;
-
-        if (thisObj && !thisObj->fields.empty()) {
-            std::string* str = (std::string*)thisObj->fields[0];
-            if (str) {
-                int offset = offsetVal.val.i;
-                if (offset < 0) offset = 0;
-                if (offset > str->length()) offset = str->length();
-
-                if (strVal.type == JavaValue::REFERENCE && !strVal.strVal.empty()) {
-                     str->insert(offset, strVal.strVal);
-                } else if (strVal.type == JavaValue::REFERENCE && strVal.val.ref == nullptr) {
-                     str->insert(offset, "null");
-                }
-            }
-        }
-        frame->push(thisVal);
-    });
-
-    // java/lang/StringBuffer.delete(II)Ljava/lang/StringBuffer;
-    registerNative("java/lang/StringBuffer", "delete", "(II)Ljava/lang/StringBuffer;", [](std::shared_ptr<StackFrame> frame) {
-        std::cerr << "Native StringBuffer.delete(int, int)" << std::endl;
-        JavaValue endVal = frame->pop();
-        JavaValue startVal = frame->pop();
-        JavaValue thisVal = frame->pop();
-        JavaObject* thisObj = (JavaObject*)thisVal.val.ref;
-
-        if (thisObj && !thisObj->fields.empty()) {
-            std::string* str = (std::string*)thisObj->fields[0];
-            if (str) {
-                int start = startVal.val.i;
-                int end = endVal.val.i;
-                if (start < 0) start = 0;
-                if (end > str->length()) end = str->length();
-                if (start < end) {
-                    str->erase(start, end - start);
-                }
-            }
-        }
-        frame->push(thisVal);
-    });
-
-    // java/lang/StringBuffer.toString()Ljava/lang/String;
-    registerNative("java/lang/StringBuffer", "toString", "()Ljava/lang/String;", [](std::shared_ptr<StackFrame> frame) {
-        std::cerr << "Native StringBuffer.toString" << std::endl;
-        JavaValue thisVal = frame->pop();
-        JavaObject* thisObj = (JavaObject*)thisVal.val.ref;
-        
-        JavaValue ret;
-        ret.type = JavaValue::REFERENCE;
-        
-        if (thisObj && !thisObj->fields.empty()) {
-            std::string* str = (std::string*)thisObj->fields[0];
-            if (str) {
-                ret.strVal = *str;
-                std::cerr << "StringBuffer result: " << *str << std::endl;
-            }
-        }
-        frame->push(ret);
-    });
+    // Register natives from other files
+    j2me::natives::registerClassNatives(*this);
+    j2me::natives::registerThreadNatives(*this);
+    j2me::natives::registerStringNatives(*this);
+    j2me::natives::registerStringBufferNatives(*this);
+    j2me::natives::registerSystemNatives(*this);
+    j2me::natives::registerObjectNatives(*this);
+    j2me::natives::registerInputStreamNatives(*this);
+    j2me::natives::registerPrintStreamNatives(*this);
+    j2me::natives::registerDisplayNatives(*this);
+    j2me::natives::registerGraphicsNatives(*this);
+    j2me::natives::registerImageNatives(*this);
+    j2me::natives::registerGameCanvasNatives(*this);
+    j2me::natives::registerRecordStoreNatives(*this);
+    j2me::natives::registerTimerNatives(*this);
 
     // java/lang/StringBuilder.<init>()V
     registerNative("java/lang/StringBuilder", "<init>", "()V", [](std::shared_ptr<StackFrame> frame) {
+
         std::cerr << "Native StringBuilder.<init>" << std::endl;
         JavaValue thisVal = frame->pop();
         JavaObject* thisObj = (JavaObject*)thisVal.val.ref;

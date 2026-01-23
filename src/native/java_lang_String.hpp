@@ -5,9 +5,12 @@
 #include "../core/Interpreter.hpp"
 
 namespace j2me {
+namespace core {
+    class NativeRegistry;
+}
 namespace natives {
 
-void registerStringNatives();
+void registerStringNatives(j2me::core::NativeRegistry& registry);
 void registerStringBuilderNatives();
 
 // Helper to create a Java String object from C++ string

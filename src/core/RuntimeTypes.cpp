@@ -36,10 +36,12 @@ void JavaClass::link(std::shared_ptr<JavaClass> parent) {
         
         LOG_DEBUG("[JavaClass::link]   Field: " + nameInfo->bytes + " desc=" + descInfo->bytes + " access_flags=" + std::to_string(field.access_flags));
         
+        std::string key = nameInfo->bytes + "|" + descInfo->bytes;
+        
         if (field.access_flags & 0x0008) {
-            staticFields[nameInfo->bytes] = 0;
+            staticFields[key] = 0;
         } else {
-            fieldOffsets[nameInfo->bytes] = offset++;
+            fieldOffsets[key] = offset++;
         }
     }
     instanceSize = offset;

@@ -28,6 +28,7 @@ public:
     void render(Interpreter* interpreter);
     
     bool shouldExit() const { return quit; }
+    int getKeyStates() const { return keyStates; }
 
     // Legacy static wrappers (deprecated/modified)
     static void processEvents(Interpreter* interpreter) {
@@ -45,6 +46,7 @@ private:
     std::queue<int> eventQueue; // Stores mapped keyCodes
     std::mutex queueMutex;
     std::atomic<bool> quit{false};
+    std::atomic<int> keyStates{0};
 };
 
 } // namespace core

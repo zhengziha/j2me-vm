@@ -11,116 +11,59 @@
 namespace j2me {
 namespace natives {
 
-void registerGraphicsNatives() {
-    auto& registry = j2me::core::NativeRegistry::getInstance();
+static int32_t getGraphicsNativePtr(j2me::core::JavaObject* graphicsObj) {
+    if (!graphicsObj || !graphicsObj->cls) return 0;
+    auto it = graphicsObj->cls->fieldOffsets.find("nativePtr|I");
+    if (it == graphicsObj->cls->fieldOffsets.end()) {
+        it = graphicsObj->cls->fieldOffsets.find("nativePtr");
+    }
+    if (it != graphicsObj->cls->fieldOffsets.end()) {
+        return (int32_t)graphicsObj->fields[it->second];
+    }
+    return 0;
+}
 
-    // javax/microedition/lcdui/Image.createImageNative(Ljava/lang/String;)I
-    registry.registerNative("javax/microedition/lcdui/Image", "createImageNative", "(Ljava/lang/String;)I", 
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
-            j2me::core::JavaValue nameVal = frame->pop(); // name string
-            
-            int32_t imgId = 0;
-            if (nameVal.type == j2me::core::JavaValue::REFERENCE && !nameVal.strVal.empty()) {
-                std::string resName = nameVal.strVal;
-                // Remove leading slash if present
-                if (resName.size() > 0 && resName[0] == '/') resName = resName.substr(1);
-                
-                std::cout << "[Image] Loading image: " << resName << std::endl;
-                
-                auto loader = j2me::core::NativeRegistry::getInstance().getJarLoader();
-                if (loader && loader->hasFile(resName)) {
-                    auto data = loader->getFile(resName);
-                    if (data) {
-                        SDL_Surface* surface = j2me::platform::GraphicsContext::getInstance().createImage(data->data(), data->size());
-                        if (surface) {
-                            imgId = nextImageId++;
-                            imageMap[imgId] = surface;
-                            std::cout << "[Image] Loaded successfully, ID: " << imgId << " Size: " << surface->w << "x" << surface->h << std::endl;
-                        } else {
-                            std::cerr << "[Image] Failed to decode image" << std::endl;
-                        }
-                    } else {
-                        std::cerr << "[Image] Failed to read file data" << std::endl;
-                    }
-                } else {
-                    std::cerr << "[Image] File not found in JAR: " << resName << std::endl;
-                    // Fallback to Mock for testing if file missing but we want to survive
-                    int w = 32, h = 32;
-                    SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormat(0, w, h, 32, SDL_PIXELFORMAT_RGBA32);
-                    if (surface) {
-                        SDL_LockSurface(surface);
-                        uint32_t* pixels = (uint32_t*)surface->pixels;
-                        for(int y=0; y<h; y++) {
-                            for(int x=0; x<w; x++) {
-                                pixels[y*w+x] = SDL_MapRGBA(surface->format, x*8, y*8, 128, 255);
-                            }
-                        }
-                        SDL_UnlockSurface(surface);
-                        imgId = nextImageId++;
-                        imageMap[imgId] = surface;
-                        std::cout << "[Image] Created Mock Image, ID: " << imgId << std::endl;
-                    }
-                }
-            }
-            
-            // Return int ID
-            j2me::core::JavaValue ret;
-            ret.type = j2me::core::JavaValue::INT;
-            ret.val.i = imgId;
-            frame->push(ret);
-        }
-    );
+static SDL_Surface* getTargetSurface(j2me::core::JavaObject* graphicsObj, bool& isScreen) {
+    int32_t ptr = getGraphicsNativePtr(graphicsObj);
+    if (ptr == 0) {
+        isScreen = true;
+        return nullptr; // Screen handled by GraphicsContext
+    }
+    isScreen = false;
+    auto it = imageMap.find(ptr);
+    if (it != imageMap.end()) {
+        return it->second;
+    }
+    return nullptr;
+}
 
-    // javax/microedition/lcdui/Image.createRGBImageNative([IIIZ)I
-    registry.registerNative("javax/microedition/lcdui/Image", "createRGBImageNative", "([IIIZ)I", 
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
-            bool processAlpha = frame->pop().val.i != 0;
-            int height = frame->pop().val.i;
-            int width = frame->pop().val.i;
-            j2me::core::JavaValue rgbVal = frame->pop();
-            
-            int32_t imgId = 0;
-            
-            if (width > 0 && height > 0 && rgbVal.type == j2me::core::JavaValue::REFERENCE && rgbVal.val.ref != nullptr) {
-                j2me::core::JavaObject* rgbArray = (j2me::core::JavaObject*)rgbVal.val.ref;
-                // Note: Array elements are stored in fields for int[] as well in this VM implementation
-                if (rgbArray->fields.size() >= (size_t)(width * height)) {
-                    SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, SDL_PIXELFORMAT_ARGB8888);
-                    if (surface) {
-                        SDL_LockSurface(surface);
-                        uint32_t* pixels = (uint32_t*)surface->pixels;
-                        for(int i=0; i<width*height; i++) {
-                            // Fields are int64_t, cast to uint32_t
-                            uint32_t argb = (uint32_t)rgbArray->fields[i];
-                            if (!processAlpha) {
-                                argb |= 0xFF000000;
-                            }
-                            pixels[i] = argb;
-                        }
-                        SDL_UnlockSurface(surface);
-                        
-                        imgId = nextImageId++;
-                        imageMap[imgId] = surface;
-                        std::cout << "[Image] Created RGB Image, ID: " << imgId << " Size: " << width << "x" << height << std::endl;
-                    }
-                }
-            }
-            
-            j2me::core::JavaValue ret;
-            ret.type = j2me::core::JavaValue::INT;
-            ret.val.i = imgId;
-            frame->push(ret);
-        }
-    );
+static uint32_t getGraphicsColor(j2me::core::JavaObject* graphicsObj) {
+     if (!graphicsObj || !graphicsObj->cls) return 0;
+    auto it = graphicsObj->cls->fieldOffsets.find("color|I");
+    if (it == graphicsObj->cls->fieldOffsets.end()) {
+        it = graphicsObj->cls->fieldOffsets.find("color");
+    }
+    if (it != graphicsObj->cls->fieldOffsets.end()) {
+        return (uint32_t)graphicsObj->fields[it->second];
+    }
+    return 0;
+}
 
-    // javax/microedition/lcdui/Graphics.drawImage(Ljavax/microedition/lcdui/Image;III)V
+void registerGraphicsNatives(j2me::core::NativeRegistry& registry) {
+    // registry passed as argument
+
+    // javax/microedition/lcdui/Graphics.drawImageNative(Ljavax/microedition/lcdui/Image;III)V
     registry.registerNative("javax/microedition/lcdui/Graphics", "drawImageNative", "(Ljavax/microedition/lcdui/Image;III)V", 
         [](std::shared_ptr<j2me::core::StackFrame> frame) {
             int anchor = frame->pop().val.i;
             int y = frame->pop().val.i;
             int x = frame->pop().val.i;
             j2me::core::JavaValue imgVal = frame->pop();
-            frame->pop(); // this
+            j2me::core::JavaValue thisVal = frame->pop(); // this
+            j2me::core::JavaObject* graphicsObj = (j2me::core::JavaObject*)thisVal.val.ref;
+            
+            bool isScreen;
+            SDL_Surface* target = getTargetSurface(graphicsObj, isScreen);
             
             if (imgVal.val.ref != nullptr) {
                 // Get nativePtr field
@@ -131,12 +74,21 @@ void registerGraphicsNatives() {
                      if (imgId != 0) {
                          auto it = imageMap.find(imgId);
                          if (it != imageMap.end()) {
-                             SDL_Surface* surface = it->second;
-                             static int frameCount = 0;
-                             if (frameCount++ % 60 == 0) { // Log once per second (approx)
-                                 std::cout << "[Graphics] drawImage ID: " << imgId << " at " << x << "," << y << std::endl;
+                             SDL_Surface* srcSurface = it->second;
+                             
+                             if (isScreen) {
+                                 /*
+                                 static int frameCount = 0;
+                                 if (frameCount++ % 60 == 0) { 
+                                     std::cout << "[Graphics] drawImage ID: " << imgId << " at " << x << "," << y << std::endl;
+                                 }
+                                 */
+                                 j2me::platform::GraphicsContext::getInstance().drawImage(srcSurface, x, y);
+                             } else if (target) {
+                                 // Draw to offscreen surface
+                                 SDL_Rect dest = {x, y, 0, 0};
+                                 SDL_BlitSurface(srcSurface, nullptr, target, &dest);
                              }
-                             j2me::platform::GraphicsContext::getInstance().drawImage(surface, x, y);
                          } else {
                              std::cerr << "[Graphics] drawImage: Invalid Image ID " << imgId << std::endl;
                          }
@@ -148,61 +100,127 @@ void registerGraphicsNatives() {
         }
     );
 
-    // javax/microedition/lcdui/Graphics.drawLine(IIII)V
+    // javax/microedition/lcdui/Graphics.drawLineNative(IIII)V
     registry.registerNative("javax/microedition/lcdui/Graphics", "drawLineNative", "(IIII)V", 
         [](std::shared_ptr<j2me::core::StackFrame> frame) {
             int y2 = frame->pop().val.i;
             int x2 = frame->pop().val.i;
             int y1 = frame->pop().val.i;
             int x1 = frame->pop().val.i;
-            frame->pop(); // this (Graphics object)
+            j2me::core::JavaValue thisVal = frame->pop();
+            j2me::core::JavaObject* graphicsObj = (j2me::core::JavaObject*)thisVal.val.ref;
             
-            j2me::platform::GraphicsContext::getInstance().drawLine(x1, y1, x2, y2);
+            bool isScreen;
+            SDL_Surface* target = getTargetSurface(graphicsObj, isScreen);
+
+            if (isScreen) {
+                j2me::platform::GraphicsContext::getInstance().drawLine(x1, y1, x2, y2);
+            } else if (target) {
+                // Offscreen line drawing
+                // For now, use a simple pixel setter or FillRect for dots
+                uint32_t color = getGraphicsColor(graphicsObj);
+                // Simple Bresenham? Or just skip for now?
+                // Let's implement a simple horizontal/vertical or just dots.
+                // SDL_FillRect for 1px?
+                SDL_Rect r = {x1, y1, 1, 1};
+                SDL_FillRect(target, &r, color); 
+                // TODO: proper line drawing
+            }
         }
     );
 
-    // javax/microedition/lcdui/Graphics.fillRect(IIII)V
+    // javax/microedition/lcdui/Graphics.fillRectNative(IIII)V
     registry.registerNative("javax/microedition/lcdui/Graphics", "fillRectNative", "(IIII)V", 
         [](std::shared_ptr<j2me::core::StackFrame> frame) {
             int h = frame->pop().val.i;
             int w = frame->pop().val.i;
             int y = frame->pop().val.i;
             int x = frame->pop().val.i;
-            frame->pop(); // this
+            j2me::core::JavaValue thisVal = frame->pop();
+            j2me::core::JavaObject* graphicsObj = (j2me::core::JavaObject*)thisVal.val.ref;
             
-            j2me::platform::GraphicsContext::getInstance().fillRect(x, y, w, h);
+            bool isScreen;
+            SDL_Surface* target = getTargetSurface(graphicsObj, isScreen);
+            
+            if (isScreen) {
+                j2me::platform::GraphicsContext::getInstance().fillRect(x, y, w, h);
+            } else if (target) {
+                uint32_t color = getGraphicsColor(graphicsObj);
+                // Convert 0x00RRGGBB to SDL format?
+                // Java color is usually 0xAARRGGBB (but Graphics.setColor sets 0x00RRGGBB)
+                // We should map it.
+                // But wait, setColor in Graphics.java sets 'color' field.
+                // We retrieved it raw.
+                // SDL_MapRGB expects r, g, b.
+                uint8_t r = (color >> 16) & 0xFF;
+                uint8_t g = (color >> 8) & 0xFF;
+                uint8_t b = (color) & 0xFF;
+                uint32_t sdlColor = SDL_MapRGBA(target->format, r, g, b, 255);
+                
+                SDL_Rect rect = {x, y, w, h};
+                SDL_FillRect(target, &rect, sdlColor);
+            }
         }
     );
 
-    // javax/microedition/lcdui/Graphics.setColor(III)V
+    // javax/microedition/lcdui/Graphics.setColorNative(III)V
     registry.registerNative("javax/microedition/lcdui/Graphics", "setColorNative", "(III)V", 
         [](std::shared_ptr<j2me::core::StackFrame> frame) {
             int b = frame->pop().val.i;
             int g = frame->pop().val.i;
             int r = frame->pop().val.i;
-            frame->pop(); // this
+            j2me::core::JavaValue thisVal = frame->pop();
+            j2me::core::JavaObject* graphicsObj = (j2me::core::JavaObject*)thisVal.val.ref;
             
-            j2me::platform::GraphicsContext::getInstance().setColor(r, g, b);
+            bool isScreen;
+            getTargetSurface(graphicsObj, isScreen);
+            
+            if (isScreen) {
+                j2me::platform::GraphicsContext::getInstance().setColor(r, g, b);
+            }
+            // For offscreen, the color is stored in Java object 'color' field and used in draw methods.
+            // We don't need to do anything here for offscreen as we read the field.
         }
     );
     
-    // javax/microedition/lcdui/Graphics.drawString(Ljava/lang/String;III)V
+    // javax/microedition/lcdui/Graphics.drawStringNative(Ljava/lang/String;III)V
     registry.registerNative("javax/microedition/lcdui/Graphics", "drawStringNative", "(Ljava/lang/String;III)V", 
         [](std::shared_ptr<j2me::core::StackFrame> frame) {
             int anchor = frame->pop().val.i;
             int y = frame->pop().val.i;
             int x = frame->pop().val.i;
             j2me::core::JavaValue strVal = frame->pop();
-            frame->pop(); // this
+            j2me::core::JavaValue thisVal = frame->pop();
+            j2me::core::JavaObject* graphicsObj = (j2me::core::JavaObject*)thisVal.val.ref;
+            
+            bool isScreen;
+            SDL_Surface* target = getTargetSurface(graphicsObj, isScreen);
             
             if (strVal.type == j2me::core::JavaValue::REFERENCE && !strVal.strVal.empty()) {
-                // For now, just print to console for debugging
-                std::cout << "[Graphics] drawString: \"" << strVal.strVal << "\" at (" << x << "," << y << ")" << std::endl;
-                
-                // TODO: Implement actual text rendering (e.g. using a simple bitmap font)
-                // For now, let's draw a small rectangle to indicate text position
-                j2me::platform::GraphicsContext::getInstance().fillRect(x, y, 50, 10);
+                 if (isScreen) {
+                    // Placeholder
+                    j2me::platform::GraphicsContext::getInstance().fillRect(x, y, 50, 10);
+                 } else if (target) {
+                     // Placeholder
+                     uint32_t color = getGraphicsColor(graphicsObj);
+                     uint8_t r = (color >> 16) & 0xFF;
+                     uint8_t g = (color >> 8) & 0xFF;
+                     uint8_t b = (color) & 0xFF;
+                     uint32_t sdlColor = SDL_MapRGBA(target->format, r, g, b, 255);
+                     
+                     SDL_Rect rect = {x, y, 50, 10};
+                     SDL_FillRect(target, &rect, sdlColor);
+                 }
             }
+        }
+    );
+
+    // javax/microedition/lcdui/Graphics.setFontNative(Ljavax/microedition/lcdui/Font;)V
+    registry.registerNative("javax/microedition/lcdui/Graphics", "setFontNative", "(Ljavax/microedition/lcdui/Font;)V", 
+        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+            frame->pop(); // Font parameter
+            frame->pop(); // this
+            // Mock implementation: do nothing for now, as we don't have font support yet
         }
     );
 }
