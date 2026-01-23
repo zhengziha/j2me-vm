@@ -65,6 +65,19 @@ void registerThreadNatives(j2me::core::NativeRegistry& registry) {
         }
     );
 
+    // java/lang/Thread.start()V
+    registry.registerNative("java/lang/Thread", "start", "()V",
+        [&registry](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
+             // Just delegate to start0
+             auto start0 = registry.getNative("java/lang/Thread", "start0", "()V");
+             if (start0) {
+                 start0(thread, frame);
+             } else {
+                 std::cerr << "Native start0 not found" << std::endl;
+             }
+        }
+    );
+
     // java/lang/Thread.yield()V
     registry.registerNative("java/lang/Thread", "yield", "()V", 
         [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {

@@ -8,7 +8,7 @@ namespace core {
 
 StackFrame::StackFrame(const MethodInfo& method, const std::shared_ptr<ClassFile>& classFile)
     : method(method), classFile(classFile) {
-    localVariables.resize(20); 
+    localVariables.resize(20);
     operandStack.reserve(20);
 
     // Parse Code attribute

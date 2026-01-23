@@ -120,6 +120,61 @@ void registerImageNatives(j2me::core::NativeRegistry& registry) {
         }
     );
 
+    // javax/microedition/lcdui/Image.getRGB([IIIIIII)V
+    registry.registerNative("javax/microedition/lcdui/Image", "getRGB", "([IIIIIII)V", 
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
+            int height = frame->pop().val.i;
+            int width = frame->pop().val.i;
+            int y = frame->pop().val.i;
+            int x = frame->pop().val.i;
+            int scanlength = frame->pop().val.i;
+            int offset = frame->pop().val.i;
+            j2me::core::JavaValue rgbDataVal = frame->pop();
+            j2me::core::JavaValue thisVal = frame->pop();
+            
+            if (thisVal.type != j2me::core::JavaValue::REFERENCE || thisVal.val.ref == nullptr) {
+                std::cerr << "[Image] getRGB: this is null" << std::endl;
+                return;
+            }
+            j2me::core::JavaObject* imgObj = (j2me::core::JavaObject*)thisVal.val.ref;
+            int32_t imgId = 0;
+            if (imgObj->fields.size() > 0) {
+                imgId = (int32_t)imgObj->fields[0];
+            }
+            
+            if (rgbDataVal.type == j2me::core::JavaValue::REFERENCE && rgbDataVal.val.ref != nullptr) {
+                auto rgbArray = static_cast<j2me::core::JavaObject*>(rgbDataVal.val.ref);
+                
+                auto it = imageMap.find(imgId);
+                if (it != imageMap.end()) {
+                    SDL_Surface* surface = it->second;
+                    SDL_LockSurface(surface);
+                    uint32_t* pixels = (uint32_t*)surface->pixels;
+                    
+                    for (int r = 0; r < height; r++) {
+                        for (int c = 0; c < width; c++) {
+                            if (x + c >= 0 && x + c < surface->w && y + r >= 0 && y + r < surface->h) {
+                                uint32_t pixel = pixels[(y + r) * surface->w + (x + c)];
+                                
+                                int targetIndex = offset + r * scanlength + c;
+                                if (targetIndex >= 0 && targetIndex < (int)rgbArray->fields.size()) {
+                                    rgbArray->fields[targetIndex] = pixel;
+                                }
+                            }
+                        }
+                    }
+                    
+                    SDL_UnlockSurface(surface);
+                    // std::cout << "[Image] getRGB executed" << std::endl;
+                } else {
+                    std::cerr << "[Image] getRGB: Invalid Image ID " << imgId << std::endl;
+                }
+            } else {
+                 std::cerr << "[Image] getRGB: rgbData is null" << std::endl;
+            }
+        }
+    );
+
     // javax/microedition/lcdui/Image.getRGBNative(I[IIIIIII)V
     registry.registerNative("javax/microedition/lcdui/Image", "getRGBNative", "(I[IIIIIII)V", 
         [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {

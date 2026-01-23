@@ -38,6 +38,22 @@ private:
     
     // Validate that a string is actually a class name, not a descriptor
     bool isValidClassName(const std::string& name);
+
+    using InstructionHandler = std::function<bool(std::shared_ptr<JavaThread>, std::shared_ptr<StackFrame>, util::DataReader&, uint8_t)>;
+    std::vector<InstructionHandler> instructionTable;
+    void initInstructionTable();
+
+    // Instruction group initializers
+    void initConstants();
+    void initLoads();
+    void initStores();
+    void initStack();
+    void initMath();
+    void initConversions();
+    void initComparisons();
+    void initControl();
+    void initReferences();
+    void initExtended();
 };
 
 } // namespace core

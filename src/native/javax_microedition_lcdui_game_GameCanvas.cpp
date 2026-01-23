@@ -69,7 +69,8 @@ void registerGameCanvasNatives(j2me::core::NativeRegistry& registry) {
                              std::cout << "[GameCanvas] flushGraphicsNative called" << std::endl;
                          }
                          
-                         j2me::platform::GraphicsContext::getInstance().drawImage(srcSurface, 0, 0);
+                         j2me::platform::GraphicsContext::getInstance().drawImage(srcSurface, 0, 0, 20); // TOP|LEFT = 16|4 = 20
+
                      }
                 }
             }

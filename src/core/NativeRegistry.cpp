@@ -13,7 +13,9 @@
 #include "../native/javax_microedition_lcdui_Graphics.hpp"
 #include "../native/javax_microedition_lcdui_Display.hpp"
 #include "../native/javax_microedition_lcdui_Image.hpp"
+#include "../native/javax_microedition_lcdui_Font.hpp"
 #include "../native/javax_microedition_lcdui_game_GameCanvas.hpp"
+#include "../native/javax_microedition_media_Manager.hpp"
 #include "../native/javax_microedition_rms_RecordStore.hpp"
 #include "../native/java_util_Timer.hpp"
 #include "../native/java_lang_Class.hpp"
@@ -40,7 +42,9 @@ NativeRegistry::NativeRegistry() {
     j2me::natives::registerDisplayNatives(*this);
     j2me::natives::registerGraphicsNatives(*this);
     j2me::natives::registerImageNatives(*this);
+    j2me::natives::registerFontNatives(*this);
     j2me::natives::registerGameCanvasNatives(*this);
+    j2me::natives::registerMediaNatives(*this);
     j2me::natives::registerRecordStoreNatives(*this);
     j2me::natives::registerTimerNatives(*this);
 
@@ -282,7 +286,7 @@ NativeFunction NativeRegistry::getNative(const std::string& className, const std
         }
         return it->second;
     }
-    std::cerr << "[NativeRegistry] Native not found: " << key << std::endl;
+    // std::cerr << "[NativeRegistry] Native not found: " << key << std::endl;
     return nullptr;
 }
 

@@ -77,18 +77,17 @@ void registerGraphicsNatives(j2me::core::NativeRegistry& registry) {
                              SDL_Surface* srcSurface = it->second;
                              
                              if (isScreen) {
-                                 /*
-                                 static int frameCount = 0;
-                                 if (frameCount++ % 60 == 0) { 
-                                     std::cout << "[Graphics] drawImage ID: " << imgId << " at " << x << "," << y << std::endl;
-                                 }
-                                 */
-                                 j2me::platform::GraphicsContext::getInstance().drawImage(srcSurface, x, y);
-                             } else if (target) {
-                                 // Draw to offscreen surface
-                                 SDL_Rect dest = {x, y, 0, 0};
-                                 SDL_BlitSurface(srcSurface, nullptr, target, &dest);
-                             }
+                /*
+                static int frameCount = 0;
+                if (frameCount++ % 60 == 0) { 
+                    std::cout << "[Graphics] drawImage ID: " << imgId << " at " << x << "," << y << std::endl;
+                }
+                */
+                j2me::platform::GraphicsContext::getInstance().drawImage(srcSurface, x, y, anchor);
+            } else if (target) {
+                // Draw to offscreen surface
+                j2me::platform::GraphicsContext::getInstance().drawImage(srcSurface, x, y, anchor, target);
+            }
                          } else {
                              std::cerr << "[Graphics] drawImage: Invalid Image ID " << imgId << std::endl;
                          }
@@ -198,18 +197,11 @@ void registerGraphicsNatives(j2me::core::NativeRegistry& registry) {
             
             if (strVal.type == j2me::core::JavaValue::REFERENCE && !strVal.strVal.empty()) {
                  if (isScreen) {
-                    // Placeholder
-                    j2me::platform::GraphicsContext::getInstance().fillRect(x, y, 50, 10);
+                    j2me::platform::GraphicsContext::getInstance().drawString(strVal.strVal, x, y, anchor);
                  } else if (target) {
-                     // Placeholder
+                     // For offscreen, we need the current color
                      uint32_t color = getGraphicsColor(graphicsObj);
-                     uint8_t r = (color >> 16) & 0xFF;
-                     uint8_t g = (color >> 8) & 0xFF;
-                     uint8_t b = (color) & 0xFF;
-                     uint32_t sdlColor = SDL_MapRGBA(target->format, r, g, b, 255);
-                     
-                     SDL_Rect rect = {x, y, 50, 10};
-                     SDL_FillRect(target, &rect, sdlColor);
+                     j2me::platform::GraphicsContext::getInstance().drawString(strVal.strVal, x, y, anchor, color, target);
                  }
             }
         }
@@ -221,6 +213,28 @@ void registerGraphicsNatives(j2me::core::NativeRegistry& registry) {
             frame->pop(); // Font parameter
             frame->pop(); // this
             // Mock implementation: do nothing for now, as we don't have font support yet
+        }
+    );
+
+    // javax/microedition/lcdui/Graphics.setClipNative(IIII)V
+    registry.registerNative("javax/microedition/lcdui/Graphics", "setClipNative", "(IIII)V", 
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
+            int h = frame->pop().val.i;
+            int w = frame->pop().val.i;
+            int y = frame->pop().val.i;
+            int x = frame->pop().val.i;
+            j2me::core::JavaValue thisVal = frame->pop();
+            j2me::core::JavaObject* graphicsObj = (j2me::core::JavaObject*)thisVal.val.ref;
+            
+            bool isScreen;
+            SDL_Surface* target = getTargetSurface(graphicsObj, isScreen);
+            
+            if (isScreen) {
+                j2me::platform::GraphicsContext::getInstance().setClip(x, y, w, h);
+            } else if (target) {
+                SDL_Rect rect = {x, y, w, h};
+                SDL_SetClipRect(target, &rect);
+            }
         }
     );
 }
