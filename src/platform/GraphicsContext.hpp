@@ -22,37 +22,48 @@ public:
         std::lock_guard<std::mutex> lock(surfaceMutex);
         this->window = window;
         
+        // 创建渲染器
         // Create Renderer
         renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
         if (!renderer) {
             std::cerr << "SDL_CreateRenderer Error: " << SDL_GetError() << std::endl;
+            // 回退到软件渲染
             renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
         }
 
         if (renderer) {
+             // 我们不设置逻辑大小，所以 SDL_RenderCopy 会拉伸以填充窗口
              // We do NOT set logical size, so SDL_RenderCopy will stretch to fill window
+             // 创建流式纹理，用于将后端缓冲区上传到 GPU
              // Create Texture for display (Source size is logical size)
              texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STREAMING, logicalWidth, logicalHeight);
         }
         
+        // 后端缓冲区 (绘图目标) - 保持在软件中
         // Back Buffer (Drawing Target) - Keep in Software
         surface = SDL_CreateRGBSurfaceWithFormat(0, logicalWidth, logicalHeight, 32, SDL_PIXELFORMAT_RGBA32);
         
+        // 前端缓冲区 (显示目标) - 保持在软件中
         // Front Buffer (Display Target) - Keep in Software
         displaySurface = SDL_CreateRGBSurfaceWithFormat(0, logicalWidth, logicalHeight, 32, SDL_PIXELFORMAT_RGBA32);
         
+        // 填充白色背景
         // Fill white
         SDL_FillRect(surface, nullptr, SDL_MapRGB(surface->format, 255, 255, 255));
         SDL_FillRect(displaySurface, nullptr, SDL_MapRGB(displaySurface->format, 255, 255, 255));
         
+        // 初始显示
         // Initial Present
         updateNoLock();
 
+        // 初始化 TTF 字体引擎
         // Init TTF
         if (TTF_Init() == -1) {
             std::cerr << "TTF_Init: " << TTF_GetError() << std::endl;
         } else {
+            // 尝试加载字体
             // Try to load font
+            // 优先使用 Tahoma (如请求)
             // Prioritize Tahoma as requested
             font = TTF_OpenFont("/System/Library/Fonts/Hiragino Sans GB.ttc", 12);
 
@@ -87,6 +98,7 @@ public:
 
     void drawLine(int x1, int y1, int x2, int y2) {
         std::lock_guard<std::mutex> lock(surfaceMutex);
+        // Bresenham 直线算法
         // Bresenham's line algorithm
         int dx = abs(x2 - x1);
         int sx = x1 < x2 ? 1 : -1;
@@ -112,6 +124,7 @@ public:
     void commit() {
         std::lock_guard<std::mutex> lock(surfaceMutex);
         if (surface && displaySurface) {
+            // 将后台缓冲区复制到前台缓冲区
             SDL_BlitSurface(surface, nullptr, displaySurface, nullptr);
         }
     }
@@ -124,27 +137,35 @@ public:
 private:
     void updateNoLock() {
         if (renderer && texture && displaySurface) {
+             // 更新纹理
              SDL_UpdateTexture(texture, nullptr, displaySurface->pixels, displaySurface->pitch);
+             // 清除渲染器
              SDL_RenderClear(renderer);
+             // 复制纹理到渲染器 (自动缩放以填充窗口)
              SDL_RenderCopy(renderer, texture, nullptr, nullptr); // Stretches to fill target
+             // 显示
              SDL_RenderPresent(renderer);
         }
     }
 
 public:
 
+    // 绘制图像的新方法
     // New method for image drawing
     SDL_Surface* createImage(const unsigned char* data, int len) {
+        // 使用 stb_image 解码
         // Use stb_image to decode
         int w, h, n;
         unsigned char* pixels = stbi_load_from_memory(data, len, &w, &h, &n, 4); // Force RGBA
         if (!pixels) return nullptr;
         
+        // 创建 SDL Surface
         // Create SDL surface
         SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormat(0, w, h, 32, SDL_PIXELFORMAT_RGBA32);
         if (surface) {
             SDL_LockSurface(surface);
             
+            // 正确复制像素 (考虑 pitch)
             // Correct copy respecting pitch
             for (int y = 0; y < h; y++) {
                 uint8_t* srcRow = pixels + (y * w * 4);
@@ -200,9 +221,11 @@ private:
         int tx = x;
         int ty = y;
         
+        // 处理锚点 (J2ME)
         // Handle Anchors (J2ME)
         // HCENTER = 1, VCENTER = 2, LEFT = 4, RIGHT = 8, TOP = 16, BOTTOM = 32, BASELINE = 64
         
+        // 水平方向
         // Horizontal
         if (anchor & 1) { // HCENTER
             tx -= src->w / 2;
@@ -211,6 +234,7 @@ private:
         }
         // Default is LEFT (no offset)
         
+        // 垂直方向
         // Vertical
         if (anchor & 32) { // BOTTOM
             ty -= src->h;

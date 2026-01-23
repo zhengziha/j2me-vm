@@ -28,6 +28,7 @@ int Interpreter::execute(std::shared_ptr<JavaThread> thread, int instructions) {
         if (thread->state != JavaThread::RUNNABLE) break;
 
         if (EventLoop::getInstance().shouldExit()) {
+             // 处理退出请求
              // Handle exit
              return executed;
         }
@@ -37,6 +38,7 @@ int Interpreter::execute(std::shared_ptr<JavaThread> thread, int instructions) {
 
         // Code is cached in frame
         if (frame->code.empty()) {
+            // 如果代码为空 (例如 native 或 abstract 方法)，弹出栈帧
             // Should be native or abstract, but if it's on stack, pop it?
             thread->popFrame();
             continue;
@@ -49,10 +51,12 @@ int Interpreter::execute(std::shared_ptr<JavaThread> thread, int instructions) {
         if (frame->pc < frame->code.size()) opcode = frame->code[frame->pc];
         
         try {
+            // 执行单条指令
             // executeInstruction now modifies thread state directly (pushes/pops frames)
             // It returns false if we should stop execution immediately (error), otherwise true
             bool continueExec = executeInstruction(thread, frame, codeReader);
             
+            // 更新 PC (程序计数器)
             // Update PC
             frame->pc = codeReader.tell();
             executed++;
@@ -64,6 +68,7 @@ int Interpreter::execute(std::shared_ptr<JavaThread> thread, int instructions) {
              LOG_ERROR("Runtime Exception: " + std::string(e.what()));
              
              if (frame && frame->classFile) {
+                 // 获取类名
                  // Get Class Name
                  std::string className = "Unknown";
                  if (frame->classFile->constant_pool.size() > frame->classFile->this_class) {
@@ -74,6 +79,7 @@ int Interpreter::execute(std::shared_ptr<JavaThread> thread, int instructions) {
                      }
                  }
                  
+                 // 获取方法名
                  // Get Method Name
                  std::string methodName = "Unknown";
                  if (frame->method.name_index < frame->classFile->constant_pool.size()) {
@@ -135,6 +141,7 @@ int Interpreter::execute(std::shared_ptr<JavaThread> thread, int instructions) {
                  }
              }
              
+             // 不要重新抛出异常，优雅地退出线程以防止进程终止
              // Do not rethrow, just exit the thread gracefully to prevent process termination
              LOG_ERROR("Thread terminated due to uncaught exception.");
              break; 
@@ -148,6 +155,7 @@ bool Interpreter::initializeClass(std::shared_ptr<JavaThread> thread, std::share
         return false;
     }
     
+    // 防止循环初始化
     // Prevent circular initialization
     if (cls->initializing) {
         return false; 
@@ -158,6 +166,7 @@ bool Interpreter::initializeClass(std::shared_ptr<JavaThread> thread, std::share
     
     bool pushed = false;
 
+    // 首先初始化父类 (如果存在)
     // First, initialize superclass if exists
     if (cls->superClass) {
         if (initializeClass(thread, cls->superClass)) {
@@ -165,6 +174,7 @@ bool Interpreter::initializeClass(std::shared_ptr<JavaThread> thread, std::share
         }
     }
     
+    // 查找并执行 <clinit> 方法 (类初始化器)
     // Find and execute <clinit> method
     for (const auto& method : cls->rawFile->methods) {
         auto name = std::dynamic_pointer_cast<ConstantUtf8>(cls->rawFile->constant_pool[method.name_index]);

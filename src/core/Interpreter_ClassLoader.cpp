@@ -9,6 +9,7 @@ namespace core {
 std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& className) {
     // std::cerr << "Resolving class: " << className << std::endl;
     // Check if already loaded
+    // 检查类是否已加载
     auto it = loadedClasses.find(className);
     if (it != loadedClasses.end()) {
         // std::cerr << "Already loaded: " << className << std::endl;
@@ -17,11 +18,14 @@ std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& classNam
 
     // Try to load from JAR
     // Class name in JAR usually ends with .class, but internal name doesn't
+    // 尝试从 JAR 加载。JAR 中的文件名通常以 .class 结尾，但内部类名不带后缀
     std::string path = className + ".class";
     
     // Check if file exists
+    // 检查文件是否存在
     if (!jarLoader.hasFile(path)) {
         // Check library loader if available
+        // 如果系统库加载器可用，则尝试从中加载
         if (libraryLoader && libraryLoader->hasFile(path)) {
              LOG_DEBUG("[Interpreter] Loading " + className + " from library loader");
              auto data = libraryLoader->getFile(path);
@@ -49,6 +53,7 @@ std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& classNam
                      }
 
                      // Resolve interfaces
+                     // 解析接口
                      for (uint16_t interfaceIndex : rawFile->interfaces) {
                          if (interfaceIndex > 0 && interfaceIndex < rawFile->constant_pool.size()) {
                              auto interfaceInfo = std::dynamic_pointer_cast<ConstantClass>(rawFile->constant_pool[interfaceIndex]);
@@ -71,12 +76,15 @@ std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& classNam
         }
 
         // Mock java/lang/Object if missing (it's the root of everything)
+        // 如果缺少 java/lang/Object，则模拟它 (它是所有类的根)
         if (className == "java/lang/Object") {
              // Return a dummy ClassFile for Object so we stop recursion
+             // 返回一个虚拟的 Object ClassFile 以停止递归
              auto dummy = std::make_shared<ClassFile>();
              dummy->this_class = 0; // Invalid, but we won't read it
              
              // We need to construct a minimal valid JavaClass
+             // 我们需要构造一个最小有效的 JavaClass
              auto javaClass = std::make_shared<JavaClass>(dummy);
              javaClass->name = "java/lang/Object";
              javaClass->instanceSize = 0;
@@ -85,6 +93,7 @@ std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& classNam
         }
 
         // Mock java/lang/StringBuffer to ensure we use our Native implementation
+        // 模拟 java/lang/StringBuffer 以确保使用我们的本地实现
         if (className == "java/lang/StringBuffer") {
              auto dummy = std::make_shared<ClassFile>();
              auto javaClass = std::make_shared<JavaClass>(dummy);
@@ -118,6 +127,7 @@ std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& classNam
         }
 
         // Mock java/lang/StringBuilder to ensure we use our Native implementation
+        // 模拟 java/lang/StringBuilder
         if (className == "java/lang/StringBuilder") {
              auto dummy = std::make_shared<ClassFile>();
              auto javaClass = std::make_shared<JavaClass>(dummy);
@@ -151,6 +161,7 @@ std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& classNam
         }
 
         // Mock java/io/InputStream for resource loading
+        // 模拟 java/io/InputStream 用于资源加载
         if (className == "java/io/InputStream") {
              auto dummy = std::make_shared<ClassFile>();
              auto javaClass = std::make_shared<JavaClass>(dummy);
@@ -188,6 +199,7 @@ std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& classNam
         }
 
         // Mock java/lang/String for string operations
+        // 模拟 java/lang/String
         if (className == "java/lang/String") {
              auto dummy = std::make_shared<ClassFile>();
              auto javaClass = std::make_shared<JavaClass>(dummy);
@@ -217,6 +229,7 @@ std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& classNam
              addField("count", "I", 0x0002); // private int count
              
              // Manually set fieldOffsets since we're not calling link()
+             // 手动设置 fieldOffsets，因为我们不调用 link()
              javaClass->fieldOffsets["value|[B"] = 0;
              javaClass->fieldOffsets["offset|I"] = 1;
              javaClass->fieldOffsets["count|I"] = 2;
@@ -247,6 +260,7 @@ std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& classNam
         }
 
         // Mock j2me/media/DummyPlayer
+        // 模拟 j2me/media/DummyPlayer
         if (className == "j2me/media/DummyPlayer") {
              auto dummy = std::make_shared<ClassFile>();
              auto javaClass = std::make_shared<JavaClass>(dummy);
@@ -288,6 +302,7 @@ std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& classNam
         }
 
         // Generic array class handling
+        // 通用数组类处理
         if (className.length() > 0 && className[0] == '[') {
              auto dummy = std::make_shared<ClassFile>();
              auto javaClass = std::make_shared<JavaClass>(dummy);
@@ -314,6 +329,7 @@ std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& classNam
         auto javaClass = std::make_shared<JavaClass>(rawFile);
         
         // Link with superclass (recursive load)
+        // 链接父类 (递归加载)
         if (rawFile->super_class != 0) {
             auto superInfo = std::dynamic_pointer_cast<ConstantClass>(rawFile->constant_pool[rawFile->super_class]);
             auto superNameInfo = std::dynamic_pointer_cast<ConstantUtf8>(rawFile->constant_pool[superInfo->name_index]);
@@ -331,6 +347,7 @@ std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& classNam
         }
 
         // Resolve interfaces
+        // 解析接口
         for (uint16_t interfaceIndex : rawFile->interfaces) {
             if (interfaceIndex > 0 && interfaceIndex < rawFile->constant_pool.size()) {
                 auto interfaceInfo = std::dynamic_pointer_cast<ConstantClass>(rawFile->constant_pool[interfaceIndex]);

@@ -47,6 +47,7 @@ void EventLoop::pollSDL() {
                 std::lock_guard<std::mutex> lock(queueMutex);
                 eventQueue.push({KeyEvent::PRESSED, keyCode});
                 
+                // 更新按键状态位 (用于 GameCanvas)
                 // Update keyStates (GameCanvas)
                 if (keyCode > 0 && keyCode <= 31) { // Safety check
                     keyStates |= (1 << keyCode);
@@ -58,6 +59,7 @@ void EventLoop::pollSDL() {
                 std::lock_guard<std::mutex> lock(queueMutex);
                 eventQueue.push({KeyEvent::RELEASED, keyCode});
 
+                // 更新按键状态位 (用于 GameCanvas)
                 if (keyCode > 0 && keyCode <= 31) {
                     keyStates &= ~(1 << keyCode);
                 }
@@ -65,7 +67,9 @@ void EventLoop::pollSDL() {
         }
     }
     
+    // 刷新屏幕 (主线程)
     // Refresh screen (Main Thread)
+    // 确保窗口表面更新发生在主线程
     // This ensures window surface update happens on the main thread
     j2me::platform::GraphicsContext::getInstance().update();
 }
@@ -82,6 +86,7 @@ void EventLoop::dispatchEvents(Interpreter* interpreter) {
         KeyEvent event = events.front();
         events.pop();
         
+        // 获取当前显示的 Displayable 对象
         j2me::core::JavaObject* displayable = j2me::natives::getCurrentDisplayable();
         if (displayable && displayable->cls) {
             std::string methodName;
@@ -89,6 +94,7 @@ void EventLoop::dispatchEvents(Interpreter* interpreter) {
             else if (event.type == KeyEvent::RELEASED) methodName = "keyReleased";
             
             if (!methodName.empty()) {
+                // 向上遍历类层次结构以查找方法
                 // Walk up class hierarchy to find method
                 auto currentCls = displayable->cls;
                 while (currentCls) {
@@ -98,14 +104,17 @@ void EventLoop::dispatchEvents(Interpreter* interpreter) {
                         if (name->bytes == methodName) {
                             auto frame = std::make_shared<j2me::core::StackFrame>(method, currentCls->rawFile);
                             
+                            // 压入 'this'
                             // Push 'this'
                             j2me::core::JavaValue vThis; vThis.type = j2me::core::JavaValue::REFERENCE; vThis.val.ref = displayable;
                             frame->setLocal(0, vThis);
                             
+                            // 压入 keyCode
                             // Push keyCode
                             j2me::core::JavaValue vKey; vKey.type = j2me::core::JavaValue::INT; vKey.val.i = event.keyCode;
                             frame->setLocal(1, vKey);
                             
+                            // 创建并启动事件处理线程
                             auto thread = std::make_shared<JavaThread>(frame);
                             ThreadManager::getInstance().addThread(thread);
                             found = true;
@@ -130,9 +139,11 @@ void EventLoop::render(Interpreter* interpreter) {
         }
         
         if (graphicsCls) {
+            // 分配 Graphics 对象
             // Allocate Graphics object
             j2me::core::JavaObject* g = j2me::core::HeapManager::getInstance().allocate(graphicsCls);
             
+            // 查找 paint 方法
             // Find paint method
             auto currentCls = displayable->cls;
             while (currentCls) {
@@ -145,24 +156,29 @@ void EventLoop::render(Interpreter* interpreter) {
 
                         auto frame = std::make_shared<j2me::core::StackFrame>(method, currentCls->rawFile);
                         
+                        // 压入 'this' (Canvas)
                         // Push 'this' (Canvas)
                         j2me::core::JavaValue vThis; vThis.type = j2me::core::JavaValue::REFERENCE; vThis.val.ref = displayable;
                         frame->setLocal(0, vThis);
                         
+                        // 压入 'Graphics'
                         // Push 'Graphics'
                         j2me::core::JavaValue vG; vG.type = j2me::core::JavaValue::REFERENCE; vG.val.ref = g;
                         frame->setLocal(1, vG);
                         
+                        // 检查是否已经在绘制
                         // Check if already painting
                         if (!paintingThread.expired()) {
                             auto ptr = paintingThread.lock();
                             if (ptr && !ptr->isFinished()) {
+                                // 已经在绘制，跳过
                                 // Already painting, skip
                                 found = true;
                                 break;
                             }
                         }
 
+                        // 启动绘制线程
                         auto thread = std::make_shared<JavaThread>(frame);
                         paintingThread = thread;
                         isPainting = true;
@@ -182,12 +198,14 @@ void EventLoop::render(Interpreter* interpreter) {
 void EventLoop::checkPaintFinished() {
     if (isPainting) {
         if (paintingThread.expired()) {
+            // 线程已销毁，意味着绘制完成
             // Thread destroyed, meaning paint finished
             j2me::platform::GraphicsContext::getInstance().commit();
             isPainting = false;
         } else {
             auto ptr = paintingThread.lock();
             if (ptr && ptr->isFinished()) {
+                // 线程存在但已完成
                 // Thread exists but finished
                 j2me::platform::GraphicsContext::getInstance().commit();
                 isPainting = false;

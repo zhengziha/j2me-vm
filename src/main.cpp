@@ -14,6 +14,7 @@
 #include "platform/GraphicsContext.hpp"
 #include "util/FileUtils.hpp"
 
+// 辅助函数：解析 Manifest 文件以获取 MIDlet-1 类名
 // Helper to parse Manifest for MIDlet-1
 std::string parseMidletClassName(const std::string& manifestContent) {
     std::string midlet1Line;
@@ -55,6 +56,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    // 解析命令行参数
     // Parse command line arguments
     j2me::core::VMConfig config;
     config.logLevel = j2me::core::LogLevel::INFO;
@@ -85,18 +87,26 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    // 设置全局日志级别
     // Set log level global
     j2me::core::Logger::getInstance().setLevel(config.logLevel);
 
+    // 初始化 SDL (必须在主线程中进行)
     // Initialize SDL (MUST BE ON MAIN THREAD)
+    // SDL_INIT_VIDEO: 初始化视频子系统
+    // SDL_INIT_AUDIO: 初始化音频子系统
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
         LOG_ERROR("SDL could not initialize! SDL_Error: " + std::string(SDL_GetError()));
     } else {
         LOG_INFO("SDL Initialized.");
     }
 
+    // 创建窗口
     // Create window
-    // Initial size set to 3x scale (720x960) for better visibility on modern screens
+    // 初始大小设置为 3 倍缩放 (240x320) 以适应现代屏幕
+    // Initial size set to 3x scale (240x320) for better visibility on modern screens   
+    // SDL_WINDOW_RESIZABLE: 允许用户调整窗口大小
+    // SDL_WINDOW_ALLOW_HIGHDPI: 支持高 DPI 显示器 (如 Retina 屏幕)
     SDL_Window* window = SDL_CreateWindow("J2ME Emulator",
                                           SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
                                           240, 320, 
@@ -107,16 +117,24 @@ int main(int argc, char* argv[]) {
     }
     LOG_INFO("Window Created.");
     
-    // Init Graphics Context with Logical Resolution
+    // 初始化图形上下文，设置逻辑分辨率 (240x320)
+    // Init Graphics Context with Logical Resolution (240x320)
+    // 所有的绘图操作都基于这个逻辑分辨率，最后会缩放到实际窗口大小
+    // All drawing operations are based on this logical resolution, and scaled to window size at the end
     j2me::platform::GraphicsContext::getInstance().init(window, 240, 320);
     
+    // 检查是否为 .class 文件
     // Check if it's a .class file
     config.isClass = j2me::util::FileUtils::isClassFile(config.filePath);
     
+    // 加载 Loader
     // Load Loaders
+    // appLoader 用于加载应用程序的类 (JAR 或 class)
+    // libraryLoader 用于加载系统类库 (rt.jar)
     config.appLoader = std::make_shared<j2me::loader::JarLoader>();
     config.libraryLoader = std::make_shared<j2me::loader::JarLoader>();
     
+    // 加载类库 (rt.jar)
     // Load Library
     bool libraryLoaded = false;
     std::vector<std::string> libraryPaths;
@@ -153,6 +171,7 @@ int main(int argc, char* argv[]) {
             return 1;
         }
         
+        // 解析类名
         // Resolve class name
         std::string className = config.filePath;
         if (className.length() >= 6 && className.substr(className.length() - 6) == ".class") {
@@ -166,6 +185,7 @@ int main(int argc, char* argv[]) {
         config.mainClassName = className;
         
     } else {
+        // JAR 模式
         // JAR Mode
         LOG_INFO("Loading JAR: " + config.filePath);
         if (!config.appLoader->load(config.filePath)) {
@@ -186,6 +206,7 @@ int main(int argc, char* argv[]) {
         }
         
         if (config.mainClassName.empty()) {
+            // 启发式回退策略
             // Heuristic fallbacks
             config.mainClassName = "HelloWorld.class";
             if (!config.appLoader->hasFile(config.mainClassName)) config.mainClassName = "Point.class";
@@ -197,6 +218,7 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    // 运行虚拟机
     // Run VM
     j2me::core::J2MEVM vm;
     int result = vm.run(config);

@@ -21,11 +21,13 @@ J2MEVM::~J2MEVM() {}
 int J2MEVM::run(const VMConfig& config) {
     currentConfig = config;
     
+    // 设置日志级别
     // Set log level
     Logger::getInstance().setLevel(config.logLevel);
 
     LOG_INFO("Starting J2ME VM Thread...");
 
+    // 设置 Loader 和 Interpreter
     // Setup Loaders & Interpreter
     j2me::loader::JarLoader& baseLoader = config.isClass ? *config.libraryLoader : *config.appLoader;
     interpreter = std::make_unique<Interpreter>(baseLoader);
@@ -44,8 +46,12 @@ int J2MEVM::run(const VMConfig& config) {
     bool hasMain = hasMainMethod(mainClass);
 
     if (hasMain && !isMIDlet) {
+        // 如果有 main 方法且不是 MIDlet，则以标准 Java 程序模式运行
+        // If it has a main method and is not a MIDlet, run as a standard Java program
         runHeadless();
     } else if (isMIDlet) {
+        // 否则作为 MIDlet (J2ME 应用) 运行
+        // Otherwise run as a MIDlet (J2ME application)
         runMIDlet();
     } else {
         LOG_ERROR("Class is not a MIDlet and has no main method. Cannot run.");
@@ -59,6 +65,8 @@ int J2MEVM::run(const VMConfig& config) {
 
 bool J2MEVM::loadMainClass(const VMConfig& config) {
     if (config.isClass) {
+        // 加载单个 .class 文件
+        // Load single .class file
         LOG_INFO("Loading .class file: " + config.filePath);
         if (!config.classData) {
             LOG_ERROR("Class data missing for .class file");
@@ -71,7 +79,9 @@ bool J2MEVM::loadMainClass(const VMConfig& config) {
 
         mainClass = std::make_shared<JavaClass>(classFile);
 
-        // Link
+        // 链接类 (处理父类)
+        // Link class (handle superclass)
+        // 确保父类被正确解析和链接
         if (classFile->super_class != 0) {
             auto superInfo = std::dynamic_pointer_cast<ConstantClass>(classFile->constant_pool[classFile->super_class]);
             auto superNameInfo = std::dynamic_pointer_cast<ConstantUtf8>(classFile->constant_pool[superInfo->name_index]);
@@ -91,8 +101,10 @@ bool J2MEVM::loadMainClass(const VMConfig& config) {
         LOG_INFO("Registered class: " + config.mainClassName);
         return true;
     } else {
+        // JAR 模式
         // JAR Mode
-        // Interpreter handles loading via loader, we just need to resolve it
+        // Interpreter 负责通过 loader 加载，我们只需要解析主类
+        // Interpreter handles loading via loader, we just need to resolve the main class
         try {
             std::string clsName = config.mainClassName;
             if (clsName.size() >= 6 && clsName.substr(clsName.size()-6) == ".class") 
@@ -111,6 +123,8 @@ bool J2MEVM::loadMainClass(const VMConfig& config) {
 void J2MEVM::runHeadless() {
     LOG_INFO("Running main method (headless mode)...");
     
+    // 查找 public static void main(String[] args) 方法
+    // Find public static void main(String[] args)
     for (const auto& method : mainClass->rawFile->methods) {
         auto name = std::dynamic_pointer_cast<ConstantUtf8>(mainClass->rawFile->constant_pool[method.name_index]);
         auto desc = std::dynamic_pointer_cast<ConstantUtf8>(mainClass->rawFile->constant_pool[method.descriptor_index]);
@@ -118,6 +132,8 @@ void J2MEVM::runHeadless() {
         if (name && desc && name->bytes == "main" && desc->bytes == "([Ljava/lang/String;)V") {
             auto frame = std::make_shared<StackFrame>(method, mainClass->rawFile);
             
+            // 创建 args 数组 (目前为空)
+            // Create args array (currently empty)
             auto arrayCls = interpreter->resolveClass("[Ljava/lang/String;");
             if (arrayCls) {
                 auto arrayObj = HeapManager::getInstance().allocate(arrayCls);
@@ -129,9 +145,13 @@ void J2MEVM::runHeadless() {
                 frame->setLocal(0, vArgs);
             }
             
+            // 创建并启动主线程
+            // Create and start main thread
             auto mainThread = std::make_shared<JavaThread>(frame);
             ThreadManager::getInstance().addThread(mainThread);
             
+            // 主循环：执行指令直到线程结束
+            // Main loop: execute instructions until thread finishes
             while (!mainThread->isFinished()) {
                  auto t = ThreadManager::getInstance().nextThread();
                  if (t) interpreter->execute(t, 20000);
@@ -149,22 +169,26 @@ void J2MEVM::runHeadless() {
 void J2MEVM::runMIDlet() {
     LOG_INFO("Running MIDlet (GUI mode)...");
     
+    // 分配 MIDlet 实例
     // Allocate instance
     midletInstance = HeapManager::getInstance().allocate(mainClass);
 
+    // 运行构造函数 <init>
     // Run <init>
     findAndRunInit();
     
+    // 运行 startApp()
     // Run startApp
     findAndRunStartApp();
     
+    // 进入 VM 主循环
     // Enter VM Loop
     vmLoop();
 }
 
 void J2MEVM::findAndRunInit() {
-    // Find <init> in the main class (constructors are not inherited, but we should look at the class itself)
-    // Actually we should scan methods of mainClass
+    // 在主类中查找 <init> (构造函数不继承，必须看类本身)
+    // Find <init> in the main class (constructors are not inherited, must check the class itself)
     bool found = false;
     for (const auto& method : mainClass->rawFile->methods) {
         auto name = std::dynamic_pointer_cast<ConstantUtf8>(mainClass->rawFile->constant_pool[method.name_index]);
@@ -177,6 +201,8 @@ void J2MEVM::findAndRunInit() {
              auto initThread = std::make_shared<JavaThread>(frame);
              ThreadManager::getInstance().addThread(initThread);
              
+             // 运行直到 <init> 完成
+             // Run until <init> completes
              while (!initThread->isFinished()) {
                   EventLoop::getInstance().pollSDL();
                   EventLoop::getInstance().dispatchEvents(interpreter.get());
@@ -198,6 +224,8 @@ void J2MEVM::findAndRunStartApp() {
     auto currentCls = mainClass;
     bool startAppFound = false;
     
+    // 在类继承层次结构中查找 startApp
+    // Find startApp in class hierarchy
     while (currentCls) {
         for (const auto& method : currentCls->rawFile->methods) {
             auto name = std::dynamic_pointer_cast<ConstantUtf8>(currentCls->rawFile->constant_pool[method.name_index]);
@@ -210,7 +238,10 @@ void J2MEVM::findAndRunStartApp() {
                     auto startThread = std::make_shared<JavaThread>(frame);
                     ThreadManager::getInstance().addThread(startThread);
                     
+                    // 运行 startApp 直到完成 (或直到它 yield/return)
                     // Run startApp to completion (or until it yields/returns)
+                    // 注意：在真实的 J2ME 中，startApp 可能很快返回，也可能阻塞。
+                    // 这里我们运行直到它结束，同时处理事件。
                     // Note: In real J2ME, startApp might return quickly, or block. 
                     // Here we run it until finished, pumping events.
                     while (!startThread->isFinished()) {
@@ -245,6 +276,7 @@ void J2MEVM::vmLoop() {
     auto lastFrameTime = clock::now();
     const auto FRAME_INTERVAL = std::chrono::milliseconds(33); // ~30 FPS
 
+    // 移除了指令限速，依靠按键事件频率限制游戏速度
     // Throttling State Removed as per user request
     // We rely on Key Event Frequency Limiting for game speed control
 
@@ -252,9 +284,11 @@ void J2MEVM::vmLoop() {
         try {
             auto now = clock::now();
             
+            // 限制渲染、输入轮询和事件分发的频率为 30 FPS
             // Limit Rendering, Input Polling AND Event Dispatch to 30 FPS
             if (now - lastFrameTime >= FRAME_INTERVAL) {
                 eventLoop.pollSDL();
+                // 将 dispatchEvents 移至此处以限制按键事件频率
                 // Move dispatchEvents here to limit key event frequency
                 eventLoop.dispatchEvents(interpreter.get());
                 eventLoop.render(interpreter.get());
@@ -266,7 +300,9 @@ void J2MEVM::vmLoop() {
             
             auto thread = ThreadManager::getInstance().nextThread();
             if (thread) {
+                // 执行一批指令
                 // Execute a batch of instructions
+                // 每批 20000 条指令提供良好的粒度
                 // 20000 instructions per batch provides good granularity
                 interpreter->execute(thread, 20000); 
             } else {

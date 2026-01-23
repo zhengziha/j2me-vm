@@ -11,6 +11,7 @@ StackFrame::StackFrame(const MethodInfo& method, const std::shared_ptr<ClassFile
     localVariables.resize(20);
     operandStack.reserve(20);
 
+    // 解析 Code 属性
     // Parse Code attribute
     for (const auto& attr : method.attributes) {
         if (attr.attribute_name_index < classFile->constant_pool.size()) {
@@ -56,6 +57,7 @@ void StackFrame::setLocal(uint16_t index, JavaValue value) {
 
 JavaValue StackFrame::getLocal(uint16_t index) {
     if (index >= localVariables.size()) {
+        // 返回默认值 0/null
         // Return default 0/null
         JavaValue v;
         v.type = JavaValue::INT;
