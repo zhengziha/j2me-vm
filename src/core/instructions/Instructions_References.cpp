@@ -466,6 +466,56 @@ void Interpreter::initReferences() {
              auto cls = resolveClass(className->bytes);
              if (!cls) throw std::runtime_error("Class not found: " + className->bytes);
              
+             // INTERCEPT: Force native implementation for String(byte[]) to handle encoding (GBK) correctly
+              // This bypasses the Java implementation in rt.jar which might default to ISO-8859-1
+              if (className->bytes == "java/lang/String" && name->bytes == "<init>") {
+                  // std::cout << "DEBUG: String constructor called: " << descriptor->bytes << std::endl;
+                  if (descriptor->bytes == "([B)V") {
+                      auto nativeFunc = NativeRegistry::getInstance().getNative("java/lang/String", "<init>", "([B)V");
+                      if (nativeFunc) {
+                          LOG_DEBUG("Intercepted String(byte[])");
+                          nativeFunc(thread, frame);
+                          break; 
+                      }
+                  }
+                  // Intercept String(byte[], int, int)
+                  else if (descriptor->bytes == "([BII)V") {
+                      auto nativeFunc = NativeRegistry::getInstance().getNative("java/lang/String", "<init>", "([BII)V");
+                      if (nativeFunc) {
+                          LOG_DEBUG("Intercepted String(byte[], int, int)");
+                          nativeFunc(thread, frame);
+                          break;
+                      }
+                  }
+                  // Intercept String(byte[], String)
+                  else if (descriptor->bytes == "([BLjava/lang/String;)V") {
+                      auto nativeFunc = NativeRegistry::getInstance().getNative("java/lang/String", "<init>", "([BLjava/lang/String;)V");
+                      if (nativeFunc) {
+                          LOG_DEBUG("Intercepted String(byte[], String)");
+                          nativeFunc(thread, frame);
+                          break;
+                      }
+                  }
+                  // Intercept String(char[])
+                  else if (descriptor->bytes == "([C)V") {
+                      auto nativeFunc = NativeRegistry::getInstance().getNative("java/lang/String", "<init>", "([C)V");
+                      if (nativeFunc) {
+                          // LOG_DEBUG("Intercepted String(char[])");
+                          nativeFunc(thread, frame);
+                          break;
+                      }
+                  }
+                  // Intercept String(char[], int, int)
+                  else if (descriptor->bytes == "([CII)V") {
+                      auto nativeFunc = NativeRegistry::getInstance().getNative("java/lang/String", "<init>", "([CII)V");
+                      if (nativeFunc) {
+                          // LOG_DEBUG("Intercepted String(char[], int, int)");
+                          nativeFunc(thread, frame);
+                          break;
+                      }
+                  }
+              }
+             
              if (isStatic) {
                  if (initializeClass(thread, cls)) {
                      codeReader.seek(codeReader.tell() - 3);

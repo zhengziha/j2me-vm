@@ -81,7 +81,7 @@ void registerImageNatives(j2me::core::NativeRegistry& registry) {
                     if (it != imageMap.end()) {
                         SDL_Surface* surface = it->second;
                         result.val.i = surface->w;
-                        std::cout << "[Image] getWidth: " << result.val.i << std::endl;
+                        // std::cout << "[Image] getWidth: " << result.val.i << std::endl;
                     } else {
                         std::cerr << "[Image] getWidth: Invalid Image ID " << imgId << std::endl;
                     }
@@ -109,7 +109,7 @@ void registerImageNatives(j2me::core::NativeRegistry& registry) {
                     if (it != imageMap.end()) {
                         SDL_Surface* surface = it->second;
                         result.val.i = surface->h;
-                        std::cout << "[Image] getHeight: " << result.val.i << std::endl;
+                        // std::cout << "[Image] getHeight: " << result.val.i << std::endl;
                     } else {
                         std::cerr << "[Image] getHeight: Invalid Image ID " << imgId << std::endl;
                     }

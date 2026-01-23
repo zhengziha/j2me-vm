@@ -49,13 +49,6 @@ std::string parseMidletClassName(const std::string& manifestContent) {
 }
 
 int main(int argc, char* argv[]) {
-    // Auto-exit after 120 seconds
-    std::thread([]() {
-        std::this_thread::sleep_for(std::chrono::seconds(120));
-        std::cout << "\n[System] Timeout reached (120s). Exiting process.\n" << std::endl;
-        std::exit(0);
-    }).detach();
-
     if (argc < 2) {
         std::cout << "Usage: j2me-vm [--log-level LEVEL] <path_to_jar_or_class>" << std::endl;
         std::cout << "  LEVEL: debug, info, error, none (default: info)" << std::endl;

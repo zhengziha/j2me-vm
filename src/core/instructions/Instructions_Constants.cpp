@@ -7,6 +7,32 @@
 namespace j2me {
 namespace core {
 
+// Helper to convert UTF-8 (Modified UTF-8) to UTF-16
+static std::vector<uint16_t> utf8ToUtf16(const std::string& utf8) {
+    std::vector<uint16_t> utf16;
+    size_t i = 0;
+    while (i < utf8.length()) {
+        uint8_t c = utf8[i++];
+        if (c < 0x80) {
+            utf16.push_back(c);
+        } else if ((c & 0xE0) == 0xC0) {
+            if (i < utf8.length()) {
+                uint8_t c2 = utf8[i++];
+                utf16.push_back(((c & 0x1F) << 6) | (c2 & 0x3F));
+            }
+        } else if ((c & 0xF0) == 0xE0) {
+            if (i + 1 < utf8.length()) {
+                uint8_t c2 = utf8[i++];
+                uint8_t c3 = utf8[i++];
+                utf16.push_back(((c & 0x0F) << 12) | ((c2 & 0x3F) << 6) | (c3 & 0x3F));
+            }
+        } else {
+             // Skip invalid or 4-byte sequences for now (Java strings are mostly BMP)
+        }
+    }
+    return utf16;
+}
+
 void Interpreter::initConstants() {
     // Default handler (can be kept in initInstructionTable or here if we want)
     // Here we only set constants.
@@ -85,22 +111,23 @@ void Interpreter::initConstants() {
                     
                         if (arrayCls) {
                             auto arrayObj = HeapManager::getInstance().allocate(arrayCls);
-                            arrayObj->fields.resize(strVal->bytes.length());
-                            for (size_t i = 0; i < strVal->bytes.length(); i++) {
-                                arrayObj->fields[i] = (uint16_t)(uint8_t)strVal->bytes[i];
+                            std::vector<uint16_t> utf16 = utf8ToUtf16(strVal->bytes);
+                            arrayObj->fields.resize(utf16.size());
+                            for (size_t i = 0; i < utf16.size(); i++) {
+                                arrayObj->fields[i] = utf16[i];
                             }
                             stringObj->fields[valueIt->second] = (int64_t)arrayObj;
+                            
+                            auto countIt = stringCls->fieldOffsets.find("count|I");
+                            if (countIt != stringCls->fieldOffsets.end()) {
+                                stringObj->fields[countIt->second] = utf16.size();
+                            }
                         }
                     }
                     
                     auto offsetIt = stringCls->fieldOffsets.find("offset|I");
                     if (offsetIt != stringCls->fieldOffsets.end()) {
                         stringObj->fields[offsetIt->second] = 0;
-                    }
-                    
-                    auto countIt = stringCls->fieldOffsets.find("count|I");
-                    if (countIt != stringCls->fieldOffsets.end()) {
-                        stringObj->fields[countIt->second] = strVal->bytes.length();
                     }
                     
                     val.val.ref = stringObj;
@@ -158,22 +185,23 @@ void Interpreter::initConstants() {
                         
                         if (arrayCls) {
                             auto arrayObj = HeapManager::getInstance().allocate(arrayCls);
-                            arrayObj->fields.resize(strVal->bytes.length());
-                            for (size_t i = 0; i < strVal->bytes.length(); i++) {
-                                arrayObj->fields[i] = (uint16_t)(uint8_t)strVal->bytes[i];
+                            std::vector<uint16_t> utf16 = utf8ToUtf16(strVal->bytes);
+                            arrayObj->fields.resize(utf16.size());
+                            for (size_t i = 0; i < utf16.size(); i++) {
+                                arrayObj->fields[i] = utf16[i];
                             }
                             stringObj->fields[valueIt->second] = (int64_t)arrayObj;
+                            
+                            auto countIt = stringCls->fieldOffsets.find("count|I");
+                            if (countIt != stringCls->fieldOffsets.end()) {
+                                stringObj->fields[countIt->second] = utf16.size();
+                            }
                         }
                     }
                     
                     auto offsetIt = stringCls->fieldOffsets.find("offset|I");
                     if (offsetIt != stringCls->fieldOffsets.end()) {
                         stringObj->fields[offsetIt->second] = 0;
-                    }
-                    
-                    auto countIt = stringCls->fieldOffsets.find("count|I");
-                    if (countIt != stringCls->fieldOffsets.end()) {
-                        stringObj->fields[countIt->second] = strVal->bytes.length();
                     }
                     
                     val.val.ref = stringObj;

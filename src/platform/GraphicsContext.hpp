@@ -33,11 +33,17 @@ public:
         if (TTF_Init() == -1) {
             std::cerr << "TTF_Init: " << TTF_GetError() << std::endl;
         } else {
-            // Try common fonts with CJK support first
+            // Try to load font
+            // Prioritize Tahoma as requested
             font = TTF_OpenFont("/System/Library/Fonts/Hiragino Sans GB.ttc", 12);
-            if (!font) font = TTF_OpenFont("/System/Library/Fonts/STHeiti Light.ttc", 12);
-            if (!font) font = TTF_OpenFont("/System/Library/Fonts/Geneva.ttf", 12);
-            if (!font) font = TTF_OpenFont("/System/Library/Fonts/Helvetica.ttc", 12);
+
+            // font = TTF_OpenFont("fonts/Tahoma.ttf", 12);
+            if (!font) {
+                font = TTF_OpenFont("fonts/s60snr.ttf", 12);
+            }
+            if (!font) {
+                font = TTF_OpenFont("/Library/Fonts/Arial.ttf", 12);
+            }
             if (!font) {
                 std::cerr << "TTF_OpenFont failed: " << TTF_GetError() << std::endl;
             }
