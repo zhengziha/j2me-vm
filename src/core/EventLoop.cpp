@@ -18,7 +18,7 @@ static int mapKey(SDL_Keycode key) {
         case SDLK_DOWN: return 6; // DOWN
         case SDLK_LEFT: return 2; // LEFT
         case SDLK_RIGHT: return 5; // RIGHT
-        case SDLK_RETURN: return 8; // FIRE
+        case SDLK_RETURN: return 8; // FIRE 8
         case SDLK_0: return 48;
         case SDLK_1: return 49;
         case SDLK_2: return 50;
@@ -45,19 +45,9 @@ void EventLoop::pollSDL() {
             int keyCode = mapKey(e.key.keysym.sym);
             if (keyCode != 0) {
                 std::lock_guard<std::mutex> lock(queueMutex);
-                eventQueue.push(keyCode);
+                eventQueue.push({KeyEvent::PRESSED, keyCode});
                 
                 // Update keyStates (GameCanvas)
-                // Need to map keyCode to GameAction bit
-                // UP=1 -> bit 1 (1<<1 = 2)
-                // DOWN=6 -> bit 6 (1<<6 = 64)
-                // LEFT=2 -> bit 2 (4)
-                // RIGHT=5 -> bit 5 (32)
-                // FIRE=8 -> bit 8 (256)
-                // GAME_A=9 -> bit 9 (512)
-                // GAME_B=10 -> bit 10 (1024)
-                // GAME_C=11 -> bit 11 (2048)
-                // GAME_D=12 -> bit 12 (4096)
                 if (keyCode > 0 && keyCode <= 31) { // Safety check
                     keyStates |= (1 << keyCode);
                 }
@@ -65,6 +55,9 @@ void EventLoop::pollSDL() {
         } else if (e.type == SDL_KEYUP) {
             int keyCode = mapKey(e.key.keysym.sym);
             if (keyCode != 0) {
+                std::lock_guard<std::mutex> lock(queueMutex);
+                eventQueue.push({KeyEvent::RELEASED, keyCode});
+
                 if (keyCode > 0 && keyCode <= 31) {
                     keyStates &= ~(1 << keyCode);
                 }
@@ -78,7 +71,7 @@ void EventLoop::pollSDL() {
 }
 
 void EventLoop::dispatchEvents(Interpreter* interpreter) {
-    std::queue<int> events;
+    std::queue<KeyEvent> events;
     {
         std::lock_guard<std::mutex> lock(queueMutex);
         if (eventQueue.empty()) return;
@@ -86,37 +79,42 @@ void EventLoop::dispatchEvents(Interpreter* interpreter) {
     }
     
     while (!events.empty()) {
-        int keyCode = events.front();
+        KeyEvent event = events.front();
         events.pop();
         
         j2me::core::JavaObject* displayable = j2me::natives::getCurrentDisplayable();
         if (displayable && displayable->cls) {
-            // Call keyPressed(keyCode)
-            // Walk up class hierarchy to find method
-            auto currentCls = displayable->cls;
-            while (currentCls) {
-                bool found = false;
-                for (const auto& method : currentCls->rawFile->methods) {
-                    auto name = std::dynamic_pointer_cast<j2me::core::ConstantUtf8>(currentCls->rawFile->constant_pool[method.name_index]);
-                    if (name->bytes == "keyPressed") {
-                        auto frame = std::make_shared<j2me::core::StackFrame>(method, currentCls->rawFile);
-                        
-                        // Push 'this'
-                        j2me::core::JavaValue vThis; vThis.type = j2me::core::JavaValue::REFERENCE; vThis.val.ref = displayable;
-                        frame->setLocal(0, vThis);
-                        
-                        // Push keyCode
-                        j2me::core::JavaValue vKey; vKey.type = j2me::core::JavaValue::INT; vKey.val.i = keyCode;
-                        frame->setLocal(1, vKey);
-                        
-                        auto thread = std::make_shared<JavaThread>(frame);
-                        ThreadManager::getInstance().addThread(thread);
-                        found = true;
-                        break;
+            std::string methodName;
+            if (event.type == KeyEvent::PRESSED) methodName = "keyPressed";
+            else if (event.type == KeyEvent::RELEASED) methodName = "keyReleased";
+            
+            if (!methodName.empty()) {
+                // Walk up class hierarchy to find method
+                auto currentCls = displayable->cls;
+                while (currentCls) {
+                    bool found = false;
+                    for (const auto& method : currentCls->rawFile->methods) {
+                        auto name = std::dynamic_pointer_cast<j2me::core::ConstantUtf8>(currentCls->rawFile->constant_pool[method.name_index]);
+                        if (name->bytes == methodName) {
+                            auto frame = std::make_shared<j2me::core::StackFrame>(method, currentCls->rawFile);
+                            
+                            // Push 'this'
+                            j2me::core::JavaValue vThis; vThis.type = j2me::core::JavaValue::REFERENCE; vThis.val.ref = displayable;
+                            frame->setLocal(0, vThis);
+                            
+                            // Push keyCode
+                            j2me::core::JavaValue vKey; vKey.type = j2me::core::JavaValue::INT; vKey.val.i = event.keyCode;
+                            frame->setLocal(1, vKey);
+                            
+                            auto thread = std::make_shared<JavaThread>(frame);
+                            ThreadManager::getInstance().addThread(thread);
+                            found = true;
+                            break;
+                        }
                     }
+                    if (found) break;
+                    currentCls = currentCls->superClass;
                 }
-                if (found) break;
-                currentCls = currentCls->superClass;
             }
         }
     }
@@ -167,6 +165,7 @@ void EventLoop::render(Interpreter* interpreter) {
 
                         auto thread = std::make_shared<JavaThread>(frame);
                         paintingThread = thread;
+                        isPainting = true;
                         ThreadManager::getInstance().addThread(thread);
 
                         found = true;
@@ -175,6 +174,23 @@ void EventLoop::render(Interpreter* interpreter) {
                 }
                 if (found) break;
                 currentCls = currentCls->superClass;
+            }
+        }
+    }
+}
+
+void EventLoop::checkPaintFinished() {
+    if (isPainting) {
+        if (paintingThread.expired()) {
+            // Thread destroyed, meaning paint finished
+            j2me::platform::GraphicsContext::getInstance().commit();
+            isPainting = false;
+        } else {
+            auto ptr = paintingThread.lock();
+            if (ptr && ptr->isFinished()) {
+                // Thread exists but finished
+                j2me::platform::GraphicsContext::getInstance().commit();
+                isPainting = false;
             }
         }
     }

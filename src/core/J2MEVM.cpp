@@ -240,16 +240,35 @@ void J2MEVM::findAndRunStartApp() {
 void J2MEVM::vmLoop() {
     LOG_INFO("Entering VM Event Loop...");
     EventLoop& eventLoop = EventLoop::getInstance();
+    
+    using clock = std::chrono::steady_clock;
+    auto lastFrameTime = clock::now();
+    const auto FRAME_INTERVAL = std::chrono::milliseconds(33); // ~30 FPS
+
+    // Throttling State Removed as per user request
+    // We rely on Key Event Frequency Limiting for game speed control
+
     while (!eventLoop.shouldExit()) {
         try {
-            eventLoop.pollSDL();
-            eventLoop.dispatchEvents(interpreter.get());
+            auto now = clock::now();
+            
+            // Limit Rendering, Input Polling AND Event Dispatch to 30 FPS
+            if (now - lastFrameTime >= FRAME_INTERVAL) {
+                eventLoop.pollSDL();
+                // Move dispatchEvents here to limit key event frequency
+                eventLoop.dispatchEvents(interpreter.get());
+                eventLoop.render(interpreter.get());
+                lastFrameTime = now;
+            }
+
+            eventLoop.checkPaintFinished();
             TimerManager::getInstance().tick(interpreter.get());
-            eventLoop.render(interpreter.get());
             
             auto thread = ThreadManager::getInstance().nextThread();
             if (thread) {
-                interpreter->execute(thread, 50000); 
+                // Execute a batch of instructions
+                // 20000 instructions per batch provides good granularity
+                interpreter->execute(thread, 20000); 
             } else {
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
@@ -257,7 +276,6 @@ void J2MEVM::vmLoop() {
             
         } catch (const std::exception& e) {
              LOG_ERROR("Exception in VM Loop: " + std::string(e.what()));
-             // std::exit(1); // Don't exit hard, maybe return?
              return;
         }
     }

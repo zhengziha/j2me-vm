@@ -21,12 +21,22 @@ public:
     void init(SDL_Window* window) {
         std::lock_guard<std::mutex> lock(surfaceMutex);
         this->window = window;
-        // J2ME uses a software buffer usually, but we can draw to surface directly or renderer
-        // For simplicity, let's use SDL_Surface of the window
-        surface = SDL_GetWindowSurface(window);
+        
+        // Window Surface (Screen)
+        windowSurface = SDL_GetWindowSurface(window);
+        
+        // Back Buffer (Drawing Target)
+        surface = SDL_CreateRGBSurfaceWithFormat(0, windowSurface->w, windowSurface->h, 32, windowSurface->format->format);
+        
+        // Front Buffer (Display Target)
+        displaySurface = SDL_CreateRGBSurfaceWithFormat(0, windowSurface->w, windowSurface->h, 32, windowSurface->format->format);
         
         // Fill white
         SDL_FillRect(surface, nullptr, SDL_MapRGB(surface->format, 255, 255, 255));
+        SDL_FillRect(displaySurface, nullptr, SDL_MapRGB(displaySurface->format, 255, 255, 255));
+        
+        // Initial Present
+        SDL_BlitSurface(displaySurface, nullptr, windowSurface, nullptr);
         SDL_UpdateWindowSurface(window);
 
         // Init TTF
@@ -90,9 +100,19 @@ public:
         SDL_FillRect(surface, &rect, currentColor);
     }
     
-    void update() {
+    void commit() {
         std::lock_guard<std::mutex> lock(surfaceMutex);
-        SDL_UpdateWindowSurface(window);
+        if (surface && displaySurface) {
+            SDL_BlitSurface(surface, nullptr, displaySurface, nullptr);
+        }
+    }
+    
+    void update() { // Called by Main Loop (present)
+        std::lock_guard<std::mutex> lock(surfaceMutex);
+        if (window && windowSurface && displaySurface) {
+            SDL_BlitSurface(displaySurface, nullptr, windowSurface, nullptr);
+            SDL_UpdateWindowSurface(window);
+        }
     }
 
     // New method for image drawing
@@ -189,7 +209,9 @@ private:
 
     GraphicsContext() = default;
     SDL_Window* window = nullptr;
-    SDL_Surface* surface = nullptr;
+    SDL_Surface* windowSurface = nullptr; // Actual Window Surface
+    SDL_Surface* displaySurface = nullptr; // Front Buffer (Ready to show)
+    SDL_Surface* surface = nullptr; // Back Buffer (Drawing Target)
     uint32_t currentColor = 0; 
     SDL_Color currentSDLColor = {0, 0, 0, 255};
     std::mutex surfaceMutex;

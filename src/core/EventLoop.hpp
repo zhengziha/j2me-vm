@@ -11,8 +11,9 @@ namespace j2me {
 namespace core {
 
 struct KeyEvent {
+    enum Type { PRESSED, RELEASED };
+    Type type;
     int keyCode;
-    // type: pressed/released? For now just pressed
 };
 
 class EventLoop {
@@ -28,6 +29,7 @@ public:
     // Called by VM Thread
     void dispatchEvents(Interpreter* interpreter);
     void render(Interpreter* interpreter);
+    void checkPaintFinished();
     
     bool shouldExit() const { return quit; }
     int getKeyStates() const { return keyStates; }
@@ -45,13 +47,14 @@ public:
     }
 
 private:
-    std::queue<int> eventQueue; // Stores mapped keyCodes
+    std::queue<KeyEvent> eventQueue; // Stores mapped keyCodes with type
     std::mutex queueMutex;
     std::atomic<bool> quit{false};
     std::atomic<int> keyStates{0};
     
     // Track current painting thread to avoid flooding
     std::weak_ptr<JavaThread> paintingThread;
+    bool isPainting = false;
 };
 
 } // namespace core

@@ -59,11 +59,11 @@ std::string getJavaString(j2me::core::JavaObject* strObj) {
     
     // Debug: print keys
     
-    std::cout << "String fields: ";
-    for (const auto& kv : strObj->cls->fieldOffsets) {
-        std::cout << kv.first << ", ";
-    }
-    std::cout << std::endl;
+    // std::cout << "String fields: ";
+    // for (const auto& kv : strObj->cls->fieldOffsets) {
+    //     std::cout << kv.first << ", ";
+    // }
+    // std::cout << std::endl;
     
 
     // Try to get from value field
@@ -101,9 +101,9 @@ std::string getJavaString(j2me::core::JavaObject* strObj) {
                 count = (size_t)strObj->fields[countIt->second];
             }
             
-            std::cout << "getJavaString: arraySize=" << arrayObj->fields.size() 
-                      << ", offset=" << offset 
-                      << ", count=" << count << std::endl;
+            // std::cout << "getJavaString: arraySize=" << arrayObj->fields.size() 
+            //           << ", offset=" << offset 
+            //           << ", count=" << count << std::endl;
             
             // GBK Heuristic Repair:
             // If the string contains only characters <= 0xFF (Latin-1), and has high bytes (> 0x7F),

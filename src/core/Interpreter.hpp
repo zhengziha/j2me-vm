@@ -21,7 +21,7 @@ namespace core {
 class Interpreter {
 public:
     Interpreter(j2me::loader::JarLoader& loader);
-    void execute(std::shared_ptr<JavaThread> thread, int instructions);
+    int execute(std::shared_ptr<JavaThread> thread, int instructions);
     std::shared_ptr<JavaClass> resolveClass(const std::string& className);
     
     // Directly register a class (useful for .class files loaded directly)

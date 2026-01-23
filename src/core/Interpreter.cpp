@@ -19,9 +19,9 @@ Interpreter::Interpreter(j2me::loader::JarLoader& loader) : jarLoader(loader) { 
 
 // resolveClass is implemented in Interpreter_ClassLoader.cpp
 
-void Interpreter::execute(std::shared_ptr<JavaThread> thread, int instructions) {
-    if (!thread || thread->isFinished()) return;
-    if (thread->state != JavaThread::RUNNABLE) return;
+int Interpreter::execute(std::shared_ptr<JavaThread> thread, int instructions) {
+    if (!thread || thread->isFinished()) return 0;
+    if (thread->state != JavaThread::RUNNABLE) return 0;
 
     int executed = 0;
     while (executed < instructions && !thread->isFinished()) {
@@ -29,7 +29,7 @@ void Interpreter::execute(std::shared_ptr<JavaThread> thread, int instructions) 
 
         if (EventLoop::getInstance().shouldExit()) {
              // Handle exit
-             return;
+             return executed;
         }
 
         auto frame = thread->currentFrame();
@@ -140,6 +140,7 @@ void Interpreter::execute(std::shared_ptr<JavaThread> thread, int instructions) 
              break; 
         }
     }
+    return executed;
 }
 
 bool Interpreter::initializeClass(std::shared_ptr<JavaThread> thread, std::shared_ptr<JavaClass> cls) {
