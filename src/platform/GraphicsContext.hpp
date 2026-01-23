@@ -18,26 +18,35 @@ public:
         return instance;
     }
 
-    void init(SDL_Window* window) {
+    void init(SDL_Window* window, int logicalWidth, int logicalHeight) {
         std::lock_guard<std::mutex> lock(surfaceMutex);
         this->window = window;
         
-        // Window Surface (Screen)
-        windowSurface = SDL_GetWindowSurface(window);
+        // Create Renderer
+        renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
+        if (!renderer) {
+            std::cerr << "SDL_CreateRenderer Error: " << SDL_GetError() << std::endl;
+            renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
+        }
+
+        if (renderer) {
+             // We do NOT set logical size, so SDL_RenderCopy will stretch to fill window
+             // Create Texture for display (Source size is logical size)
+             texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STREAMING, logicalWidth, logicalHeight);
+        }
         
-        // Back Buffer (Drawing Target)
-        surface = SDL_CreateRGBSurfaceWithFormat(0, windowSurface->w, windowSurface->h, 32, windowSurface->format->format);
+        // Back Buffer (Drawing Target) - Keep in Software
+        surface = SDL_CreateRGBSurfaceWithFormat(0, logicalWidth, logicalHeight, 32, SDL_PIXELFORMAT_RGBA32);
         
-        // Front Buffer (Display Target)
-        displaySurface = SDL_CreateRGBSurfaceWithFormat(0, windowSurface->w, windowSurface->h, 32, windowSurface->format->format);
+        // Front Buffer (Display Target) - Keep in Software
+        displaySurface = SDL_CreateRGBSurfaceWithFormat(0, logicalWidth, logicalHeight, 32, SDL_PIXELFORMAT_RGBA32);
         
         // Fill white
         SDL_FillRect(surface, nullptr, SDL_MapRGB(surface->format, 255, 255, 255));
         SDL_FillRect(displaySurface, nullptr, SDL_MapRGB(displaySurface->format, 255, 255, 255));
         
         // Initial Present
-        SDL_BlitSurface(displaySurface, nullptr, windowSurface, nullptr);
-        SDL_UpdateWindowSurface(window);
+        updateNoLock();
 
         // Init TTF
         if (TTF_Init() == -1) {
@@ -109,11 +118,20 @@ public:
     
     void update() { // Called by Main Loop (present)
         std::lock_guard<std::mutex> lock(surfaceMutex);
-        if (window && windowSurface && displaySurface) {
-            SDL_BlitSurface(displaySurface, nullptr, windowSurface, nullptr);
-            SDL_UpdateWindowSurface(window);
+        updateNoLock();
+    }
+
+private:
+    void updateNoLock() {
+        if (renderer && texture && displaySurface) {
+             SDL_UpdateTexture(texture, nullptr, displaySurface->pixels, displaySurface->pitch);
+             SDL_RenderClear(renderer);
+             SDL_RenderCopy(renderer, texture, nullptr, nullptr); // Stretches to fill target
+             SDL_RenderPresent(renderer);
         }
     }
+
+public:
 
     // New method for image drawing
     SDL_Surface* createImage(const unsigned char* data, int len) {
@@ -209,7 +227,9 @@ private:
 
     GraphicsContext() = default;
     SDL_Window* window = nullptr;
-    SDL_Surface* windowSurface = nullptr; // Actual Window Surface
+    SDL_Renderer* renderer = nullptr;
+    SDL_Texture* texture = nullptr;
+    // SDL_Surface* windowSurface = nullptr; // Removed
     SDL_Surface* displaySurface = nullptr; // Front Buffer (Ready to show)
     SDL_Surface* surface = nullptr; // Back Buffer (Drawing Target)
     uint32_t currentColor = 0; 

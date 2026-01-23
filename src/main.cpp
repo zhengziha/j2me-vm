@@ -96,18 +96,19 @@ int main(int argc, char* argv[]) {
     }
 
     // Create window
+    // Initial size set to 3x scale (720x960) for better visibility on modern screens
     SDL_Window* window = SDL_CreateWindow("J2ME Emulator",
                                           SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-                                          240, 320, // Standard J2ME resolution
-                                          SDL_WINDOW_SHOWN);
+                                          240, 320, 
+                                          SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
     if (window == nullptr) {
         LOG_ERROR("Window could not be created! SDL_Error: " + std::string(SDL_GetError()));
         return 1;
     }
     LOG_INFO("Window Created.");
     
-    // Init Graphics Context
-    j2me::platform::GraphicsContext::getInstance().init(window);
+    // Init Graphics Context with Logical Resolution
+    j2me::platform::GraphicsContext::getInstance().init(window, 240, 320);
     
     // Check if it's a .class file
     config.isClass = j2me::util::FileUtils::isClassFile(config.filePath);
