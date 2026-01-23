@@ -85,7 +85,7 @@ std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& classNam
              auto dummy = std::make_shared<ClassFile>();
              auto javaClass = std::make_shared<JavaClass>(dummy);
              javaClass->name = "java/lang/StringBuffer";
-             javaClass->instanceSize = 0; // We use fields vector dynamically
+             javaClass->instanceSize = 1; // ID for native map
              
              // Helper to add method
              auto addMethod = [&](const std::string& name, const std::string& desc) {

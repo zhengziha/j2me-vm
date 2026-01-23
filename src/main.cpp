@@ -22,6 +22,7 @@
 #include "native/java_lang_Class.hpp"
 #include "native/java_lang_Object.hpp"
 #include "native/java_lang_String.hpp"
+#include "native/java_lang_StringBuffer.hpp"
 #include "native/java_io_InputStream.hpp"
 #include "native/java_io_PrintStream.hpp"
 #include "native/java_lang_System.hpp"
@@ -107,6 +108,7 @@ void runVM(VMConfig config) {
     j2me::natives::registerClassNatives();
     j2me::natives::registerObjectNatives();
     j2me::natives::registerStringNatives();
+    j2me::natives::registerStringBufferNatives();
     j2me::natives::registerPrintStreamNatives();
     j2me::natives::registerSystemNatives();
     j2me::natives::registerInputStreamNatives();

@@ -186,6 +186,7 @@ void registerImageNatives() {
                 
                 int32_t imgId = nextImageId++;
                 imageMap[imgId] = surface;
+                mutableImages.insert(imgId);
                 
                 j2me::core::JavaValue result;
                 result.type = j2me::core::JavaValue::INT;
@@ -203,6 +204,19 @@ void registerImageNatives() {
                 result.val.i = 0; 
                 frame->push(result);
             }
+        }
+    );
+
+    // javax/microedition/lcdui/Image.isMutableNative(I)Z
+    registry.registerNative("javax/microedition/lcdui/Image", "isMutableNative", "(I)Z", 
+        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+            int32_t imgId = frame->pop().val.i;
+            
+            j2me::core::JavaValue result;
+            result.type = j2me::core::JavaValue::INT;
+            result.val.i = (mutableImages.find(imgId) != mutableImages.end()) ? 1 : 0;
+            
+            frame->push(result);
         }
     );
 
