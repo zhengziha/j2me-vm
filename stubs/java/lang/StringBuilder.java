@@ -21,5 +21,7 @@ public class StringBuilder {
 
     public native StringBuilder append(char c);
 
+    public native StringBuilder append(Object obj);
+
     public native String toString();
 }

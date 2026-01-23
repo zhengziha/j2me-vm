@@ -195,6 +195,7 @@ enum Opcode : uint8_t {
     OP_NEWARRAY     = 0xbc,
     OP_ANEWARRAY    = 0xbd,
     OP_ARRAYLENGTH  = 0xbe,
+    OP_ATHROW       = 0xbf,
     OP_CHECKCAST    = 0xc0,
     OP_INSTANCEOF   = 0xc1,
     OP_MONITORENTER = 0xc2,

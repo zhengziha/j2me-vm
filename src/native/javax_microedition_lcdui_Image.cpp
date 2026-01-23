@@ -3,16 +3,66 @@
 #include "../core/NativeRegistry.hpp"
 #include "../core/StackFrame.hpp"
 #include "../core/HeapManager.hpp"
+#include "../platform/GraphicsContext.hpp"
 #include "../platform/stb_image.h"
 #include <SDL2/SDL.h>
 #include <iostream>
 #include <map>
+#include <iomanip>
 
 namespace j2me {
 namespace natives {
 
 void registerImageNatives() {
     auto& registry = j2me::core::NativeRegistry::getInstance();
+
+    // javax/microedition/lcdui/Image.createImageNative(Ljava/lang/String;)I
+    registry.registerNative("javax/microedition/lcdui/Image", "createImageNative", "(Ljava/lang/String;)I", 
+        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+            j2me::core::JavaValue nameVal = frame->pop(); // name string
+            
+            int32_t imgId = 0;
+            if (nameVal.type == j2me::core::JavaValue::REFERENCE && !nameVal.strVal.empty()) {
+                std::string resName = nameVal.strVal;
+                // Remove leading slash if present
+                if (resName.size() > 0 && resName[0] == '/') resName = resName.substr(1);
+                
+                std::cout << "[Image] Loading image: " << resName << std::endl;
+                
+                auto loader = j2me::core::NativeRegistry::getInstance().getJarLoader();
+                if (loader && loader->hasFile(resName)) {
+                    auto data = loader->getFile(resName);
+                    if (data) {
+                        std::cout << "[Image] File found. Size: " << data->size() << " bytes." << std::endl;
+                        SDL_Surface* surface = j2me::platform::GraphicsContext::getInstance().createImage(data->data(), data->size());
+                        if (surface) {
+                            imgId = nextImageId++;
+                            imageMap[imgId] = surface;
+                            std::cout << "[Image] Loaded successfully, ID: " << imgId << " Size: " << surface->w << "x" << surface->h << std::endl;
+                        } else {
+                            std::cerr << "[Image] Failed to decode image: " << resName << std::endl;
+                            // Print first few bytes for debugging
+                            std::cerr << "Header bytes: ";
+                            const unsigned char* bytes = data->data();
+                            for (size_t i = 0; i < std::min((size_t)16, data->size()); ++i) {
+                                std::cerr << std::hex << std::setw(2) << std::setfill('0') << (int)bytes[i] << " ";
+                            }
+                            std::cerr << std::dec << std::endl;
+                        }
+                    } else {
+                        std::cerr << "[Image] Failed to read file data" << std::endl;
+                    }
+                } else {
+                    std::cerr << "[Image] Image file not found in JAR: " << resName << std::endl;
+                }
+            }
+            
+            j2me::core::JavaValue result;
+            result.type = j2me::core::JavaValue::INT;
+            result.val.i = imgId;
+            frame->push(result);
+        }
+    );
 
     // javax/microedition/lcdui/Image.getWidth()I
     registry.registerNative("javax/microedition/lcdui/Image", "getWidth", "()I", 
@@ -183,6 +233,18 @@ void registerImageNatives() {
                     buffer[i] = (unsigned char)dataObj->fields[offset + i];
                 }
                 
+                // Debug: Print header
+                // std::cout << "[Image] createImageFromData length=" << length << " offset=" << offset << std::endl;
+                /*
+                if (length > 0) {
+                    std::cout << "[Image] createImageFromData length=" << length << " Header: ";
+                    for (int i = 0; i < std::min(16, length); i++) {
+                        std::cout << std::hex << std::setw(2) << std::setfill('0') << (int)buffer[i] << " ";
+                    }
+                    std::cout << std::dec << std::endl;
+                }
+                */
+
                 // Load with stbi
                 int w, h, channels;
                 // Force 4 channels (RGBA)

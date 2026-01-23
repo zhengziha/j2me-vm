@@ -18,7 +18,7 @@ void registerInputStreamNatives() {
     registry.registerNative("java/io/InputStream", "read", "()I", 
         [](std::shared_ptr<j2me::core::StackFrame> frame) {
             try {
-                    std::cerr << "[Native] InputStream.read()I entered. Stack size: " << frame->size() << std::endl;
+                    // std::cerr << "[Native] InputStream.read()I entered. Stack size: " << frame->size() << std::endl;
                     j2me::core::JavaValue thisVal = frame->pop();
                     
                     j2me::core::JavaValue result;
@@ -29,11 +29,11 @@ void registerInputStreamNatives() {
                         j2me::core::JavaObject* inputStreamObj = (j2me::core::JavaObject*)thisVal.val.ref;
                         if (inputStreamObj->fields.size() > 0) {
                             int streamId = (int)inputStreamObj->fields[0];
-                            std::cout << "[Native] InputStream.read()I streamId: " << streamId << std::endl;
+                            // std::cout << "[Native] InputStream.read()I streamId: " << streamId << std::endl;
                             auto stream = j2me::core::HeapManager::getInstance().getStream(streamId);
                             if (stream) {
                                 result.val.i = stream->read();
-                                std::cout << "[Native] InputStream.read()I result: " << result.val.i << std::endl;
+                                // std::cout << "[Native] InputStream.read()I result: " << result.val.i << std::endl;
                             } else {
                                 std::cout << "[Native] InputStream.read()I stream not found for id: " << streamId << std::endl;
                             }

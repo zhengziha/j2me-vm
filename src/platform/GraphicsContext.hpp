@@ -5,6 +5,7 @@
 #include "stb_image.h"
 #include <memory>
 #include <iostream>
+#include <mutex>
 
 namespace j2me {
 namespace platform {
@@ -17,6 +18,7 @@ public:
     }
 
     void init(SDL_Window* window) {
+        std::lock_guard<std::mutex> lock(surfaceMutex);
         this->window = window;
         // J2ME uses a software buffer usually, but we can draw to surface directly or renderer
         // For simplicity, let's use SDL_Surface of the window
@@ -28,10 +30,14 @@ public:
     }
 
     void setColor(int r, int g, int b) {
-        currentColor = SDL_MapRGB(surface->format, r, g, b);
+        std::lock_guard<std::mutex> lock(surfaceMutex);
+        if (surface) {
+            currentColor = SDL_MapRGB(surface->format, r, g, b);
+        }
     }
 
     void drawLine(int x1, int y1, int x2, int y2) {
+        std::lock_guard<std::mutex> lock(surfaceMutex);
         // SDL2 doesn't have drawLine on Surface easily without Renderer, 
         // but for Phase 3 prototype we can use a simple Bresenham or just direct pixel if horizontal/vertical.
         // Actually, let's use SDL_Renderer if possible, but our main loop used Surface.
@@ -60,12 +66,14 @@ public:
     }
 
     void fillRect(int x, int y, int w, int h) {
+        std::lock_guard<std::mutex> lock(surfaceMutex);
         SDL_Rect rect = {x, y, w, h};
         SDL_FillRect(surface, &rect, currentColor);
         // update(); // Removed to prevent flickering
     }
     
     void update() {
+        std::lock_guard<std::mutex> lock(surfaceMutex);
         SDL_UpdateWindowSurface(window);
     }
 
@@ -93,6 +101,7 @@ public:
     }
 
     void drawImage(SDL_Surface* img, int x, int y) {
+        std::lock_guard<std::mutex> lock(surfaceMutex);
         if (!img || !surface) return;
         SDL_Rect dest = {x, y, 0, 0};
         SDL_BlitSurface(img, nullptr, surface, &dest);
@@ -104,6 +113,7 @@ private:
     SDL_Window* window = nullptr;
     SDL_Surface* surface = nullptr;
     uint32_t currentColor = 0; // Black by default (0) or whatever
+    std::mutex surfaceMutex;
 
     void putPixel(int x, int y) {
         if (!surface) return;

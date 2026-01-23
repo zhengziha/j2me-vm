@@ -1,4 +1,7 @@
 #include <iostream>
+#include <thread>
+#include <chrono>
+#include <cstdlib>
 #include <SDL2/SDL.h>
 #include <algorithm> // for std::replace
 #include <string>
@@ -7,6 +10,7 @@
 #include "loader/JarLoader.hpp"
 #include "core/ClassParser.hpp"
 #include "core/Interpreter.hpp"
+#include "core/EventLoop.hpp"
 #include "core/HeapManager.hpp"
 #include "core/Logger.hpp"
 #include "platform/GraphicsContext.hpp"
@@ -22,6 +26,8 @@
 #include "native/java_io_PrintStream.hpp"
 #include "native/java_lang_System.hpp"
 #include "native/java_lang_Thread.hpp"
+#include "native/java_util_Timer.hpp"
+#include "core/TimerManager.hpp"
 #include <fstream>
 #include <optional>
 
@@ -79,48 +85,19 @@ bool hasMainMethod(std::shared_ptr<j2me::core::JavaClass> cls) {
     return false;
 }
 
-int main(int argc, char* argv[]) {
-    if (argc < 2) {
-        std::cout << "Usage: j2me-vm [--log-level LEVEL] <path_to_jar_or_class>" << std::endl;
-        std::cout << "  LEVEL: debug, info, error, none (default: info)" << std::endl;
-        return 1;
-    }
-
-    // Parse command line arguments
+struct VMConfig {
     std::string filePath;
-    j2me::core::LogLevel logLevel = j2me::core::LogLevel::INFO;
+    j2me::core::LogLevel logLevel;
+    std::shared_ptr<j2me::loader::JarLoader> appLoader;
+    std::shared_ptr<j2me::loader::JarLoader> libraryLoader;
+    std::string mainClassName;
+    bool isClass; // true if loading single class file
+    std::optional<std::vector<uint8_t>> classData; // if single class
+};
 
-    for (int i = 1; i < argc; i++) {
-        std::string arg = argv[i];
-        if (arg == "--log-level" && i + 1 < argc) {
-            std::string levelStr = argv[++i];
-            if (levelStr == "debug") {
-                logLevel = j2me::core::LogLevel::DEBUG;
-            } else if (levelStr == "info") {
-                logLevel = j2me::core::LogLevel::INFO;
-            } else if (levelStr == "error") {
-                logLevel = j2me::core::LogLevel::ERROR;
-            } else if (levelStr == "none") {
-                logLevel = j2me::core::LogLevel::NONE;
-            } else {
-                std::cerr << "Invalid log level: " << levelStr << std::endl;
-                return 1;
-            }
-        } else if (arg[0] != '-') {
-            filePath = arg;
-        }
-    }
-
-    if (filePath.empty()) {
-        std::cerr << "Error: No file specified" << std::endl;
-        return 1;
-    }
-
-    // Check if it's a .class file
-    bool isClass = isClassFile(filePath);
-    
+void runVM(VMConfig config) {
     // Set log level
-    j2me::core::Logger::getInstance().setLevel(logLevel);
+    j2me::core::Logger::getInstance().setLevel(config.logLevel);
 
     // Register natives
     j2me::natives::registerGraphicsNatives();
@@ -134,86 +111,38 @@ int main(int argc, char* argv[]) {
     j2me::natives::registerSystemNatives();
     j2me::natives::registerInputStreamNatives();
     j2me::natives::registerThreadNatives();
+    j2me::natives::registerTimerNatives();
 
-    LOG_INFO("Starting J2ME VM...");
+    LOG_INFO("Starting J2ME VM Thread...");
 
-    // Handle .class file directly
-    if (isClass) {
-        LOG_INFO("Loading .class file: " + filePath);
+    // Create interpreter
+    // If isClass, use libraryLoader as base, else appLoader
+    j2me::loader::JarLoader& baseLoader = config.isClass ? *config.libraryLoader : *config.appLoader;
+    j2me::core::Interpreter interpreter(baseLoader);
+    interpreter.setLibraryLoader(config.libraryLoader);
+    j2me::core::NativeRegistry::getInstance().setInterpreter(&interpreter);
+    if (!config.isClass && config.appLoader) {
+        j2me::core::NativeRegistry::getInstance().setJarLoader(config.appLoader.get());
+    }
+
+    std::shared_ptr<j2me::core::JavaObject> midletInstance;
+
+    if (config.isClass) {
+        // Handle .class file directly
+        LOG_INFO("Loading .class file: " + config.filePath);
         
-        auto classData = readClassFile(filePath);
-        if (!classData) {
-            LOG_ERROR("Failed to read .class file: " + filePath);
-            return 1;
+        if (!config.classData) {
+            LOG_ERROR("Class data missing for .class file");
+            return;
         }
         
         // Parse the class file
         j2me::core::ClassParser parser;
-        auto classFile = parser.parse(*classData);
+        auto classFile = parser.parse(*config.classData);
         LOG_INFO("Successfully parsed class file!");
         
-        // Create a minimal JarLoader for library classes
-        auto libraryLoader = std::make_shared<j2me::loader::JarLoader>();
-        bool libraryLoaded = false;
-        
-        // Try to load rt.jar
-        std::vector<std::string> libraryPaths;
-        
-        // Find directory of the .class file
-        size_t lastSlash = filePath.find_last_of("/\\");
-        if (lastSlash != std::string::npos) {
-            std::string classDir = filePath.substr(0, lastSlash);
-            // libraryPaths.push_back(classDir + "/stubs/rt.jar");
-            // libraryPaths.push_back(classDir + "/../stubs/rt.jar");
-        }
-        
-        libraryPaths.push_back("/Users/zhengzihang/my-src/j2me-vm/stubs/rt.jar");
-        libraryPaths.push_back("stubs/rt.jar");
-        libraryPaths.push_back("../stubs/rt.jar");
-        
-        for (const auto& path : libraryPaths) {
-            LOG_DEBUG("Trying library path: " + path);
-            if (libraryLoader->load(path)) {
-                LOG_INFO("Loaded library classes (rt.jar)");
-                libraryLoaded = true;
-                break;
-            }
-        }
-        
-        if (!libraryLoaded) {
-            LOG_ERROR("Warning: rt.jar not found. Library classes might be missing.");
-        }
-        
-        // Create interpreter
-        j2me::core::Interpreter interpreter(*libraryLoader);
-        interpreter.setLibraryLoader(libraryLoader);
-        j2me::core::NativeRegistry::getInstance().setInterpreter(&interpreter);
-        
-        // Get class name from file path
-        std::string className = filePath;
-        
-        LOG_DEBUG("Original file path: " + className);
-        
-        // Remove .class extension first
-        if (className.length() >= 6 && className.substr(className.length() - 6) == ".class") {
-            className = className.substr(0, className.length() - 6);
-        }
-        
-        LOG_DEBUG("After removing .class: " + className);
-        
-        // Find the last directory separator
-        size_t lastSep = className.find_last_of("/\\");
-        if (lastSep != std::string::npos) {
-            // Extract part after last separator
-            className = className.substr(lastSep + 1);
-        }
-        
-        LOG_DEBUG("After extracting filename: " + className);
-        
-        // Replace . with / for package names
-        std::replace(className.begin(), className.end(), '.', '/');
-        
-        LOG_DEBUG("Resolved class name: " + className);
+        // Get class name from file path or config
+        std::string className = config.mainClassName;
         
         // Create JavaClass from parsed class file
         auto javaClass = std::make_shared<j2me::core::JavaClass>(classFile);
@@ -242,10 +171,6 @@ int main(int argc, char* argv[]) {
         bool isMIDlet = isMIDletClass(javaClass);
         bool hasMain = hasMainMethod(javaClass);
         
-        LOG_INFO("Class: " + className);
-        LOG_INFO("Is MIDlet: " + std::string(isMIDlet ? "yes" : "no"));
-        LOG_INFO("Has main method: " + std::string(hasMain ? "yes" : "no"));
-        
         // If it has main method and is not a MIDlet, run main and exit
         if (hasMain && !isMIDlet) {
             LOG_INFO("Running main method (headless mode)...");
@@ -272,49 +197,200 @@ int main(int argc, char* argv[]) {
                     
                     interpreter.execute(frame);
                     LOG_INFO("main method completed.");
-                    return 0;
+                    return;
+                }
+            }
+        }
+        
+        if (isMIDlet) {
+             LOG_INFO("Running MIDlet (GUI mode)...");
+             // Instantiate and prepare for loop
+             // For single class MIDlet, we need to alloc and init
+             auto cls = interpreter.resolveClass(className);
+             midletInstance.reset(j2me::core::HeapManager::getInstance().allocate(cls));
+             
+             // Call <init>
+             for (const auto& method : classFile->methods) {
+                auto name = std::dynamic_pointer_cast<j2me::core::ConstantUtf8>(classFile->constant_pool[method.name_index]);
+                if (name->bytes == "<init>") {
+                     auto frame = std::make_shared<j2me::core::StackFrame>(method, classFile);
+                     j2me::core::JavaValue vThis; vThis.type = j2me::core::JavaValue::REFERENCE; vThis.val.ref = midletInstance.get();
+                     frame->setLocal(0, vThis);
+                     interpreter.execute(frame);
+                     break;
                 }
             }
             
-            LOG_ERROR("main method not found!");
-            return 1;
-        }
-        
-        // If it's a MIDlet, we need to run it with GUI
-        if (isMIDlet) {
-            LOG_INFO("Running MIDlet (GUI mode)...");
-            // Fall through to the GUI code below
+            // Call startApp
+            // ... (similar to below, but for single class)
+             // Check inheritance (simplified)
+            auto currentCls = cls;
+            bool startAppFound = false;
+            while (currentCls) {
+                for (const auto& method : currentCls->rawFile->methods) {
+                    auto name = std::dynamic_pointer_cast<j2me::core::ConstantUtf8>(currentCls->rawFile->constant_pool[method.name_index]);
+                    if (name->bytes == "startApp") {
+                            auto frame = std::make_shared<j2me::core::StackFrame>(method, currentCls->rawFile);
+                            j2me::core::JavaValue vThis; vThis.type = j2me::core::JavaValue::REFERENCE; vThis.val.ref = midletInstance.get();
+                            frame->setLocal(0, vThis);
+                            interpreter.execute(frame);
+                            startAppFound = true;
+                            break;
+                    }
+                }
+                if (startAppFound) break;
+                currentCls = currentCls->superClass;
+            }
         } else {
             LOG_ERROR("Class is not a MIDlet and has no main method. Cannot run.");
-            return 1;
+            return;
+        }
+
+    } else {
+        // JAR Mode
+        if (config.appLoader->hasFile(config.mainClassName)) {
+            auto classData = config.appLoader->getFile(config.mainClassName);
+            if (classData) {
+                LOG_INFO("Found " + config.mainClassName + ", parsing...");
+                try {
+                    j2me::core::ClassParser parser;
+                    auto classFile = parser.parse(*classData);
+                    LOG_INFO("Successfully parsed class file!");
+                    
+                    // 1. Create instance (ALLOC)
+                    LOG_INFO("Resolving main class...");
+                    // remove .class if present
+                    std::string clsName = config.mainClassName;
+                    if (clsName.size() >= 6 && clsName.substr(clsName.size()-6) == ".class") 
+                        clsName = clsName.substr(0, clsName.size()-6);
+                        
+                    auto cls = interpreter.resolveClass(clsName); 
+                    LOG_INFO("Allocating instance..." + clsName);
+                    midletInstance.reset(j2me::core::HeapManager::getInstance().allocate(cls));
+
+                    // 2. Call constructor (init)
+                    LOG_INFO("Finding <init>..." + clsName);
+                    for (const auto& method : classFile->methods) {
+                        auto name = std::dynamic_pointer_cast<j2me::core::ConstantUtf8>(classFile->constant_pool[method.name_index]);
+                        if (name->bytes == "<init>") {
+                             LOG_INFO("Executing <init>..." + clsName);
+                             auto frame = std::make_shared<j2me::core::StackFrame>(method, classFile);
+                             j2me::core::JavaValue vThis; vThis.type = j2me::core::JavaValue::REFERENCE; vThis.val.ref = midletInstance.get();
+                             frame->setLocal(0, vThis);
+                             interpreter.execute(frame);
+                             break;
+                        }
+                    }
+                    LOG_INFO("<init> done." + clsName);
+                    
+                    // 3. Call startApp()
+                    LOG_INFO("Looking for startApp method...");
+                    auto currentCls = cls;
+                    bool startAppFound = false;
+                    
+                    while (currentCls) {
+                        for (const auto& method : currentCls->rawFile->methods) {
+                            auto name = std::dynamic_pointer_cast<j2me::core::ConstantUtf8>(currentCls->rawFile->constant_pool[method.name_index]);
+                            if (name->bytes == "startApp") {
+                                 LOG_INFO("Calling startApp() in class " + currentCls->name);
+                                 auto frame = std::make_shared<j2me::core::StackFrame>(method, currentCls->rawFile);
+                                 j2me::core::JavaValue vThis; vThis.type = j2me::core::JavaValue::REFERENCE; vThis.val.ref = midletInstance.get();
+                                 frame->setLocal(0, vThis);
+                                 interpreter.execute(frame);
+                                 LOG_INFO("startApp() done.");
+                                 startAppFound = true;
+                                 break;
+                           }
+                        }
+                        if (startAppFound) break;
+                        currentCls = currentCls->superClass;
+                    }
+                    
+                    if (!startAppFound) {
+                        LOG_INFO("startApp not found in hierarchy.");
+                    }
+                    
+                } catch (const std::exception& e) {
+                    LOG_ERROR("Exception during VM execution: " + std::string(e.what()));
+                    std::exit(1);
+                }
+            }
         }
     }
     
-    // For .jar files or MIDlets, continue with the existing GUI code
-    LOG_INFO("Loading JAR: " + filePath);
+    // Enter VM Loop (handle events from queue, render)
+    LOG_INFO("Entering VM Event Loop...");
+    j2me::core::EventLoop& eventLoop = j2me::core::EventLoop::getInstance();
+    while (!eventLoop.shouldExit()) {
+        try {
+            eventLoop.dispatchEvents(&interpreter);
+            j2me::core::TimerManager::getInstance().tick(&interpreter);
+            eventLoop.render(&interpreter);
+        } catch (const std::exception& e) {
+             LOG_ERROR("Exception in VM Loop: " + std::string(e.what()));
+             std::exit(1);
+        }
+        
+        // Small sleep to yield CPU and prevent 100% usage on VM thread
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    LOG_INFO("VM Thread Exiting...");
+    std::exit(0);
+}
 
-    j2me::loader::JarLoader loader;
-    if (!loader.load(filePath)) {
-        LOG_ERROR("Failed to load JAR file.");
+int main(int argc, char* argv[]) {
+    // Auto-exit after 120 seconds
+    std::thread([]() {
+        std::this_thread::sleep_for(std::chrono::seconds(120));
+        std::cout << "\n[System] Timeout reached (120s). Exiting process.\n" << std::endl;
+        std::exit(0);
+    }).detach();
+
+    if (argc < 2) {
+        std::cout << "Usage: j2me-vm [--log-level LEVEL] <path_to_jar_or_class>" << std::endl;
+        std::cout << "  LEVEL: debug, info, error, none (default: info)" << std::endl;
         return 1;
     }
-    j2me::core::NativeRegistry::getInstance().setJarLoader(&loader);
 
-    auto manifest = loader.getManifest();
-    if (manifest) {
-        LOG_INFO("Manifest found:\n" + *manifest);
-    } else {
-        LOG_INFO("No Manifest found.");
+    // Parse command line arguments
+    VMConfig config;
+    config.logLevel = j2me::core::LogLevel::INFO;
+
+    for (int i = 1; i < argc; i++) {
+        std::string arg = argv[i];
+        if (arg == "--log-level" && i + 1 < argc) {
+            std::string levelStr = argv[++i];
+            if (levelStr == "debug") {
+                config.logLevel = j2me::core::LogLevel::DEBUG;
+            } else if (levelStr == "info") {
+                config.logLevel = j2me::core::LogLevel::INFO;
+            } else if (levelStr == "error") {
+                config.logLevel = j2me::core::LogLevel::ERROR;
+            } else if (levelStr == "none") {
+                config.logLevel = j2me::core::LogLevel::NONE;
+            } else {
+                std::cerr << "Invalid log level: " << levelStr << std::endl;
+                return 1;
+            }
+        } else if (arg[0] != '-') {
+            config.filePath = arg;
+        }
     }
 
-    // Initialize SDL
+    if (config.filePath.empty()) {
+        std::cerr << "Error: No file specified" << std::endl;
+        return 1;
+    }
+
+    // Check if it's a .class file
+    config.isClass = isClassFile(config.filePath);
+    
+    // Set log level global
+    j2me::core::Logger::getInstance().setLevel(config.logLevel);
+
+    // Initialize SDL (MUST BE ON MAIN THREAD)
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
-        // Just print error and continue if headless, but we really need it for InputTest
         LOG_ERROR("SDL could not initialize! SDL_Error: " + std::string(SDL_GetError()));
-        // return 1; // Don't return, maybe we can run in headless mode? 
-        // But InputTest needs events.
-        // In the sandbox, maybe we have a dummy driver?
-        // Let's assume we can proceed or mock it if fails.
     } else {
         LOG_INFO("SDL Initialized.");
     }
@@ -330,367 +406,134 @@ int main(int argc, char* argv[]) {
     }
     LOG_INFO("Window Created.");
     
-    // Init Graphics Context (even if window is null, it might handle it safely?)
+    // Init Graphics Context
     j2me::platform::GraphicsContext::getInstance().init(window);
-
-    // Load Main Class
-    std::string mainClassName = "HelloWorld.class";
-
-    if (manifest) {
-        // Parse Manifest string line by line
-        std::string content = *manifest;
-        std::string midlet1Line;
-        
-        size_t pos = 0;
-        while (pos < content.length()) {
-            size_t end = content.find('\n', pos);
-            if (end == std::string::npos) end = content.length();
-            
-            std::string line = content.substr(pos, end - pos);
-            // Remove \r if present
-            if (!line.empty() && line.back() == '\r') line.pop_back();
-            
-            if (line.rfind("MIDlet-1:", 0) == 0) { // Starts with "MIDlet-1:"
-                midlet1Line = line.substr(9); // Skip "MIDlet-1:"
-                // Handle continuation lines? J2ME Manifests can wrap lines.
-                // But usually MIDlet-1 fits or we just take what we have for now.
-                break;
-            }
-            
-            pos = end + 1;
-        }
-
-        if (!midlet1Line.empty()) {
-             // Parse MIDlet-1: Name, Icon, Class
-             // e.g. "仙剑奇侠传, /sword.png, pal.GameMIDlet"
-             size_t firstComma = midlet1Line.find(',');
-             if (firstComma != std::string::npos) {
-                 size_t secondComma = midlet1Line.find(',', firstComma + 1);
-                 if (secondComma != std::string::npos) {
-                     std::string className = midlet1Line.substr(secondComma + 1);
-                     // Trim spaces
-                     size_t start = className.find_first_not_of(" \t");
-                     if (start != std::string::npos) {
-                         className = className.substr(start);
-                         size_t end = className.find_last_not_of(" \t");
-                         if (end != std::string::npos) {
-                             className = className.substr(0, end + 1);
-                         }
-                     }
-                     
-                     // Replace . with /
-                     std::replace(className.begin(), className.end(), '.', '/');
-                     
-                     mainClassName = className + ".class";
-                     LOG_INFO("Found MIDlet-1 class: " + mainClassName);
-                 }
-             }
-        }
-    }
     
-    // Fallback if not found in Manifest or Manifest missing
-    if (!loader.hasFile(mainClassName)) {
-        // Fallback logic
-        if (!loader.hasFile(mainClassName)) {
-            mainClassName = "Point.class";
-        }
-        if (!loader.hasFile(mainClassName)) {
-            mainClassName = "GraphicsTest.class";
-        }
-        if (!loader.hasFile(mainClassName)) {
-            mainClassName = "InputTest.class"; // New input test
-        }
-        if (!loader.hasFile(mainClassName)) {
-            mainClassName = "ResourceTest.class";
-        }
-        if (!loader.hasFile(mainClassName)) {
-            mainClassName = "RMSTest.class";
-        }
-        if (!loader.hasFile(mainClassName)) {
-            mainClassName = "ImageTest.class";
-        }
-    }
-
-    // Load library classes (rt.jar)
-    auto libraryLoader = std::make_shared<j2me::loader::JarLoader>();
+    // Load Loaders
+    config.appLoader = std::make_shared<j2me::loader::JarLoader>();
+    config.libraryLoader = std::make_shared<j2me::loader::JarLoader>();
+    
+    // Load Library
     bool libraryLoaded = false;
-    
-    // Try multiple possible paths for rt.jar
     std::vector<std::string> libraryPaths;
     
-    // First, try to find rt.jar relative to the JAR file
-    if (!filePath.empty()) {
-        // Find the last '/' or '\' to get the directory
-        size_t lastSlash = filePath.find_last_of("/\\");
+    if (!config.filePath.empty()) {
+        size_t lastSlash = config.filePath.find_last_of("/\\");
         if (lastSlash != std::string::npos) {
-            std::string jarDir = filePath.substr(0, lastSlash);
-            
-            // Try stubs/rt.jar relative to JAR directory
-            std::string path1 = jarDir + "/stubs/rt.jar";
-            libraryPaths.push_back(path1);
-            LOG_DEBUG("Trying library path (relative to JAR): " + path1);
-            
-            // Try ../stubs/rt.jar relative to JAR directory
-            std::string path2 = jarDir + "/../stubs/rt.jar";
-            libraryPaths.push_back(path2);
-            LOG_DEBUG("Trying library path (relative to JAR parent): " + path2);
+            std::string jarDir = config.filePath.substr(0, lastSlash);
+            libraryPaths.push_back(jarDir + "/stubs/rt.jar");
+            libraryPaths.push_back(jarDir + "/../stubs/rt.jar");
         }
     }
-    
-    // Try absolute path
-    std::string absPath = "/Users/zhengzihang/my-src/j2me-vm/stubs/rt.jar";
-    libraryPaths.push_back(absPath);
-    LOG_DEBUG("Trying library path (absolute): " + absPath);
-    
-    // Try relative paths
+    libraryPaths.push_back("/Users/zhengzihang/my-src/j2me-vm/stubs/rt.jar");
     libraryPaths.push_back("stubs/rt.jar");
     libraryPaths.push_back("../stubs/rt.jar");
     
     for (const auto& path : libraryPaths) {
         LOG_INFO("Trying library path: " + path);
-        if (libraryLoader->load(path)) {
+        if (config.libraryLoader->load(path)) {
             LOG_INFO("Loaded library classes (rt.jar)");
             libraryLoaded = true;
             break;
-        } else {
-            LOG_INFO("Failed to load library from: " + path);
         }
     }
     
     if (!libraryLoaded) {
         LOG_ERROR("Warning: rt.jar not found. Library classes might be missing.");
     }
-
-    std::shared_ptr<j2me::core::JavaObject> midletInstance;
-    j2me::core::Interpreter interpreter(loader);
-    interpreter.setLibraryLoader(libraryLoader);
-    j2me::core::NativeRegistry::getInstance().setInterpreter(&interpreter);
-
-    if (loader.hasFile(mainClassName)) {
-        auto classData = loader.getFile(mainClassName);
-        if (classData) {
-            LOG_INFO("Found " + mainClassName + ", parsing...");
-            try {
-                j2me::core::ClassParser parser;
-                auto classFile = parser.parse(*classData);
-                LOG_INFO("Successfully parsed class file!");
-                
-                // For GraphicsTest, we want to create instance and call paint(Graphics)
-                // 1. Create instance (ALLOC)
-                LOG_INFO("Resolving main class...");
-                auto cls = interpreter.resolveClass(mainClassName.substr(0, mainClassName.length()-6)); // remove .class
-                LOG_INFO("Allocating instance..." + mainClassName);
-                midletInstance.reset(j2me::core::HeapManager::getInstance().allocate(cls));
-
-                // 2. Call constructor (init) if needed
-                // We assume 0-arg constructor for GraphicsTest
-                // We need to find <init> method
-                LOG_INFO("Finding <init>..." + mainClassName);
-                for (const auto& method : classFile->methods) {
-                    auto name = std::dynamic_pointer_cast<j2me::core::ConstantUtf8>(classFile->constant_pool[method.name_index]);
-                    if (name->bytes == "<init>") {
-                         LOG_INFO("Executing <init>..." + mainClassName);
-                         auto frame = std::make_shared<j2me::core::StackFrame>(method, classFile);
-                         // Set 'this'
-                         j2me::core::JavaValue vThis; vThis.type = j2me::core::JavaValue::REFERENCE; vThis.val.ref = midletInstance.get();
-                         frame->setLocal(0, vThis);
-                         interpreter.execute(frame);
-                         break;
-                    }
-                }
-                LOG_INFO("<init> done." + mainClassName);
-                
-                // 3. Call startApp() if it is a MIDlet
-                // Check inheritance (simplified)
-                // Assuming it is a MIDlet for now if it has startApp
-                LOG_INFO("Looking for startApp method...");
-                for (const auto& method : cls->rawFile->methods) {
-                    auto name = std::dynamic_pointer_cast<j2me::core::ConstantUtf8>(cls->rawFile->constant_pool[method.name_index]);
-                    auto desc = std::dynamic_pointer_cast<j2me::core::ConstantUtf8>(cls->rawFile->constant_pool[method.descriptor_index]);
-                    LOG_DEBUG("Found method: " + name->bytes + desc->bytes);
-                    if (name->bytes == "startApp") {
-                         LOG_INFO("Calling startApp()...");
-                         LOG_DEBUG("Method has " + std::to_string(method.attributes.size()) + " attributes");
-                         for (const auto& attr : method.attributes) {
-                             auto attrName = std::dynamic_pointer_cast<j2me::core::ConstantUtf8>(cls->rawFile->constant_pool[attr.attribute_name_index]);
-                             LOG_DEBUG("  Attribute: " + attrName->bytes);
-                         }
-                        auto frame = std::make_shared<j2me::core::StackFrame>(method, cls->rawFile);
-                        j2me::core::JavaValue vThis; vThis.type = j2me::core::JavaValue::REFERENCE; vThis.val.ref = midletInstance.get();
-                        frame->setLocal(0, vThis);
-                        interpreter.execute(frame);
-                        LOG_INFO("startApp() done.");
-                        break;
-                   }
-               }
-               
-               // Let's run 'main' if it exists (for console tests)
-               // Or if it is a Canvas, we'll drive it in the loop.
-               
-               bool hasMain = false;
-               for (const auto& method : cls->rawFile->methods) {
-                   auto name = std::dynamic_pointer_cast<j2me::core::ConstantUtf8>(cls->rawFile->constant_pool[method.name_index]);
-                   if (name->bytes == "main") {
-                        auto frame = std::make_shared<j2me::core::StackFrame>(method, cls->rawFile);
-                        interpreter.execute(frame);
-                        hasMain = true;
-                        break;
-                   }
-               }
-               
-               if (!hasMain) {
-                    LOG_INFO("No main method, assuming Canvas/MIDlet...");
-               }
-
-            } catch (const std::exception& e) {
-                LOG_ERROR("Failed to run class file: " + std::string(e.what()));
-                return 1;
-            }
+    
+    if (config.isClass) {
+        config.classData = readClassFile(config.filePath);
+        if (!config.classData) {
+            LOG_ERROR("Failed to read .class file: " + config.filePath);
+            return 1;
         }
+        
+        // Resolve class name
+        std::string className = config.filePath;
+        if (className.length() >= 6 && className.substr(className.length() - 6) == ".class") {
+            className = className.substr(0, className.length() - 6);
+        }
+        size_t lastSep = className.find_last_of("/\\");
+        if (lastSep != std::string::npos) {
+            className = className.substr(lastSep + 1);
+        }
+        std::replace(className.begin(), className.end(), '.', '/');
+        config.mainClassName = className;
+        
     } else {
-        LOG_ERROR(mainClassName + " not found in JAR");
-    }
-
-    // Main loop flag
-    bool quit = false;
-    SDL_Event e;
-
-    // Key mapping helper
-    auto mapKey = [](SDL_Keycode key) -> int {
-        switch (key) {
-            case SDLK_UP: return 1; // UP
-            case SDLK_DOWN: return 6; // DOWN
-            case SDLK_LEFT: return 2; // LEFT
-            case SDLK_RIGHT: return 5; // RIGHT
-            case SDLK_RETURN: return 8; // FIRE
-            case SDLK_0: return 48;
-            case SDLK_1: return 49;
-            case SDLK_2: return 50;
-            case SDLK_3: return 51;
-            case SDLK_4: return 52;
-            case SDLK_5: return 53;
-            case SDLK_6: return 54;
-            case SDLK_7: return 55;
-            case SDLK_8: return 56;
-            case SDLK_9: return 57;
-            // case SDLK_8: return 42; // STAR (Duplicate case label)
-            // Just basic mapping
-            default: return 0;
+        // JAR Mode
+        LOG_INFO("Loading JAR: " + config.filePath);
+        if (!config.appLoader->load(config.filePath)) {
+            LOG_ERROR("Failed to load JAR file.");
+            return 1;
         }
-    };
-
-    // While application is running
-    while (!quit) {
-        try {
-            // Handle events on queue
-            while (SDL_PollEvent(&e) != 0) {
-                // User requests quit
-                if (e.type == SDL_QUIT) {
-                    quit = true;
-                } else if (e.type == SDL_KEYDOWN) {
-                     int keyCode = mapKey(e.key.keysym.sym);
-                     if (keyCode != 0 && midletInstance) {
-                         // Call keyPressed(keyCode)
-                         auto cls = midletInstance->cls;
-                         for (const auto& method : cls->rawFile->methods) {
-                             auto name = std::dynamic_pointer_cast<j2me::core::ConstantUtf8>(cls->rawFile->constant_pool[method.name_index]);
-                             if (name->bytes == "keyPressed") {
-                                 auto frame = std::make_shared<j2me::core::StackFrame>(method, cls->rawFile);
-                                 
-                                 // Push 'this'
-                                 j2me::core::JavaValue vThis; vThis.type = j2me::core::JavaValue::REFERENCE; vThis.val.ref = midletInstance.get();
-                                 frame->setLocal(0, vThis);
-                                 
-                                 // Push keyCode
-                                 j2me::core::JavaValue vKey; vKey.type = j2me::core::JavaValue::INT; vKey.val.i = keyCode;
-                                 frame->setLocal(1, vKey);
-                                 
-                                 interpreter.execute(frame);
-                                 break;
-                             }
-                         }
-                     }
+        
+        auto manifest = config.appLoader->getManifest();
+        if (manifest) {
+            LOG_INFO("Manifest found:\n" + *manifest);
+            // Parse MIDlet-1
+            std::string content = *manifest;
+            std::string midlet1Line;
+            size_t pos = 0;
+            while (pos < content.length()) {
+                size_t end = content.find('\n', pos);
+                if (end == std::string::npos) end = content.length();
+                std::string line = content.substr(pos, end - pos);
+                if (!line.empty() && line.back() == '\r') line.pop_back();
+                if (line.rfind("MIDlet-1:", 0) == 0) {
+                    midlet1Line = line.substr(9);
+                    break;
                 }
+                pos = end + 1;
             }
-            
-            // If we have an instance (Canvas), call paint(Graphics)
-            // Use getCurrentDisplayable() instead of midletInstance
-            j2me::core::JavaObject* displayable = j2me::natives::getCurrentDisplayable();
-            
-            if (displayable) {
-                 // Create a Graphics object
-                 // For Phase 3, we just create a dummy JavaObject for Graphics
-                 // We need to load Graphics class first?
-                 // Let's cheat and pass null as Graphics for now? 
-                 // No, the native methods pop 'this' (Graphics).
-                 // So we need a Graphics instance.
-                 
-                 static std::shared_ptr<j2me::core::JavaClass> graphicsCls;
-                 if (!graphicsCls) {
-                     graphicsCls = interpreter.resolveClass("javax/microedition/lcdui/Graphics");
-                 }
-                 
-                 if (graphicsCls) {
-                     j2me::core::JavaObject* g = j2me::core::HeapManager::getInstance().allocate(graphicsCls);
-                     
-                     // Find paint method
-                     auto cls = displayable->cls;
-                     // Need to walk up hierarchy if not found!
-                     // GraphicsTest extends Canvas. paint is in GraphicsTest.
-                     // So simple lookup should work.
-                     
-                     bool found = false;
-                     // Walk up the class hierarchy to find paint
-                     auto currentCls = cls;
-                     while (currentCls) {
-                         for (const auto& method : currentCls->rawFile->methods) {
-                             auto name = std::dynamic_pointer_cast<j2me::core::ConstantUtf8>(currentCls->rawFile->constant_pool[method.name_index]);
-                             if (name->bytes == "paint") {
-                                 auto frame = std::make_shared<j2me::core::StackFrame>(method, currentCls->rawFile);
-                                 
-                                 // Push 'this' (Canvas)
-                                 j2me::core::JavaValue vThis; vThis.type = j2me::core::JavaValue::REFERENCE; vThis.val.ref = displayable;
-                                 frame->setLocal(0, vThis);
-                                 
-                                 // Push 'g' (Graphics)
-                                 j2me::core::JavaValue vG; vG.type = j2me::core::JavaValue::REFERENCE; vG.val.ref = g;
-                                 frame->setLocal(1, vG);
-                                 
-                                 interpreter.execute(frame);
-                                 found = true;
-                                 break;
-                             }
-                     }
-                     if (found) break;
-                     currentCls = currentCls->superClass;
-                 }
-
-                 if (!found) {
-                     static bool warned = false;
-                     if (!warned) {
-                         LOG_ERROR("Warning: paint method not found in " + cls->name);
-                         warned = true;
+            if (!midlet1Line.empty()) {
+                 size_t firstComma = midlet1Line.find(',');
+                 if (firstComma != std::string::npos) {
+                     size_t secondComma = midlet1Line.find(',', firstComma + 1);
+                     if (secondComma != std::string::npos) {
+                         std::string className = midlet1Line.substr(secondComma + 1);
+                         size_t start = className.find_first_not_of(" \t");
+                         if (start != std::string::npos) className = className.substr(start);
+                         size_t end = className.find_last_not_of(" \t");
+                         if (end != std::string::npos) className = className.substr(0, end + 1);
+                         std::replace(className.begin(), className.end(), '.', '/');
+                         config.mainClassName = className + ".class";
+                         LOG_INFO("Found MIDlet-1 class: " + config.mainClassName);
                      }
                  }
-             } else {
-                 // std::cerr << "Could not load Graphics class!" << std::endl;
-             }
             }
-            
-            // SDL Update happens inside GraphicsContext natives, but we can do it here too
-            j2me::platform::GraphicsContext::getInstance().update();
-            SDL_Delay(16); // ~60FPS
-        } catch (const std::exception& e) {
-            LOG_ERROR("Runtime error in main loop: " + std::string(e.what()));
-            quit = true;
+        } else {
+             LOG_INFO("No Manifest found.");
+        }
+        
+        if (config.mainClassName.empty()) {
+            config.mainClassName = "HelloWorld.class";
+            // Fallback logic
+            if (!config.appLoader->hasFile(config.mainClassName)) config.mainClassName = "Point.class";
+            if (!config.appLoader->hasFile(config.mainClassName)) config.mainClassName = "GraphicsTest.class";
+            if (!config.appLoader->hasFile(config.mainClassName)) config.mainClassName = "InputTest.class";
+            if (!config.appLoader->hasFile(config.mainClassName)) config.mainClassName = "ResourceTest.class";
+            if (!config.appLoader->hasFile(config.mainClassName)) config.mainClassName = "RMSTest.class";
+            if (!config.appLoader->hasFile(config.mainClassName)) config.mainClassName = "ImageTest.class";
         }
     }
 
-    // Destroy window
-    SDL_DestroyWindow(window);
+    // Launch VM Thread
+    LOG_INFO("Launching VM Thread...");
+    std::thread vmThread(runVM, config);
+    vmThread.detach();
 
-    // Quit SDL subsystems
-    SDL_Quit();
-
+    // Main Thread Event Loop
+    LOG_INFO("Entering Main Event Loop (SDL)...");
+    j2me::core::EventLoop& eventLoop = j2me::core::EventLoop::getInstance();
+    while (!eventLoop.shouldExit()) {
+        eventLoop.pollSDL();
+        // Update screen from backbuffer
+        j2me::platform::GraphicsContext::getInstance().update();
+        std::this_thread::sleep_for(std::chrono::milliseconds(16)); // ~60 FPS
+    }
+    
+    LOG_INFO("Main Thread Exiting...");
     return 0;
 }

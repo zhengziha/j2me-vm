@@ -114,7 +114,7 @@ void registerGraphicsNatives() {
     );
 
     // javax/microedition/lcdui/Graphics.drawImage(Ljavax/microedition/lcdui/Image;III)V
-    registry.registerNative("javax/microedition/lcdui/Graphics", "drawImage", "(Ljavax/microedition/lcdui/Image;III)V", 
+    registry.registerNative("javax/microedition/lcdui/Graphics", "drawImageNative", "(Ljavax/microedition/lcdui/Image;III)V", 
         [](std::shared_ptr<j2me::core::StackFrame> frame) {
             int anchor = frame->pop().val.i;
             int y = frame->pop().val.i;
@@ -149,7 +149,7 @@ void registerGraphicsNatives() {
     );
 
     // javax/microedition/lcdui/Graphics.drawLine(IIII)V
-    registry.registerNative("javax/microedition/lcdui/Graphics", "drawLine", "(IIII)V", 
+    registry.registerNative("javax/microedition/lcdui/Graphics", "drawLineNative", "(IIII)V", 
         [](std::shared_ptr<j2me::core::StackFrame> frame) {
             int y2 = frame->pop().val.i;
             int x2 = frame->pop().val.i;
@@ -162,7 +162,7 @@ void registerGraphicsNatives() {
     );
 
     // javax/microedition/lcdui/Graphics.fillRect(IIII)V
-    registry.registerNative("javax/microedition/lcdui/Graphics", "fillRect", "(IIII)V", 
+    registry.registerNative("javax/microedition/lcdui/Graphics", "fillRectNative", "(IIII)V", 
         [](std::shared_ptr<j2me::core::StackFrame> frame) {
             int h = frame->pop().val.i;
             int w = frame->pop().val.i;
@@ -175,7 +175,7 @@ void registerGraphicsNatives() {
     );
 
     // javax/microedition/lcdui/Graphics.setColor(III)V
-    registry.registerNative("javax/microedition/lcdui/Graphics", "setColor", "(III)V", 
+    registry.registerNative("javax/microedition/lcdui/Graphics", "setColorNative", "(III)V", 
         [](std::shared_ptr<j2me::core::StackFrame> frame) {
             int b = frame->pop().val.i;
             int g = frame->pop().val.i;
@@ -187,7 +187,7 @@ void registerGraphicsNatives() {
     );
     
     // javax/microedition/lcdui/Graphics.drawString(Ljava/lang/String;III)V
-    registry.registerNative("javax/microedition/lcdui/Graphics", "drawString", "(Ljava/lang/String;III)V", 
+    registry.registerNative("javax/microedition/lcdui/Graphics", "drawStringNative", "(Ljava/lang/String;III)V", 
         [](std::shared_ptr<j2me::core::StackFrame> frame) {
             int anchor = frame->pop().val.i;
             int y = frame->pop().val.i;

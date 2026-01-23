@@ -1,6 +1,8 @@
 #include "java_lang_Thread.hpp"
 #include "../core/NativeRegistry.hpp"
 #include "../core/StackFrame.hpp"
+#include "../core/EventLoop.hpp"
+#include "../core/TimerManager.hpp"
 #include <thread>
 #include <chrono>
 #include <iostream>
@@ -13,7 +15,7 @@ void registerThreadNatives() {
 
     // java/lang/Thread.sleep(J)V
     registry.registerNative("java/lang/Thread", "sleep", "(J)V", 
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [&registry](std::shared_ptr<j2me::core::StackFrame> frame) {
             int64_t millis = frame->pop().val.l;
             
             if (millis < 0) {
@@ -22,9 +24,28 @@ void registerThreadNatives() {
                 return;
             }
             
-            // Sleep
-            // std::cout << "Thread.sleep(" << millis << ")" << std::endl;
-            std::this_thread::sleep_for(std::chrono::milliseconds(millis));
+            auto interpreter = registry.getInterpreter();
+            int64_t remaining = millis;
+            
+            // If millis is 0, just yield and process events once
+            if (remaining == 0) {
+                j2me::core::TimerManager::getInstance().tick(interpreter);
+                j2me::core::EventLoop::runSingleStep(interpreter);
+                std::this_thread::yield();
+                return;
+            }
+
+            while (remaining > 0) {
+                // Run event loop (Process Input & Render & Timer)
+                j2me::core::TimerManager::getInstance().tick(interpreter);
+                j2me::core::EventLoop::runSingleStep(interpreter);
+                
+                int64_t step = 16; // ~60 FPS
+                if (step > remaining) step = remaining;
+                
+                std::this_thread::sleep_for(std::chrono::milliseconds(step));
+                remaining -= step;
+            }
         }
     );
 }
