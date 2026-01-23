@@ -47,6 +47,20 @@ std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& classNam
                      } else {
                          javaClass->link(nullptr);
                      }
+
+                     // Resolve interfaces
+                     for (uint16_t interfaceIndex : rawFile->interfaces) {
+                         if (interfaceIndex > 0 && interfaceIndex < rawFile->constant_pool.size()) {
+                             auto interfaceInfo = std::dynamic_pointer_cast<ConstantClass>(rawFile->constant_pool[interfaceIndex]);
+                             if (interfaceInfo) {
+                                 auto interfaceNameInfo = std::dynamic_pointer_cast<ConstantUtf8>(rawFile->constant_pool[interfaceInfo->name_index]);
+                                 if (interfaceNameInfo) {
+                                     auto interfaceClass = resolveClass(interfaceNameInfo->bytes);
+                                     javaClass->interfaces.push_back(interfaceClass);
+                                 }
+                             }
+                         }
+                     }
              
                      loadedClasses[className] = javaClass;
                      return javaClass;
@@ -314,6 +328,20 @@ std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& classNam
         } else {
             // This is java/lang/Object (or invalid)
             javaClass->link(nullptr);
+        }
+
+        // Resolve interfaces
+        for (uint16_t interfaceIndex : rawFile->interfaces) {
+            if (interfaceIndex > 0 && interfaceIndex < rawFile->constant_pool.size()) {
+                auto interfaceInfo = std::dynamic_pointer_cast<ConstantClass>(rawFile->constant_pool[interfaceIndex]);
+                if (interfaceInfo) {
+                    auto interfaceNameInfo = std::dynamic_pointer_cast<ConstantUtf8>(rawFile->constant_pool[interfaceInfo->name_index]);
+                    if (interfaceNameInfo) {
+                        auto interfaceClass = resolveClass(interfaceNameInfo->bytes);
+                        javaClass->interfaces.push_back(interfaceClass);
+                    }
+                }
+            }
         }
 
         loadedClasses[className] = javaClass;

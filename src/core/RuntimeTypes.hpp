@@ -17,6 +17,7 @@ public:
     std::shared_ptr<ClassFile> rawFile;
     std::string name;
     std::shared_ptr<JavaClass> superClass;
+    std::vector<std::shared_ptr<JavaClass>> interfaces;
     
     // Field layout map: name -> offset in object fields vector
     std::map<std::string, size_t> fieldOffsets;

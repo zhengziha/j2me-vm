@@ -131,13 +131,20 @@ void Interpreter::initReferences() {
             }
             
             bool found = false;
-            std::shared_ptr<JavaClass> current = obj->cls;
-            while (current) {
-                if (current->name == className->bytes) {
-                    found = true;
-                    break;
-                }
-                current = current->superClass;
+            
+            std::function<bool(std::shared_ptr<JavaClass>, const std::string&)> isAssignable = 
+                [&](std::shared_ptr<JavaClass> sub, const std::string& target) -> bool {
+                    if (!sub) return false;
+                    if (sub->name == target) return true;
+                    if (isAssignable(sub->superClass, target)) return true;
+                    for (auto& iface : sub->interfaces) {
+                         if (isAssignable(iface, target)) return true;
+                    }
+                    return false;
+                };
+
+            if (isAssignable(obj->cls, className->bytes)) {
+                found = true;
             }
             
             if (!found) {
@@ -167,13 +174,19 @@ void Interpreter::initReferences() {
             if (!obj->cls) {
                  if (className->bytes == "java/lang/Object") isInstance = true;
             } else {
-                 std::shared_ptr<JavaClass> current = obj->cls;
-                 while (current) {
-                     if (current->name == className->bytes) {
-                         isInstance = true;
-                         break;
-                     }
-                     current = current->superClass;
+                 std::function<bool(std::shared_ptr<JavaClass>, const std::string&)> isAssignable = 
+                     [&](std::shared_ptr<JavaClass> sub, const std::string& target) -> bool {
+                         if (!sub) return false;
+                         if (sub->name == target) return true;
+                         if (isAssignable(sub->superClass, target)) return true;
+                         for (auto& iface : sub->interfaces) {
+                              if (isAssignable(iface, target)) return true;
+                         }
+                         return false;
+                     };
+
+                 if (isAssignable(obj->cls, className->bytes)) {
+                     isInstance = true;
                  }
             }
             frame->push(JavaValue{JavaValue::INT, {.i = isInstance ? 1 : 0}});
