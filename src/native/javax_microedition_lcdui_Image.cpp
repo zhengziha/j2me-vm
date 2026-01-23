@@ -18,7 +18,7 @@ void registerImageNatives(j2me::core::NativeRegistry& registry) {
 
     // javax/microedition/lcdui/Image.createImage(Ljava/io/InputStream;)Ljavax/microedition/lcdui/Image;
     registry.registerNative("javax/microedition/lcdui/Image", "createImageNative", "(Ljava/lang/String;)I", 
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             j2me::core::JavaValue nameVal = frame->pop(); // name string
             
             int32_t imgId = 0;
@@ -66,7 +66,7 @@ void registerImageNatives(j2me::core::NativeRegistry& registry) {
 
     // javax/microedition/lcdui/Image.getWidth()I
     registry.registerNative("javax/microedition/lcdui/Image", "getWidth", "()I", 
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             j2me::core::JavaValue thisVal = frame->pop();
             
             j2me::core::JavaValue result;
@@ -94,7 +94,7 @@ void registerImageNatives(j2me::core::NativeRegistry& registry) {
 
     // javax/microedition/lcdui/Image.getHeight()I
     registry.registerNative("javax/microedition/lcdui/Image", "getHeight", "()I", 
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             j2me::core::JavaValue thisVal = frame->pop();
             
             j2me::core::JavaValue result;
@@ -122,7 +122,7 @@ void registerImageNatives(j2me::core::NativeRegistry& registry) {
 
     // javax/microedition/lcdui/Image.getRGBNative(I[IIIIIII)V
     registry.registerNative("javax/microedition/lcdui/Image", "getRGBNative", "(I[IIIIIII)V", 
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             int height = frame->pop().val.i;
             int width = frame->pop().val.i;
             int y = frame->pop().val.i;
@@ -172,7 +172,8 @@ void registerImageNatives(j2me::core::NativeRegistry& registry) {
 
     // javax/microedition/lcdui/Image.createRGBImageNative([IIIZ)I
     registry.registerNative("javax/microedition/lcdui/Image", "createRGBImageNative", "([IIIZ)I", 
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
+            std::cout << "[Image] createRGBImageNative called" << std::endl;
             int processAlpha = frame->pop().val.i;
             int height = frame->pop().val.i;
             int width = frame->pop().val.i;
@@ -222,7 +223,7 @@ void registerImageNatives(j2me::core::NativeRegistry& registry) {
 
     // javax/microedition/lcdui/Image.createMutableImageNative(II)I
     registry.registerNative("javax/microedition/lcdui/Image", "createMutableImageNative", "(II)I", 
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             int height = frame->pop().val.i;
             int width = frame->pop().val.i;
             
@@ -259,7 +260,7 @@ void registerImageNatives(j2me::core::NativeRegistry& registry) {
 
     // javax/microedition/lcdui/Image.isMutableNative(I)Z
     registry.registerNative("javax/microedition/lcdui/Image", "isMutableNative", "(I)Z", 
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             int32_t imgId = frame->pop().val.i;
             
             j2me::core::JavaValue result;
@@ -272,7 +273,7 @@ void registerImageNatives(j2me::core::NativeRegistry& registry) {
 
     // javax/microedition/lcdui/Image.createImageFromDataNative([BII)I
     registry.registerNative("javax/microedition/lcdui/Image", "createImageFromDataNative", "([BII)I", 
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             int length = frame->pop().val.i;
             int offset = frame->pop().val.i;
             j2me::core::JavaValue dataVal = frame->pop();
@@ -357,7 +358,7 @@ void registerImageNatives(j2me::core::NativeRegistry& registry) {
 
     // javax/microedition/lcdui/Image.getGraphicsNative(I)I
     registry.registerNative("javax/microedition/lcdui/Image", "getGraphicsNative", "(I)I", 
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             int32_t imgId = frame->pop().val.i;
             // For now, return the same ID, assuming 1:1 mapping between Image and Graphics context for offscreen
             // Real implementation would need a Graphics object tracking this target

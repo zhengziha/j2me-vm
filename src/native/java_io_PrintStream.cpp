@@ -12,7 +12,7 @@ void registerPrintStreamNatives(j2me::core::NativeRegistry& registry) {
 
     // java/io/PrintStream.println(Ljava/lang/String;)V
     registry.registerNative("java/io/PrintStream", "printlnNative", "(Ljava/lang/String;)V",
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             j2me::core::JavaValue strVal = frame->pop();
             frame->pop(); // this
             
@@ -56,7 +56,7 @@ void registerPrintStreamNatives(j2me::core::NativeRegistry& registry) {
 
     // java/io/PrintStream.printNative(Ljava/lang/String;)V
     registry.registerNative("java/io/PrintStream", "printNative", "(Ljava/lang/String;)V",
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             j2me::core::JavaValue strVal = frame->pop();
             frame->pop(); // this
             

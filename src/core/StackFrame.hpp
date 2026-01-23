@@ -55,6 +55,7 @@ public:
     const MethodInfo& method;
     const std::shared_ptr<ClassFile>& classFile;
     uint32_t pc = 0; // Program Counter
+    std::vector<uint8_t> code; // Cached code
 
 private:
     std::vector<JavaValue> operandStack;

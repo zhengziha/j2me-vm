@@ -11,10 +11,11 @@ namespace j2me {
 namespace core {
 
 class Interpreter;
+class JavaThread;
 
-// Native function signature: void(Frame)
+// Native function signature: void(Thread, Frame)
 // The native function pops arguments from the frame's stack and pushes the result (if any).
-using NativeFunction = std::function<void(std::shared_ptr<StackFrame>)>;
+using NativeFunction = std::function<void(std::shared_ptr<JavaThread>, std::shared_ptr<StackFrame>)>;
 
 class NativeRegistry {
 public:

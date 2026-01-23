@@ -109,7 +109,7 @@ void registerRecordStoreNatives(j2me::core::NativeRegistry& registry) {
 
     // javax/microedition/rms/RecordStore.openRecordStoreNative(Ljava/lang/String;Z)I
     registry.registerNative("javax/microedition/rms/RecordStore", "openRecordStoreNative", "(Ljava/lang/String;Z)I",
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             j2me::core::JavaValue createVal = frame->pop();
             j2me::core::JavaValue nameVal = frame->pop();
             
@@ -151,7 +151,7 @@ void registerRecordStoreNatives(j2me::core::NativeRegistry& registry) {
 
     // javax/microedition/rms/RecordStore.addRecordNative(Ljava/lang/String;[BII)I
     registry.registerNative("javax/microedition/rms/RecordStore", "addRecordNative", "(Ljava/lang/String;[BII)I",
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             j2me::core::JavaValue numBytesVal = frame->pop();
             j2me::core::JavaValue offsetVal = frame->pop();
             j2me::core::JavaValue dataVal = frame->pop();
@@ -237,7 +237,7 @@ void registerRecordStoreNatives(j2me::core::NativeRegistry& registry) {
 
     // javax/microedition/rms/RecordStore.getRecordNative(Ljava/lang/String;I)[B
     registry.registerNative("javax/microedition/rms/RecordStore", "getRecordNative", "(Ljava/lang/String;I)[B",
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             j2me::core::JavaValue recordIdVal = frame->pop();
             j2me::core::JavaValue nameVal = frame->pop();
             
@@ -303,7 +303,7 @@ void registerRecordStoreNatives(j2me::core::NativeRegistry& registry) {
 
     // javax/microedition/rms/RecordStore.deleteRecordNative(Ljava/lang/String;I)V
     registry.registerNative("javax/microedition/rms/RecordStore", "deleteRecordNative", "(Ljava/lang/String;I)V",
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             j2me::core::JavaValue recordIdVal = frame->pop();
             j2me::core::JavaValue nameVal = frame->pop();
             
@@ -354,7 +354,7 @@ void registerRecordStoreNatives(j2me::core::NativeRegistry& registry) {
 
     // javax/microedition/rms/RecordStore.getNumRecordsNative(Ljava/lang/String;)I
     registry.registerNative("javax/microedition/rms/RecordStore", "getNumRecordsNative", "(Ljava/lang/String;)I",
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             j2me::core::JavaValue nameVal = frame->pop();
             
             int numRecords = 0;
@@ -400,7 +400,7 @@ void registerRecordStoreNatives(j2me::core::NativeRegistry& registry) {
 
     // javax/microedition/rms/RecordStore.getSizeNative(Ljava/lang/String;)I
     registry.registerNative("javax/microedition/rms/RecordStore", "getSizeNative", "(Ljava/lang/String;)I",
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             j2me::core::JavaValue nameVal = frame->pop();
             
             int size = 0;
@@ -446,7 +446,7 @@ void registerRecordStoreNatives(j2me::core::NativeRegistry& registry) {
 
     // javax/microedition/rms/RecordStore.getSizeAvailableNative(Ljava/lang/String;)I
     registry.registerNative("javax/microedition/rms/RecordStore", "getSizeAvailableNative", "(Ljava/lang/String;)I",
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             j2me::core::JavaValue nameVal = frame->pop();
             
             int available = 1024 * 1024;
@@ -492,7 +492,7 @@ void registerRecordStoreNatives(j2me::core::NativeRegistry& registry) {
 
     // javax/microedition/rms/RecordStore.closeRecordStoreNative(Ljava/lang/String;)V
     registry.registerNative("javax/microedition/rms/RecordStore", "closeRecordStoreNative", "(Ljava/lang/String;)V",
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             j2me::core::JavaValue nameVal = frame->pop();
             
             if (nameVal.type == j2me::core::JavaValue::REFERENCE && !nameVal.strVal.empty()) {
@@ -505,7 +505,7 @@ void registerRecordStoreNatives(j2me::core::NativeRegistry& registry) {
 
     // javax/microedition/rms/RecordStore.deleteRecordStoreNative(Ljava/lang/String;)V
     registry.registerNative("javax/microedition/rms/RecordStore", "deleteRecordStoreNative", "(Ljava/lang/String;)V",
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             j2me::core::JavaValue nameVal = frame->pop();
             
             if (nameVal.type == j2me::core::JavaValue::REFERENCE && !nameVal.strVal.empty()) {
@@ -525,7 +525,7 @@ void registerRecordStoreNatives(j2me::core::NativeRegistry& registry) {
 
     // javax/microedition/rms/RecordStore.listRecordStoresNative()[Ljava/lang/String;
     registry.registerNative("javax/microedition/rms/RecordStore", "listRecordStoresNative", "()[Ljava/lang/String;",
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             j2me::core::JavaValue result;
             result.type = j2me::core::JavaValue::REFERENCE;
             result.val.ref = nullptr;

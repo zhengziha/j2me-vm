@@ -1,9 +1,9 @@
 #include "java_lang_Thread.hpp"
 #include "../core/NativeRegistry.hpp"
 #include "../core/StackFrame.hpp"
-#include "../core/EventLoop.hpp"
-#include "../core/TimerManager.hpp"
-#include <thread>
+#include "../core/JavaThread.hpp"
+#include "../core/ThreadManager.hpp"
+#include "../core/RuntimeTypes.hpp"
 #include <chrono>
 #include <iostream>
 
@@ -11,51 +11,81 @@ namespace j2me {
 namespace natives {
 
 void registerThreadNatives(j2me::core::NativeRegistry& registry) {
-    // registry passed as argument
+    // java/lang/Thread.start0()V
+    registry.registerNative("java/lang/Thread", "start0", "()V",
+        [&registry](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
+            j2me::core::JavaValue thisObj = frame->pop(); // this Thread object
+            if (thisObj.val.ref == nullptr) {
+                std::cerr << "NullPointerException in Thread.start0" << std::endl;
+                return;
+            }
+            j2me::core::JavaObject* threadObj = (j2me::core::JavaObject*)thisObj.val.ref;
+            
+            // Create new JavaThread
+            // We need an initial frame.
+            // The initial frame should be run() method of the threadObj's class.
+            
+            auto cls = threadObj->cls;
+            // Find run()V
+             bool found = false;
+             j2me::core::MethodInfo runMethod;
+             std::shared_ptr<j2me::core::ClassFile> methodClassFile;
+             
+             // Virtual lookup for run()
+             std::shared_ptr<j2me::core::JavaClass> current = cls;
+             while (current) {
+                 for (const auto& method : current->rawFile->methods) {
+                     auto name = std::dynamic_pointer_cast<j2me::core::ConstantUtf8>(current->rawFile->constant_pool[method.name_index]);
+                     auto desc = std::dynamic_pointer_cast<j2me::core::ConstantUtf8>(current->rawFile->constant_pool[method.descriptor_index]);
+                     if (name && desc && name->bytes == "run" && desc->bytes == "()V") {
+                         runMethod = method;
+                         methodClassFile = current->rawFile;
+                         found = true;
+                         break;
+                     }
+                 }
+                 if (found) break;
+                 current = current->superClass;
+             }
+             
+             if (!found) {
+                 std::cerr << "Could not find run() method in Thread class" << std::endl;
+                 return;
+             }
+             
+             auto newFrame = std::make_shared<j2me::core::StackFrame>(runMethod, methodClassFile);
+             // push 'this' as argument 0
+             j2me::core::JavaValue thisVal; 
+             thisVal.type = j2me::core::JavaValue::REFERENCE; 
+             thisVal.val.ref = threadObj;
+             newFrame->setLocal(0, thisVal);
+             
+             auto newThread = std::make_shared<j2me::core::JavaThread>(newFrame);
+             j2me::core::ThreadManager::getInstance().registerThread(threadObj, newThread);
+        }
+    );
 
     // java/lang/Thread.yield()V
     registry.registerNative("java/lang/Thread", "yield", "()V", 
-        [&registry](std::shared_ptr<j2me::core::StackFrame> frame) {
-            auto interpreter = registry.getInterpreter();
-            j2me::core::TimerManager::getInstance().tick(interpreter);
-            j2me::core::EventLoop::runSingleStep(interpreter);
-            std::this_thread::yield();
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
+            // Just yield to scheduler
+            // No-op as round-robin will switch eventually
         }
     );
 
     // java/lang/Thread.sleep(J)V
     registry.registerNative("java/lang/Thread", "sleep", "(J)V", 
-        [&registry](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             int64_t millis = frame->pop().val.l;
+            if (millis < 0) return; 
             
-            if (millis < 0) {
-                std::cerr << "IllegalArgumentException: timeout value is negative" << std::endl;
-                // Should throw exception
+            if (millis == 0) {
                 return;
             }
             
-            auto interpreter = registry.getInterpreter();
-            int64_t remaining = millis;
-            
-            // If millis is 0, just yield and process events once
-            if (remaining == 0) {
-                j2me::core::TimerManager::getInstance().tick(interpreter);
-                j2me::core::EventLoop::runSingleStep(interpreter);
-                std::this_thread::yield();
-                return;
-            }
-
-            while (remaining > 0) {
-                // Run event loop (Process Input & Render & Timer)
-                j2me::core::TimerManager::getInstance().tick(interpreter);
-                j2me::core::EventLoop::runSingleStep(interpreter);
-                
-                int64_t step = 16; // ~60 FPS
-                if (step > remaining) step = remaining;
-                
-                std::this_thread::sleep_for(std::chrono::milliseconds(step));
-                remaining -= step;
-            }
+            thread->state = j2me::core::JavaThread::TIMED_WAITING;
+            auto now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+            thread->wakeTime = now + millis;
         }
     );
 }

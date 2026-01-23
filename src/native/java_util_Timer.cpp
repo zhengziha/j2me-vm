@@ -11,7 +11,7 @@ void registerTimerNatives(j2me::core::NativeRegistry& registry) {
 
     // java/util/Timer.scheduleImpl(Ljava/util/TimerTask;J)V
     registry.registerNative("java/util/Timer", "scheduleNative", "(Ljava/util/TimerTask;JJ)V", 
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             int64_t period = frame->pop().val.l;
             int64_t delay = frame->pop().val.l;
             j2me::core::JavaValue taskVal = frame->pop();

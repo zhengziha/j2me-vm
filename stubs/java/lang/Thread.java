@@ -19,11 +19,14 @@ public class Thread implements Runnable {
     }
 
     public void start() {
-        alive = true;
-        if (target != null) {
-            target.run();
+        if (alive) {
+             throw new IllegalThreadStateException();
         }
+        alive = true;
+        start0();
     }
+
+    private native void start0();
 
     public void run() {
         if (target != null) {

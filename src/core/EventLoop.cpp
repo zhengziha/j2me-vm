@@ -3,6 +3,7 @@
 #include "HeapManager.hpp"
 #include "../native/javax_microedition_lcdui_Display.hpp"
 #include "../platform/GraphicsContext.hpp"
+#include "ThreadManager.hpp"
 #include <SDL2/SDL.h>
 #include <iostream>
 #include <thread>
@@ -108,12 +109,8 @@ void EventLoop::dispatchEvents(Interpreter* interpreter) {
                         j2me::core::JavaValue vKey; vKey.type = j2me::core::JavaValue::INT; vKey.val.i = keyCode;
                         frame->setLocal(1, vKey);
                         
-                        try {
-                            interpreter->execute(frame);
-                        } catch (const std::exception& e) {
-                            std::cerr << "[EventLoop] Exception in keyPressed: " << e.what() << std::endl;
-                            throw;
-                        }
+                        auto thread = std::make_shared<JavaThread>(frame);
+                        ThreadManager::getInstance().addThread(thread);
                         found = true;
                         break;
                     }
@@ -158,12 +155,20 @@ void EventLoop::render(Interpreter* interpreter) {
                         j2me::core::JavaValue vG; vG.type = j2me::core::JavaValue::REFERENCE; vG.val.ref = g;
                         frame->setLocal(1, vG);
                         
-                        try {
-                            interpreter->execute(frame);
-                        } catch (const std::exception& e) {
-                            std::cerr << "[EventLoop] Exception in paint: " << e.what() << std::endl;
-                            throw;
+                        // Check if already painting
+                        if (!paintingThread.expired()) {
+                            auto ptr = paintingThread.lock();
+                            if (ptr && !ptr->isFinished()) {
+                                // Already painting, skip
+                                found = true;
+                                break;
+                            }
                         }
+
+                        auto thread = std::make_shared<JavaThread>(frame);
+                        paintingThread = thread;
+                        ThreadManager::getInstance().addThread(thread);
+
                         found = true;
                         break;
                     }

@@ -18,7 +18,7 @@ void registerDisplayNatives(j2me::core::NativeRegistry& registry) {
 
     // javax/microedition/lcdui/Canvas.setFullScreenMode(Z)V
     registry.registerNative("javax/microedition/lcdui/Canvas", "setFullScreenMode", "(Z)V", 
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             bool mode = frame->pop().val.i != 0;
             frame->pop(); // this
             std::cout << "[Canvas] setFullScreenMode: " << (mode ? "true" : "false") << std::endl;
@@ -27,7 +27,7 @@ void registerDisplayNatives(j2me::core::NativeRegistry& registry) {
     
     // javax/microedition/lcdui/Displayable.getWidth()I
     registry.registerNative("javax/microedition/lcdui/Displayable", "getWidth", "()I", 
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             frame->pop(); // this
             j2me::core::JavaValue ret;
             ret.type = j2me::core::JavaValue::INT;
@@ -38,7 +38,7 @@ void registerDisplayNatives(j2me::core::NativeRegistry& registry) {
 
     // javax/microedition/lcdui/Displayable.getHeight()I
     registry.registerNative("javax/microedition/lcdui/Displayable", "getHeight", "()I", 
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             frame->pop(); // this
             j2me::core::JavaValue ret;
             ret.type = j2me::core::JavaValue::INT;
@@ -49,7 +49,7 @@ void registerDisplayNatives(j2me::core::NativeRegistry& registry) {
     
     // Also register on Canvas just in case
     registry.registerNative("javax/microedition/lcdui/Canvas", "getWidth", "()I", 
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             frame->pop(); // this
             j2me::core::JavaValue ret;
             ret.type = j2me::core::JavaValue::INT;
@@ -58,7 +58,7 @@ void registerDisplayNatives(j2me::core::NativeRegistry& registry) {
         }
     );
     registry.registerNative("javax/microedition/lcdui/Canvas", "getHeight", "()I", 
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             frame->pop(); // this
             j2me::core::JavaValue ret;
             ret.type = j2me::core::JavaValue::INT;
@@ -69,7 +69,7 @@ void registerDisplayNatives(j2me::core::NativeRegistry& registry) {
 
     // javax/microedition/lcdui/Display.setCurrentNative(Ljavax/microedition/lcdui/Displayable;)V
     registry.registerNative("javax/microedition/lcdui/Display", "setCurrentNative", "(Ljavax/microedition/lcdui/Displayable;)V", 
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             j2me::core::JavaValue displayableVal = frame->pop();
             frame->pop(); // this (Display instance)
             

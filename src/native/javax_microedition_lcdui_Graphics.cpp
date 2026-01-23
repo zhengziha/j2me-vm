@@ -54,7 +54,7 @@ void registerGraphicsNatives(j2me::core::NativeRegistry& registry) {
 
     // javax/microedition/lcdui/Graphics.drawImageNative(Ljavax/microedition/lcdui/Image;III)V
     registry.registerNative("javax/microedition/lcdui/Graphics", "drawImageNative", "(Ljavax/microedition/lcdui/Image;III)V", 
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             int anchor = frame->pop().val.i;
             int y = frame->pop().val.i;
             int x = frame->pop().val.i;
@@ -102,7 +102,7 @@ void registerGraphicsNatives(j2me::core::NativeRegistry& registry) {
 
     // javax/microedition/lcdui/Graphics.drawLineNative(IIII)V
     registry.registerNative("javax/microedition/lcdui/Graphics", "drawLineNative", "(IIII)V", 
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             int y2 = frame->pop().val.i;
             int x2 = frame->pop().val.i;
             int y1 = frame->pop().val.i;
@@ -131,7 +131,7 @@ void registerGraphicsNatives(j2me::core::NativeRegistry& registry) {
 
     // javax/microedition/lcdui/Graphics.fillRectNative(IIII)V
     registry.registerNative("javax/microedition/lcdui/Graphics", "fillRectNative", "(IIII)V", 
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             int h = frame->pop().val.i;
             int w = frame->pop().val.i;
             int y = frame->pop().val.i;
@@ -165,7 +165,7 @@ void registerGraphicsNatives(j2me::core::NativeRegistry& registry) {
 
     // javax/microedition/lcdui/Graphics.setColorNative(III)V
     registry.registerNative("javax/microedition/lcdui/Graphics", "setColorNative", "(III)V", 
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             int b = frame->pop().val.i;
             int g = frame->pop().val.i;
             int r = frame->pop().val.i;
@@ -185,7 +185,7 @@ void registerGraphicsNatives(j2me::core::NativeRegistry& registry) {
     
     // javax/microedition/lcdui/Graphics.drawStringNative(Ljava/lang/String;III)V
     registry.registerNative("javax/microedition/lcdui/Graphics", "drawStringNative", "(Ljava/lang/String;III)V", 
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             int anchor = frame->pop().val.i;
             int y = frame->pop().val.i;
             int x = frame->pop().val.i;
@@ -217,7 +217,7 @@ void registerGraphicsNatives(j2me::core::NativeRegistry& registry) {
 
     // javax/microedition/lcdui/Graphics.setFontNative(Ljavax/microedition/lcdui/Font;)V
     registry.registerNative("javax/microedition/lcdui/Graphics", "setFontNative", "(Ljavax/microedition/lcdui/Font;)V", 
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             frame->pop(); // Font parameter
             frame->pop(); // this
             // Mock implementation: do nothing for now, as we don't have font support yet

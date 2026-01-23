@@ -14,7 +14,7 @@ namespace natives {
 void registerGameCanvasNatives(j2me::core::NativeRegistry& registry) {
     // javax/microedition/lcdui/game/GameCanvas.getKeyStatesNative()I
     registry.registerNative("javax/microedition/lcdui/game/GameCanvas", "getKeyStatesNative", "()I", 
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             frame->pop(); // this
             
             int states = j2me::core::EventLoop::getInstance().getKeyStates();
@@ -28,7 +28,7 @@ void registerGameCanvasNatives(j2me::core::NativeRegistry& registry) {
 
     // javax/microedition/lcdui/game/GameCanvas.flushGraphicsNative(Ljavax/microedition/lcdui/Image;IIII)V
     registry.registerNative("javax/microedition/lcdui/game/GameCanvas", "flushGraphicsNative", "(Ljavax/microedition/lcdui/Image;IIII)V", 
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             int h = frame->pop().val.i;
             int w = frame->pop().val.i;
             int y = frame->pop().val.i;

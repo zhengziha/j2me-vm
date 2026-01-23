@@ -3,8 +3,10 @@
 #include "../core/StackFrame.hpp"
 #include "../core/HeapManager.hpp"
 #include "../core/Interpreter.hpp"
+#include "../core/ThreadManager.hpp"
 #include "java_lang_String.hpp"
 #include <iostream>
+#include <chrono>
 
 namespace j2me {
 namespace natives {
@@ -14,7 +16,7 @@ void registerObjectNatives(j2me::core::NativeRegistry& registry) {
 
     // java/lang/Object.getClass()Ljava/lang/Class;
     registry.registerNative("java/lang/Object", "getClass", "()Ljava/lang/Class;", 
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             j2me::core::JavaValue objVal = frame->pop(); // this
             
             j2me::core::JavaValue ret;
@@ -59,7 +61,7 @@ void registerObjectNatives(j2me::core::NativeRegistry& registry) {
 
     // java/lang/Object.hashCode()I
     registry.registerNative("java/lang/Object", "hashCode", "()I", 
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             j2me::core::JavaValue objVal = frame->pop(); // this
             
             j2me::core::JavaValue ret;
@@ -72,7 +74,7 @@ void registerObjectNatives(j2me::core::NativeRegistry& registry) {
 
     // java/lang/Object.toString()Ljava/lang/String;
     registry.registerNative("java/lang/Object", "toString", "()Ljava/lang/String;", 
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             j2me::core::JavaValue objVal = frame->pop(); // this
             
             std::string str = "Object@" + std::to_string((intptr_t)objVal.val.ref);
@@ -87,6 +89,56 @@ void registerObjectNatives(j2me::core::NativeRegistry& registry) {
             ret.type = j2me::core::JavaValue::REFERENCE;
             ret.strVal = str;
             frame->push(ret);
+        }
+    );
+
+    // java/lang/Object.wait(J)V
+    registry.registerNative("java/lang/Object", "wait", "(J)V", 
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
+             int64_t timeout = frame->pop().val.l;
+             j2me::core::JavaValue thisObj = frame->pop(); // this
+             
+             if (thisObj.val.ref == nullptr) {
+                 // Throw NPE - for now just return
+                 std::cerr << "NullPointerException in Object.wait" << std::endl;
+                 return;
+             }
+             
+             if (timeout < 0) {
+                 std::cerr << "IllegalArgumentException in Object.wait: timeout < 0" << std::endl;
+                 return;
+             }
+             
+             if (timeout == 0) {
+                 thread->state = j2me::core::JavaThread::WAITING;
+                 thread->wakeTime = 0;
+             } else {
+                 thread->state = j2me::core::JavaThread::TIMED_WAITING;
+                 auto now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+                 thread->wakeTime = now + timeout;
+             }
+             
+             thread->waitingOn = thisObj.val.ref;
+        }
+    );
+
+    // java/lang/Object.notify()V
+    registry.registerNative("java/lang/Object", "notify", "()V", 
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
+             j2me::core::JavaValue thisObj = frame->pop(); // this
+             if (thisObj.val.ref == nullptr) return; // NPE
+             
+             j2me::core::ThreadManager::getInstance().notify(thisObj.val.ref);
+        }
+    );
+
+    // java/lang/Object.notifyAll()V
+    registry.registerNative("java/lang/Object", "notifyAll", "()V", 
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
+             j2me::core::JavaValue thisObj = frame->pop(); // this
+             if (thisObj.val.ref == nullptr) return; // NPE
+             
+             j2me::core::ThreadManager::getInstance().notifyAll(thisObj.val.ref);
         }
     );
 }

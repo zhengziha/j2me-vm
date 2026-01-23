@@ -13,7 +13,7 @@ namespace natives {
 void registerSystemNatives(j2me::core::NativeRegistry& registry) {
     // java/lang/System.currentTimeMillis()J
     registry.registerNative("java/lang/System", "currentTimeMillis", "()J",
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             auto now = std::chrono::system_clock::now();
             auto duration = now.time_since_epoch();
             auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
@@ -27,7 +27,7 @@ void registerSystemNatives(j2me::core::NativeRegistry& registry) {
 
     // java/lang/System.gc()V
     registry.registerNative("java/lang/System", "gc", "()V",
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             std::cout << "[System] gc() called - triggering garbage collection" << std::endl;
             // j2me::core::HeapManager::getInstance().collect(); // If implemented
         }
@@ -35,7 +35,7 @@ void registerSystemNatives(j2me::core::NativeRegistry& registry) {
     
     // java/lang/System.currentTimeMillisNative()J - kept for backward compatibility if used elsewhere
     registry.registerNative("java/lang/System", "currentTimeMillisNative", "()J",
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             auto now = std::chrono::system_clock::now();
             auto duration = now.time_since_epoch();
             auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
@@ -49,7 +49,7 @@ void registerSystemNatives(j2me::core::NativeRegistry& registry) {
 
     // java/lang/System.arraycopy(Ljava/lang/Object;ILjava/lang/Object;II)V
     registry.registerNative("java/lang/System", "arraycopy", "(Ljava/lang/Object;ILjava/lang/Object;II)V",
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             // Pop arguments in reverse order
             int length = frame->pop().val.i;
             int dstPos = frame->pop().val.i;
@@ -125,7 +125,7 @@ void registerSystemNatives(j2me::core::NativeRegistry& registry) {
 
     // java/lang/System.exitNative(I)V
     registry.registerNative("java/lang/System", "exitNative", "(I)V",
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             int status = frame->pop().val.i;
             std::cout << "System.exit(" << status << ") called." << std::endl;
             exit(status);
@@ -133,7 +133,7 @@ void registerSystemNatives(j2me::core::NativeRegistry& registry) {
     );
     
     // java/lang/System.printNative(Ljava/lang/String;)V
-    auto printImpl = [](std::shared_ptr<j2me::core::StackFrame> frame) {
+    auto printImpl = [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
              j2me::core::JavaValue strVal = frame->pop();
              if (frame->method.name_index > 0) { // Check if it's static or virtual
                  // System.printNative is static (no this)
@@ -149,7 +149,7 @@ void registerSystemNatives(j2me::core::NativeRegistry& registry) {
     };
 
     registry.registerNative("java/lang/System", "printNative", "(Ljava/lang/String;)V", 
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
              j2me::core::JavaValue strVal = frame->pop();
              if (strVal.type == j2me::core::JavaValue::REFERENCE && strVal.val.ref != nullptr) {
                  auto strObj = static_cast<j2me::core::JavaObject*>(strVal.val.ref);
@@ -161,7 +161,7 @@ void registerSystemNatives(j2me::core::NativeRegistry& registry) {
 
     // java/io/PrintStream.printNative(Ljava/lang/String;)V
     registry.registerNative("java/io/PrintStream", "printNative", "(Ljava/lang/String;)V", 
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
              j2me::core::JavaValue strVal = frame->pop();
              frame->pop(); // this
              if (strVal.type == j2me::core::JavaValue::REFERENCE && strVal.val.ref != nullptr) {

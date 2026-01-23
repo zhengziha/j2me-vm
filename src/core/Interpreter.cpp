@@ -172,7 +172,13 @@ std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& classNam
 
              addMethod("read", "()I");
              addMethod("read", "([B)I");
+             addMethod("read", "([BII)I");
+             addMethod("available", "()I");
+             addMethod("skip", "(J)J");
              addMethod("close", "()V");
+             addMethod("mark", "(I)V");
+             addMethod("reset", "()V");
+             addMethod("markSupported", "()Z");
 
              loadedClasses[className] = javaClass;
              return javaClass;
@@ -350,142 +356,94 @@ std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& classNam
     }
 }
 
-std::optional<JavaValue> Interpreter::execute(std::shared_ptr<StackFrame> frame) {
-    if (!frame) return std::nullopt;
-    
-    // Get method name for logging
-    std::string methodName = "<unknown>";
-    if (frame->method.name_index > 0 && frame->method.name_index <= frame->classFile->constant_pool.size()) {
-        auto nameInfo = std::dynamic_pointer_cast<ConstantUtf8>(frame->classFile->constant_pool[frame->method.name_index]);
-        if (nameInfo) {
-            methodName = nameInfo->bytes;
-        }
-    }
-    LOG_DEBUG("[Interpreter] Entering method: " + methodName);
-    
-    // Code attribute
-    // We need to parse it from attributes if not cached
-    std::vector<uint8_t> code;
-    for (const auto& attr : frame->method.attributes) {
-        auto nameInfo = std::dynamic_pointer_cast<ConstantUtf8>(frame->classFile->constant_pool[attr.attribute_name_index]);
-        if (nameInfo && nameInfo->bytes == "Code") {
-             util::DataReader attrReader(attr.info);
-             attrReader.readU2(); // max_stack
-             attrReader.readU2(); // max_locals
-             uint32_t codeLength = attrReader.readU4();
-             code = attrReader.readBytes(codeLength);
-             break;
-        }
-    }
-    
-    if (code.empty()) {
-        // Native?
-        LOG_DEBUG("[Interpreter] No code attribute (native?) for method: " + methodName);
-        return std::nullopt;
-    }
+void Interpreter::execute(std::shared_ptr<JavaThread> thread, int instructions) {
+    if (!thread || thread->isFinished()) return;
+    if (thread->state != JavaThread::RUNNABLE) return;
 
-    util::DataReader codeReader(code);
-    
-    LOG_DEBUG("[Interpreter] Starting execution, code size: " + std::to_string(code.size()) + " bytes");
+    int executed = 0;
+    while (executed < instructions && !thread->isFinished()) {
+        if (thread->state != JavaThread::RUNNABLE) break;
 
-    while (codeReader.tell() < code.size()) {
-        // Check for global exit signal
         if (EventLoop::getInstance().shouldExit()) {
-            LOG_INFO("[Interpreter] VM Exit requested. Stopping execution.");
-            return std::nullopt; // Or throw an exception to unwind stack faster
+             // Handle exit
+             return;
         }
+
+        auto frame = thread->currentFrame();
+        if (!frame) break;
+
+        // Code is cached in frame
+        if (frame->code.empty()) {
+            // Should be native or abstract, but if it's on stack, pop it?
+            thread->popFrame();
+            continue;
+        }
+
+        util::DataReader codeReader(frame->code);
+        codeReader.seek(frame->pc);
 
         try {
-            std::optional<JavaValue> ret;
-            bool shouldContinue = executeInstruction(frame, codeReader, ret);
-            // LOG_DEBUG("[Interpreter] executeInstruction returned: " + std::string(shouldContinue ? "true" : "false") + " at PC " + std::to_string(codeReader.tell()));
-            if (!shouldContinue) {
-                LOG_DEBUG("[Interpreter] Stopping execution (return instruction or error)");
-                if (ret) {
-                    LOG_DEBUG("[Interpreter] Returning value from method");
-                    return ret;
-                }
-                return std::nullopt;
+            // executeInstruction now modifies thread state directly (pushes/pops frames)
+            // It returns false if we should stop execution immediately (error), otherwise true
+            bool continueExec = executeInstruction(thread, frame, codeReader);
+            
+            // Update PC
+            frame->pc = codeReader.tell();
+            executed++;
+            
+            if (!continueExec) {
+                break;
             }
         } catch (const std::exception& e) {
-            std::string className = "<unknown>";
-            if (frame->classFile->this_class > 0) {
-                 auto classInfo = std::dynamic_pointer_cast<ConstantClass>(frame->classFile->constant_pool[frame->classFile->this_class]);
-                 if (classInfo) {
-                     auto nameInfo = std::dynamic_pointer_cast<ConstantUtf8>(frame->classFile->constant_pool[classInfo->name_index]);
-                     if (nameInfo) className = nameInfo->bytes;
-                 }
-            }
-            LOG_ERROR("Runtime Exception in method " + className + "." + methodName + " at PC " + std::to_string(codeReader.tell()) + ": " + std::string(e.what()));
-            throw;
+             LOG_ERROR("Runtime Exception: " + std::string(e.what()));
+             throw; // Or handle exception
         }
     }
-    
-    LOG_DEBUG("[Interpreter] Execution completed normally");
-    return std::nullopt;
 }
 
-void Interpreter::initializeClass(std::shared_ptr<JavaClass> cls) {
+bool Interpreter::initializeClass(std::shared_ptr<JavaThread> thread, std::shared_ptr<JavaClass> cls) {
     if (cls->initialized) {
-        return;
+        return false;
     }
     
     // Prevent circular initialization
     if (cls->initializing) {
-        LOG_DEBUG("[Interpreter] Class already being initialized: " + cls->name);
-        return;
+        return false; 
     }
     
     cls->initializing = true;
     LOG_DEBUG("[Interpreter] Initializing class: " + cls->name);
     
+    bool pushed = false;
+
     // First, initialize superclass if exists
     if (cls->superClass) {
-        initializeClass(cls->superClass);
+        if (initializeClass(thread, cls->superClass)) {
+            pushed = true;
+        }
     }
     
     // Find and execute <clinit> method
     for (const auto& method : cls->rawFile->methods) {
         auto name = std::dynamic_pointer_cast<ConstantUtf8>(cls->rawFile->constant_pool[method.name_index]);
         if (name && name->bytes == "<clinit>") {
-            LOG_DEBUG("[Interpreter] Executing <clinit> for: " + cls->name);
-            try {
-                auto frame = std::make_shared<StackFrame>(method, cls->rawFile);
-                execute(frame);
-            } catch (const std::exception& e) {
-                LOG_ERROR("[Interpreter] Error executing <clinit> for " + cls->name + ": " + e.what());
-                throw;
-            }
+            LOG_DEBUG("[Interpreter] Pushing <clinit> for: " + cls->name);
+            auto frame = std::make_shared<StackFrame>(method, cls->rawFile);
+            thread->pushFrame(frame);
+            pushed = true;
             break;
         }
     }
     
     cls->initialized = true;
-    cls->initializing = false;
-    LOG_DEBUG("[Interpreter] Class initialized: " + cls->name);
+    cls->initializing = false; 
+    
+    return pushed;
 }
 
-bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::DataReader& codeReader, std::optional<JavaValue>& returnVal) {
+bool Interpreter::executeInstruction(std::shared_ptr<JavaThread> thread, std::shared_ptr<StackFrame> frame, util::DataReader& codeReader) {
     static uint64_t instructionCount = 0;
     instructionCount++;
-    if (instructionCount % 100000 == 0) {
-        std::string methodName = "<unknown>";
-        if (frame->method.name_index > 0 && frame->method.name_index <= frame->classFile->constant_pool.size()) {
-            auto nameInfo = std::dynamic_pointer_cast<ConstantUtf8>(frame->classFile->constant_pool[frame->method.name_index]);
-            if (nameInfo) methodName = nameInfo->bytes;
-        }
-        
-        std::string className = "<unknown>";
-        if (frame->classFile->this_class > 0 && frame->classFile->this_class < frame->classFile->constant_pool.size()) {
-             auto clsInfo = std::dynamic_pointer_cast<ConstantClass>(frame->classFile->constant_pool[frame->classFile->this_class]);
-             if (clsInfo) {
-                 auto nameInfo = std::dynamic_pointer_cast<ConstantUtf8>(frame->classFile->constant_pool[clsInfo->name_index]);
-                 if (nameInfo) className = nameInfo->bytes;
-             }
-        }
-
-        std::cout << "[Heartbeat] Ops: " << instructionCount << " | Executing: " << className << "." << methodName << " | Stack: " << frame->stackSize() << std::endl;
-    }
 
     uint8_t opcode = codeReader.readU1();
     
@@ -1895,7 +1853,10 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
                 throw std::runtime_error("Could not find class: " + className->bytes);
             }
             
-            initializeClass(cls);
+            if (initializeClass(thread, cls)) {
+                codeReader.seek(codeReader.tell() - 3);
+                return true;
+            }
             
             JavaObject* obj = HeapManager::getInstance().allocate(cls);
             JavaValue val;
@@ -2123,7 +2084,10 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
                  if (!cls) throw std::runtime_error("Class not found: " + className->bytes);
                  
                  // Initialize class if needed
-                 initializeClass(cls);
+                 if (initializeClass(thread, cls)) {
+                     codeReader.seek(codeReader.tell() - 3);
+                     return true;
+                 }
                  
                  auto descriptor = std::dynamic_pointer_cast<ConstantUtf8>(frame->classFile->constant_pool[nameAndType->descriptor_index]);
                  auto it = cls->staticFields.find(name->bytes + "|" + descriptor->bytes);
@@ -2181,7 +2145,10 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
                  if (!cls) throw std::runtime_error("Class not found: " + className->bytes);
                  
                  // Initialize class if needed
-                 initializeClass(cls);
+                 if (initializeClass(thread, cls)) {
+                     codeReader.seek(codeReader.tell() - 3);
+                     return true;
+                 }
                  
                  JavaValue val = frame->pop();
                  // Store value - handle different types appropriately
@@ -2265,7 +2232,12 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
              auto cls = resolveClass(className->bytes);
              if (!cls) throw std::runtime_error("Class not found: " + className->bytes);
              
-             if (isStatic) initializeClass(cls);
+             if (isStatic) {
+                 if (initializeClass(thread, cls)) {
+                     codeReader.seek(codeReader.tell() - 3);
+                     return true;
+                 }
+             }
 
              // Find method
              bool found = false;
@@ -2277,12 +2249,11 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
                      // std::cout << "[Interpreter] Found method: " << className->bytes << "." << name->bytes << descriptor->bytes << " flags=" << std::hex << m.access_flags << std::dec << std::endl;
                      
                      if (m.access_flags & 0x0100) { // ACC_NATIVE
-                         // std::cout << "[Interpreter] Native method call" << std::endl;
                          auto nativeFunc = NativeRegistry::getInstance().getNative(className->bytes, name->bytes, descriptor->bytes);
-                         if (nativeFunc) {
-                             nativeFunc(frame);
-                         } else {
-                             std::cerr << "UnsatisfiedLinkError: " << className->bytes << "." << name->bytes << descriptor->bytes << std::endl;
+                        if (nativeFunc) {
+                            nativeFunc(thread, frame);
+                        } else {
+                            std::cerr << "UnsatisfiedLinkError: " << className->bytes << "." << name->bytes << descriptor->bytes << std::endl;
                              throw std::runtime_error("UnsatisfiedLinkError: " + className->bytes + "." + name->bytes + descriptor->bytes);
                          }
                      } else {
@@ -2315,44 +2286,26 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
                             }
                         }
                          
-                         // Constructor super call handling (same as before)
-                         if (isConstructor && cls->superClass && cls->superClass->name != "java/lang/Object") {
-                             bool superFound = false;
-                             for (const auto& superMethod : cls->superClass->rawFile->methods) {
-                                 auto superName = std::dynamic_pointer_cast<ConstantUtf8>(cls->superClass->rawFile->constant_pool[superMethod.name_index]);
-                                 auto superDesc = std::dynamic_pointer_cast<ConstantUtf8>(cls->superClass->rawFile->constant_pool[superMethod.descriptor_index]);
-                                 if (superName->bytes == "<init>" && superDesc->bytes == "()V") {
-                                     auto superFrame = std::make_shared<StackFrame>(superMethod, cls->superClass->rawFile);
-                                     superFrame->setLocal(0, newFrame->getLocal(0));
-                                     execute(superFrame);
-                                     superFound = true;
-                                     break;
-                                 }
-                             }
-                         }
-                         
-                         auto ret = execute(newFrame);
-                         
-                         if (descriptor->bytes.back() != 'V') {
-                             if (ret) {
-                                 frame->push(*ret);
-                             }
-                         }
-                     }
-                     found = true;
-                     break;
-                 }
-             }
+                         // Constructor super call handling - REMOVED for rt.jar compatibility
+                        // Standard Java compilers insert invokespecial super.<init> automatically.
+                        // Auto-chaining here would cause double execution.
+                        
+                        thread->pushFrame(newFrame);
+                    }
+                    found = true;
+                    break;
+                }
+            }
              
              if (!found) {
                  // Check if it's a native method NOT in class file (e.g. system hooks)
                  // This is fallback for methods not in rt.jar but registered
                  auto nativeFunc = NativeRegistry::getInstance().getNative(className->bytes, name->bytes, descriptor->bytes);
-                 if (nativeFunc) {
-                      // std::cout << "[Interpreter] Calling registered native (not in class): " << className->bytes << "." << name->bytes << std::endl;
-                      nativeFunc(frame);
-                 } else {
-                      std::cerr << "Method not found: " << className->bytes << "." << name->bytes << std::endl;
+                if (nativeFunc) {
+                     // std::cout << "[Interpreter] Calling registered native (not in class): " << className->bytes << "." << name->bytes << std::endl;
+                     nativeFunc(thread, frame);
+                } else {
+                     std::cerr << "Method not found: " << className->bytes << "." << name->bytes << std::endl;
                       throw std::runtime_error("Method not found: " + className->bytes + "." + name->bytes);
                  }
              }
@@ -2461,9 +2414,9 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
                                  }
                                  
                                  auto nativeFunc = NativeRegistry::getInstance().getNative(currentClass->name, name->bytes, descriptor->bytes);
-                                 if (nativeFunc) {
-                                     nativeFunc(frame);
-                                 } else {
+                            if (nativeFunc) {
+                                nativeFunc(thread, frame);
+                            } else {
                                      std::cerr << "UnsatisfiedLinkError (virtual): " << currentClass->name << "." << name->bytes << descriptor->bytes << std::endl;
                                  }
                              } else {
@@ -2483,20 +2436,13 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
                                     }
                                 }
                                  
-                                 auto ret = execute(newFrame);
-                                 
-                                 // Push return value if any
-                                 if (descriptor->bytes.back() != 'V') {
-                                     if (ret) {
-                                         frame->push(*ret);
-                                     }
-                                 }
-                             }
-                             
-                             found = true;
-                             break;
-                         }
-                     }
+                                 thread->pushFrame(newFrame);
+                            }
+                            
+                            found = true;
+                            break;
+                        }
+                    }
                      
                      if (found) break;
                      
@@ -2580,7 +2526,7 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
                              
                              auto nativeFunc = NativeRegistry::getInstance().getNative(currentClass->name, name->bytes, descriptor->bytes);
                              if (nativeFunc) {
-                                 nativeFunc(frame);
+                                 nativeFunc(thread, frame);
                              } else {
                                  std::cerr << "UnsatisfiedLinkError (interface): " << currentClass->name << "." << name->bytes << descriptor->bytes << std::endl;
                              }
@@ -2598,13 +2544,7 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
                                 }
                             }
                             
-                            auto ret = execute(newFrame);
-                            
-                            if (descriptor->bytes.back() != 'V') {
-                                if (ret) {
-                                    frame->push(*ret);
-                                }
-                            }
+                            thread->pushFrame(newFrame);
                         }
                          found = true;
                          break;
@@ -2667,16 +2607,26 @@ bool Interpreter::executeInstruction(std::shared_ptr<StackFrame> frame, util::Da
 
         case OP_RETURN: {
             // std::cout << "[OP_RETURN] Returning from method" << std::endl;
-            return false; // Stop execution
+            thread->popFrame();
+            return true; // Continue execution (next frame)
         }
         case OP_IRETURN:
         case OP_ARETURN:
         case OP_LRETURN:
         case OP_FRETURN:
         case OP_DRETURN: {
-            returnVal = frame->pop();
+            JavaValue retVal = frame->pop();
+            thread->popFrame();
+            
+            // Push return value to caller's stack
+            if (!thread->isFinished()) {
+                auto callerFrame = thread->currentFrame();
+                if (callerFrame) {
+                    callerFrame->push(retVal);
+                }
+            }
             // std::cout << "[OP_IRETURN/OP_ARETURN/etc] Returning value" << std::endl;
-            return false;
+            return true; // Continue execution
         }
         
         default:

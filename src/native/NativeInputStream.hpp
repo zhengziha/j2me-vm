@@ -12,15 +12,16 @@ public:
     
     int read();
     int read(uint8_t* buffer, int len);
+    long skip(long n);
+    int available();
     void close();
     
-    const uint8_t* getData() const { return data; }
-    size_t getSize() const { return size; }
+    const uint8_t* getData() const { return data.data(); }
+    size_t getSize() const { return data.size(); }
     size_t getPosition() const { return position; }
     
 private:
-    const uint8_t* data;
-    size_t size;
+    std::vector<uint8_t> data;
     size_t position;
 };
 

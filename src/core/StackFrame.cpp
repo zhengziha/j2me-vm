@@ -1,4 +1,5 @@
 #include "StackFrame.hpp"
+#include "../util/DataReader.hpp"
 #include <stdexcept>
 #include <iostream>
 
@@ -9,6 +10,21 @@ StackFrame::StackFrame(const MethodInfo& method, const std::shared_ptr<ClassFile
     : method(method), classFile(classFile) {
     localVariables.resize(20); 
     operandStack.reserve(20);
+
+    // Parse Code attribute
+    for (const auto& attr : method.attributes) {
+        if (attr.attribute_name_index < classFile->constant_pool.size()) {
+            auto nameInfo = std::dynamic_pointer_cast<ConstantUtf8>(classFile->constant_pool[attr.attribute_name_index]);
+            if (nameInfo && nameInfo->bytes == "Code") {
+                 util::DataReader attrReader(attr.info);
+                 attrReader.readU2(); // max_stack
+                 attrReader.readU2(); // max_locals
+                 uint32_t codeLength = attrReader.readU4();
+                 code = attrReader.readBytes(codeLength);
+                 break;
+            }
+        }
+    }
 }
 
 void StackFrame::push(JavaValue value) {

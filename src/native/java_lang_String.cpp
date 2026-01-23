@@ -123,7 +123,7 @@ void registerStringNatives(j2me::core::NativeRegistry& registry) {
 
     // java/lang/String.getBytes()[B
     registry.registerNative("java/lang/String", "getBytes", "()[B",
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             j2me::core::JavaValue thisVal = frame->pop();
             
             j2me::core::JavaValue result;
@@ -155,7 +155,7 @@ void registerStringNatives(j2me::core::NativeRegistry& registry) {
 
     // java/lang/String.valueOf(I)Ljava/lang/String;
     registry.registerNative("java/lang/String", "valueOf", "(I)Ljava/lang/String;",
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             j2me::core::JavaValue intVal = frame->pop();
             
             j2me::core::JavaValue result;
@@ -177,7 +177,7 @@ void registerStringNatives(j2me::core::NativeRegistry& registry) {
 
     // java/lang/String.valueOf(J)Ljava/lang/String;
     registry.registerNative("java/lang/String", "valueOf", "(J)Ljava/lang/String;",
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             j2me::core::JavaValue longVal = frame->pop();
             
             j2me::core::JavaValue result;
@@ -199,7 +199,7 @@ void registerStringNatives(j2me::core::NativeRegistry& registry) {
 
     // java/lang/String.<init>([B)V
     registry.registerNative("java/lang/String", "<init>", "([B)V",
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             j2me::core::JavaValue byteArrayVal = frame->pop();
             j2me::core::JavaValue thisVal = frame->pop();
             

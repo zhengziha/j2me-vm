@@ -45,7 +45,7 @@ NativeRegistry::NativeRegistry() {
     j2me::natives::registerTimerNatives(*this);
 
     // java/lang/StringBuilder.<init>()V
-    registerNative("java/lang/StringBuilder", "<init>", "()V", [](std::shared_ptr<StackFrame> frame) {
+    registerNative("java/lang/StringBuilder", "<init>", "()V", [](std::shared_ptr<JavaThread> thread, std::shared_ptr<StackFrame> frame) {
 
         std::cerr << "Native StringBuilder.<init>" << std::endl;
         JavaValue thisVal = frame->pop();
@@ -59,7 +59,7 @@ NativeRegistry::NativeRegistry() {
     });
 
     // java/lang/StringBuilder.append(Ljava/lang/String;)Ljava/lang/StringBuilder;
-    registerNative("java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", [](std::shared_ptr<StackFrame> frame) {
+    registerNative("java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", [](std::shared_ptr<JavaThread> thread, std::shared_ptr<StackFrame> frame) {
         std::cerr << "Native StringBuilder.append(String)" << std::endl;
         JavaValue strVal = frame->pop();
         JavaValue thisVal = frame->pop();
@@ -79,7 +79,7 @@ NativeRegistry::NativeRegistry() {
     });
 
     // java/lang/StringBuilder.append(I)Ljava/lang/StringBuilder;
-    registerNative("java/lang/StringBuilder", "append", "(I)Ljava/lang/StringBuilder;", [](std::shared_ptr<StackFrame> frame) {
+    registerNative("java/lang/StringBuilder", "append", "(I)Ljava/lang/StringBuilder;", [](std::shared_ptr<JavaThread> thread, std::shared_ptr<StackFrame> frame) {
         std::cerr << "Native StringBuilder.append(int)" << std::endl;
         JavaValue intVal = frame->pop();
         JavaValue thisVal = frame->pop();
@@ -95,7 +95,7 @@ NativeRegistry::NativeRegistry() {
     });
 
     // java/lang/StringBuilder.append(J)Ljava/lang/StringBuilder;
-    registerNative("java/lang/StringBuilder", "append", "(J)Ljava/lang/StringBuilder;", [](std::shared_ptr<StackFrame> frame) {
+    registerNative("java/lang/StringBuilder", "append", "(J)Ljava/lang/StringBuilder;", [](std::shared_ptr<JavaThread> thread, std::shared_ptr<StackFrame> frame) {
         std::cerr << "Native StringBuilder.append(long)" << std::endl;
         JavaValue longVal = frame->pop();
         JavaValue thisVal = frame->pop();
@@ -111,7 +111,7 @@ NativeRegistry::NativeRegistry() {
     });
 
     // java/lang/StringBuilder.append(C)Ljava/lang/StringBuilder;
-    registerNative("java/lang/StringBuilder", "append", "(C)Ljava/lang/StringBuilder;", [](std::shared_ptr<StackFrame> frame) {
+    registerNative("java/lang/StringBuilder", "append", "(C)Ljava/lang/StringBuilder;", [](std::shared_ptr<JavaThread> thread, std::shared_ptr<StackFrame> frame) {
         std::cerr << "Native StringBuilder.append(char)" << std::endl;
         JavaValue charVal = frame->pop();
         JavaValue thisVal = frame->pop();
@@ -127,7 +127,7 @@ NativeRegistry::NativeRegistry() {
     });
 
     // java/lang/StringBuilder.append(Z)Ljava/lang/StringBuilder;
-    registerNative("java/lang/StringBuilder", "append", "(Z)Ljava/lang/StringBuilder;", [](std::shared_ptr<StackFrame> frame) {
+    registerNative("java/lang/StringBuilder", "append", "(Z)Ljava/lang/StringBuilder;", [](std::shared_ptr<JavaThread> thread, std::shared_ptr<StackFrame> frame) {
         std::cerr << "Native StringBuilder.append(boolean)" << std::endl;
         JavaValue boolVal = frame->pop();
         JavaValue thisVal = frame->pop();
@@ -143,7 +143,7 @@ NativeRegistry::NativeRegistry() {
     });
 
     // java/lang/StringBuilder.append(F)Ljava/lang/StringBuilder;
-    registerNative("java/lang/StringBuilder", "append", "(F)Ljava/lang/StringBuilder;", [](std::shared_ptr<StackFrame> frame) {
+    registerNative("java/lang/StringBuilder", "append", "(F)Ljava/lang/StringBuilder;", [](std::shared_ptr<JavaThread> thread, std::shared_ptr<StackFrame> frame) {
         std::cerr << "Native StringBuilder.append(float)" << std::endl;
         JavaValue floatVal = frame->pop();
         JavaValue thisVal = frame->pop();
@@ -159,7 +159,7 @@ NativeRegistry::NativeRegistry() {
     });
 
     // java/lang/StringBuilder.append(D)Ljava/lang/StringBuilder;
-    registerNative("java/lang/StringBuilder", "append", "(D)Ljava/lang/StringBuilder;", [](std::shared_ptr<StackFrame> frame) {
+    registerNative("java/lang/StringBuilder", "append", "(D)Ljava/lang/StringBuilder;", [](std::shared_ptr<JavaThread> thread, std::shared_ptr<StackFrame> frame) {
         std::cerr << "Native StringBuilder.append(double)" << std::endl;
         JavaValue doubleVal = frame->pop();
         JavaValue thisVal = frame->pop();
@@ -175,7 +175,7 @@ NativeRegistry::NativeRegistry() {
     });
 
     // java/lang/StringBuilder.append(Ljava/lang/Object;)Ljava/lang/StringBuilder;
-    registerNative("java/lang/StringBuilder", "append", "(Ljava/lang/Object;)Ljava/lang/StringBuilder;", [](std::shared_ptr<StackFrame> frame) {
+    registerNative("java/lang/StringBuilder", "append", "(Ljava/lang/Object;)Ljava/lang/StringBuilder;", [](std::shared_ptr<JavaThread> thread, std::shared_ptr<StackFrame> frame) {
         JavaValue objVal = frame->pop();
         JavaValue thisVal = frame->pop();
         JavaObject* thisObj = (JavaObject*)thisVal.val.ref;
@@ -206,7 +206,7 @@ NativeRegistry::NativeRegistry() {
     });
 
     // java/lang/StringBuilder.toString()Ljava/lang/String;
-    registerNative("java/lang/StringBuilder", "toString", "()Ljava/lang/String;", [](std::shared_ptr<StackFrame> frame) {
+    registerNative("java/lang/StringBuilder", "toString", "()Ljava/lang/String;", [](std::shared_ptr<JavaThread> thread, std::shared_ptr<StackFrame> frame) {
         std::cerr << "Native StringBuilder.toString" << std::endl;
         JavaValue thisVal = frame->pop();
         JavaObject* thisObj = (JavaObject*)thisVal.val.ref;
@@ -258,7 +258,7 @@ NativeRegistry::NativeRegistry() {
     });
 
     // java/lang/String.valueOf(I)Ljava/lang/String;
-    registerNative("java/lang/String", "valueOf", "(I)Ljava/lang/String;", [](std::shared_ptr<StackFrame> frame) {
+    registerNative("java/lang/String", "valueOf", "(I)Ljava/lang/String;", [](std::shared_ptr<JavaThread> thread, std::shared_ptr<StackFrame> frame) {
         int val = frame->pop().val.i;
         JavaValue ret;
         ret.type = JavaValue::REFERENCE;
@@ -268,14 +268,21 @@ NativeRegistry::NativeRegistry() {
 }
 
 void NativeRegistry::registerNative(const std::string& className, const std::string& methodName, const std::string& descriptor, NativeFunction func) {
-    registry[makeKey(className, methodName, descriptor)] = func;
+    std::string key = makeKey(className, methodName, descriptor);
+    // std::cout << "[NativeRegistry] Registering: " << key << std::endl;
+    registry[key] = func;
 }
 
 NativeFunction NativeRegistry::getNative(const std::string& className, const std::string& methodName, const std::string& descriptor) {
-    auto it = registry.find(makeKey(className, methodName, descriptor));
+    std::string key = makeKey(className, methodName, descriptor);
+    auto it = registry.find(key);
     if (it != registry.end()) {
+        if (!it->second) {
+             std::cerr << "[NativeRegistry] FATAL: Found key but function is empty: " << key << std::endl;
+        }
         return it->second;
     }
+    std::cerr << "[NativeRegistry] Native not found: " << key << std::endl;
     return nullptr;
 }
 

@@ -2,6 +2,7 @@
 
 #include "RuntimeTypes.hpp"
 #include "Interpreter.hpp"
+#include "ThreadManager.hpp"
 #include <vector>
 #include <algorithm>
 #include <chrono>
@@ -87,7 +88,10 @@ private:
                     auto frame = std::make_shared<StackFrame>(method, currentCls->rawFile);
                     JavaValue vThis; vThis.type = JavaValue::REFERENCE; vThis.val.ref = task;
                     frame->setLocal(0, vThis);
-                    interpreter->execute(frame);
+                    
+                    auto thread = std::make_shared<JavaThread>(frame);
+                    ThreadManager::getInstance().addThread(thread);
+                    
                     found = true;
                     break;
                 }

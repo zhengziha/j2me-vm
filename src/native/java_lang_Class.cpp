@@ -16,7 +16,7 @@ void registerClassNatives(j2me::core::NativeRegistry& registry) {
 
     // java/lang/Class.getResourceAsStream(Ljava/lang/String;)Ljava/io/InputStream;
     registry.registerNative("java/lang/Class", "getResourceAsStream", "(Ljava/lang/String;)Ljava/io/InputStream;", 
-        [&registry](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [&registry](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             std::cout << "[Class] getResourceAsStream called" << std::endl;
             j2me::core::JavaValue nameVal = frame->pop();
             frame->pop(); // this (Class object)

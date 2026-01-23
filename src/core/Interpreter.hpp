@@ -5,6 +5,7 @@
 #include "../loader/JarLoader.hpp"
 #include "RuntimeTypes.hpp"
 #include "NativeRegistry.hpp"
+#include "JavaThread.hpp"
 #include <memory>
 #include <map>
 #include <optional>
@@ -16,7 +17,7 @@ namespace core {
 class Interpreter {
 public:
     Interpreter(j2me::loader::JarLoader& loader);
-    std::optional<JavaValue> execute(std::shared_ptr<StackFrame> frame);
+    void execute(std::shared_ptr<JavaThread> thread, int instructions);
     std::shared_ptr<JavaClass> resolveClass(const std::string& className);
     
     // Directly register a class (useful for .class files loaded directly)
@@ -29,10 +30,11 @@ private:
     std::shared_ptr<j2me::loader::JarLoader> libraryLoader;
     std::map<std::string, std::shared_ptr<JavaClass>> loadedClasses;
 
-    bool executeInstruction(std::shared_ptr<StackFrame> frame, util::DataReader& codeReader, std::optional<JavaValue>& returnVal);
+    bool executeInstruction(std::shared_ptr<JavaThread> thread, std::shared_ptr<StackFrame> frame, util::DataReader& codeReader);
     
     // Execute static initializer for a class
-    void initializeClass(std::shared_ptr<JavaClass> cls);
+    // Returns true if initialization was triggered (and caller should rewind PC/retry)
+    bool initializeClass(std::shared_ptr<JavaThread> thread, std::shared_ptr<JavaClass> cls);
     
     // Validate that a string is actually a class name, not a descriptor
     bool isValidClassName(const std::string& name);

@@ -22,7 +22,7 @@ void registerStringBufferNatives(j2me::core::NativeRegistry& registry) {
 
     // java/lang/StringBuffer.<init>()V
     registry.registerNative("java/lang/StringBuffer", "<init>", "()V", 
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             j2me::core::JavaValue thisVal = frame->pop();
             
             if (thisVal.type == j2me::core::JavaValue::REFERENCE && thisVal.val.ref != nullptr) {
@@ -42,7 +42,7 @@ void registerStringBufferNatives(j2me::core::NativeRegistry& registry) {
 
     // java/lang/StringBuffer.append(Ljava/lang/String;)Ljava/lang/StringBuffer;
     registry.registerNative("java/lang/StringBuffer", "append", "(Ljava/lang/String;)Ljava/lang/StringBuffer;", 
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             j2me::core::JavaValue strVal = frame->pop();
             j2me::core::JavaValue thisVal = frame->pop();
             
@@ -68,7 +68,7 @@ void registerStringBufferNatives(j2me::core::NativeRegistry& registry) {
 
     // java/lang/StringBuffer.append(I)Ljava/lang/StringBuffer;
     registry.registerNative("java/lang/StringBuffer", "append", "(I)Ljava/lang/StringBuffer;", 
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             int32_t val = frame->pop().val.i;
             j2me::core::JavaValue thisVal = frame->pop();
             
@@ -86,7 +86,7 @@ void registerStringBufferNatives(j2me::core::NativeRegistry& registry) {
 
     // java/lang/StringBuffer.append(Ljava/lang/Object;)Ljava/lang/StringBuffer;
     registry.registerNative("java/lang/StringBuffer", "append", "(Ljava/lang/Object;)Ljava/lang/StringBuffer;", 
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             j2me::core::JavaValue objVal = frame->pop();
             j2me::core::JavaValue thisVal = frame->pop();
             
@@ -117,7 +117,7 @@ void registerStringBufferNatives(j2me::core::NativeRegistry& registry) {
 
     // java/lang/StringBuffer.toString()Ljava/lang/String;
     registry.registerNative("java/lang/StringBuffer", "toString", "()Ljava/lang/String;", 
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             j2me::core::JavaValue thisVal = frame->pop();
             
             j2me::core::JavaValue result;
@@ -141,7 +141,7 @@ void registerStringBufferNatives(j2me::core::NativeRegistry& registry) {
     );
     // java/lang/StringBuffer.init()V (without brackets, for obfuscated code?)
     registry.registerNative("java/lang/StringBuffer", "init", "()V", 
-        [](std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             j2me::core::JavaValue thisVal = frame->pop();
             
             if (thisVal.type == j2me::core::JavaValue::REFERENCE && thisVal.val.ref != nullptr) {

@@ -1,9 +1,11 @@
 #pragma once
 
 #include "Interpreter.hpp"
+#include "JavaThread.hpp"
 #include <queue>
 #include <mutex>
 #include <atomic>
+#include <memory>
 
 namespace j2me {
 namespace core {
@@ -47,6 +49,9 @@ private:
     std::mutex queueMutex;
     std::atomic<bool> quit{false};
     std::atomic<int> keyStates{0};
+    
+    // Track current painting thread to avoid flooding
+    std::weak_ptr<JavaThread> paintingThread;
 };
 
 } // namespace core

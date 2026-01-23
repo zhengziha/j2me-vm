@@ -30,6 +30,8 @@
 #include "native/java_lang_Thread.hpp"
 #include "native/java_util_Timer.hpp"
 #include "core/TimerManager.hpp"
+#include "core/ThreadManager.hpp"
+#include "core/JavaThread.hpp"
 #include <fstream>
 #include <optional>
 
@@ -186,7 +188,18 @@ void runVM(VMConfig config) {
                         frame->setLocal(0, vArgs);
                     }
                     
-                    interpreter.execute(frame);
+                    auto mainThread = std::make_shared<j2me::core::JavaThread>(frame);
+                    j2me::core::ThreadManager::getInstance().addThread(mainThread);
+                    
+                    // Run until main finishes
+                    while (!mainThread->isFinished()) {
+                         auto t = j2me::core::ThreadManager::getInstance().nextThread();
+                         if (t) interpreter.execute(t, 20000);
+                         j2me::core::ThreadManager::getInstance().removeFinishedThreads();
+                         
+                         if (j2me::core::EventLoop::getInstance().shouldExit()) break;
+                    }
+                    
                     LOG_INFO("main method completed.");
                     return;
                 }
@@ -207,7 +220,19 @@ void runVM(VMConfig config) {
                      auto frame = std::make_shared<j2me::core::StackFrame>(method, classFile);
                      j2me::core::JavaValue vThis; vThis.type = j2me::core::JavaValue::REFERENCE; vThis.val.ref = midletInstance.get();
                      frame->setLocal(0, vThis);
-                     interpreter.execute(frame);
+                     
+                     auto initThread = std::make_shared<j2me::core::JavaThread>(frame);
+                     j2me::core::ThreadManager::getInstance().addThread(initThread);
+                     
+                     // Run <init> to completion
+                     while (!initThread->isFinished()) {
+                          j2me::core::EventLoop::getInstance().pollSDL();
+                          j2me::core::EventLoop::getInstance().dispatchEvents(&interpreter);
+                          j2me::core::EventLoop::getInstance().render(&interpreter);
+                          auto t = j2me::core::ThreadManager::getInstance().nextThread();
+                          if (t) interpreter.execute(t, 10000);
+                          j2me::core::ThreadManager::getInstance().removeFinishedThreads();
+                     }
                      break;
                 }
             }
@@ -224,7 +249,21 @@ void runVM(VMConfig config) {
                             auto frame = std::make_shared<j2me::core::StackFrame>(method, currentCls->rawFile);
                             j2me::core::JavaValue vThis; vThis.type = j2me::core::JavaValue::REFERENCE; vThis.val.ref = midletInstance.get();
                             frame->setLocal(0, vThis);
-                            interpreter.execute(frame);
+                            
+                            auto startThread = std::make_shared<j2me::core::JavaThread>(frame);
+                            j2me::core::ThreadManager::getInstance().addThread(startThread);
+                            
+                            // Run startApp to completion
+                            while (!startThread->isFinished()) {
+                                     if (j2me::core::EventLoop::getInstance().shouldExit()) break;
+                                     j2me::core::EventLoop::getInstance().pollSDL();
+                                     j2me::core::EventLoop::getInstance().dispatchEvents(&interpreter);
+                                     j2me::core::EventLoop::getInstance().render(&interpreter);
+                                     auto t = j2me::core::ThreadManager::getInstance().nextThread();
+                                     if (t) interpreter.execute(t, 10000);
+                                     j2me::core::ThreadManager::getInstance().removeFinishedThreads();
+                                }
+                            
                             startAppFound = true;
                             break;
                     }
@@ -268,7 +307,20 @@ void runVM(VMConfig config) {
                              auto frame = std::make_shared<j2me::core::StackFrame>(method, classFile);
                              j2me::core::JavaValue vThis; vThis.type = j2me::core::JavaValue::REFERENCE; vThis.val.ref = midletInstance.get();
                              frame->setLocal(0, vThis);
-                             interpreter.execute(frame);
+                             
+                             auto initThread = std::make_shared<j2me::core::JavaThread>(frame);
+                             j2me::core::ThreadManager::getInstance().addThread(initThread);
+                             
+                             while (!initThread->isFinished()) {
+                                  if (j2me::core::EventLoop::getInstance().shouldExit()) break;
+                                  j2me::core::EventLoop::getInstance().pollSDL();
+                                  j2me::core::EventLoop::getInstance().dispatchEvents(&interpreter);
+                                  j2me::core::TimerManager::getInstance().tick(&interpreter);
+                                  j2me::core::EventLoop::getInstance().render(&interpreter);
+                                  auto t = j2me::core::ThreadManager::getInstance().nextThread();
+                                  if (t) interpreter.execute(t, 10000);
+                                  j2me::core::ThreadManager::getInstance().removeFinishedThreads();
+                             }
                              break;
                         }
                     }
@@ -287,7 +339,37 @@ void runVM(VMConfig config) {
                                  auto frame = std::make_shared<j2me::core::StackFrame>(method, currentCls->rawFile);
                                  j2me::core::JavaValue vThis; vThis.type = j2me::core::JavaValue::REFERENCE; vThis.val.ref = midletInstance.get();
                                  frame->setLocal(0, vThis);
-                                 interpreter.execute(frame);
+                                 
+                                 auto startThread = std::make_shared<j2me::core::JavaThread>(frame);
+                                 j2me::core::ThreadManager::getInstance().addThread(startThread);
+                                 
+                                 while (!startThread->isFinished()) {
+                                     if (j2me::core::EventLoop::getInstance().shouldExit()) break;
+                                     j2me::core::EventLoop::getInstance().pollSDL();
+                                     j2me::core::EventLoop::getInstance().dispatchEvents(&interpreter);
+                                     j2me::core::TimerManager::getInstance().tick(&interpreter);
+                                     j2me::core::EventLoop::getInstance().render(&interpreter);
+                                     auto t = j2me::core::ThreadManager::getInstance().nextThread();
+                                     if (t) interpreter.execute(t, 10000);
+                                     j2me::core::ThreadManager::getInstance().removeFinishedThreads();
+                                }
+                                
+                                LOG_INFO("startApp returned. Entering main loop...");
+                                while (!j2me::core::EventLoop::getInstance().shouldExit()) {
+                                    j2me::core::EventLoop::getInstance().pollSDL();
+                                    j2me::core::EventLoop::getInstance().dispatchEvents(&interpreter);
+                                    j2me::core::TimerManager::getInstance().tick(&interpreter);
+                                    j2me::core::EventLoop::getInstance().render(&interpreter);
+                                    
+                                    auto t = j2me::core::ThreadManager::getInstance().nextThread();
+                                    if (t) {
+                                        interpreter.execute(t, 10000);
+                                    } else {
+                                        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                                    }
+                                    j2me::core::ThreadManager::getInstance().removeFinishedThreads();
+                                }
+                                 
                                  LOG_INFO("startApp() done.");
                                  startAppFound = true;
                                  break;
@@ -314,16 +396,25 @@ void runVM(VMConfig config) {
     j2me::core::EventLoop& eventLoop = j2me::core::EventLoop::getInstance();
     while (!eventLoop.shouldExit()) {
         try {
+            eventLoop.pollSDL();
             eventLoop.dispatchEvents(&interpreter);
             j2me::core::TimerManager::getInstance().tick(&interpreter);
             eventLoop.render(&interpreter);
+            
+            // Execute threads
+            auto thread = j2me::core::ThreadManager::getInstance().nextThread();
+            if (thread) {
+                interpreter.execute(thread, 50000); // Execute slice
+            } else {
+                // No runnable threads (or all waiting)
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+            j2me::core::ThreadManager::getInstance().removeFinishedThreads();
+            
         } catch (const std::exception& e) {
              LOG_ERROR("Exception in VM Loop: " + std::string(e.what()));
              std::exit(1);
         }
-        
-        // Small sleep to yield CPU and prevent 100% usage on VM thread
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     LOG_INFO("VM Thread Exiting...");
     j2me::core::NativeRegistry::getInstance().setInterpreter(nullptr);
@@ -511,26 +602,11 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    // Launch VM Thread
-    LOG_INFO("Launching VM Thread...");
-    std::thread vmThread(runVM, config);
-    // vmThread.detach(); // Don't detach!
-
-    // Main Thread Event Loop
-    LOG_INFO("Entering Main Event Loop (SDL)...");
-    j2me::core::EventLoop& eventLoop = j2me::core::EventLoop::getInstance();
-    while (!eventLoop.shouldExit()) {
-        eventLoop.pollSDL();
-        // Update screen from backbuffer
-        j2me::platform::GraphicsContext::getInstance().update();
-        std::this_thread::sleep_for(std::chrono::milliseconds(16)); // ~60 FPS
-    }
+    // Launch VM (Blocking in main thread now)
+    LOG_INFO("Starting J2ME VM...");
+    runVM(config);
     
-    LOG_INFO("Main Thread Exiting... Waiting for VM Thread to stop.");
-    if (vmThread.joinable()) {
-        vmThread.join();
-    }
-    LOG_INFO("VM Thread Stopped. Cleaning up SDL.");
+    LOG_INFO("VM Stopped. Cleaning up SDL.");
 
     SDL_DestroyWindow(window);
     SDL_Quit();
