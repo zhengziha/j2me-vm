@@ -1,5 +1,6 @@
 #include "FileUtils.hpp"
 #include <fstream>
+#include <cstdint>
 
 namespace j2me {
 namespace util {
