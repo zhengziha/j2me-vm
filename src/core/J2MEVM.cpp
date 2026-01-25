@@ -142,6 +142,7 @@ bool J2MEVM::loadMainClass(const VMConfig& config) {
             return false;
         }
     }
+    LOG_INFO("Exiting VM Event Loop...");
 }
 
 void J2MEVM::runHeadless() {
@@ -207,23 +208,30 @@ void J2MEVM::runMIDlet() {
     
     // 分配 MIDlet 实例
     // Allocate instance
+    LOG_INFO("Allocating MIDlet instance");
     midletInstance = HeapManager::getInstance().allocate(mainClass);
+    LOG_INFO("MIDlet instance allocated: " + std::to_string(reinterpret_cast<uintptr_t>(midletInstance)));
 
     // 运行构造函数 <init>
     // Run <init>
+    LOG_INFO("Calling findAndRunInit()");
     findAndRunInit();
     
     // 运行 startApp()
     // Run startApp
+    LOG_INFO("Calling findAndRunStartApp()");
     findAndRunStartApp();
 
     if (currentConfig.autoKeyEnabled) {
+        LOG_INFO("Enabling auto keys");
         EventLoop::getInstance().scheduleAutoKeys(currentConfig.autoKeyCodes, currentConfig.autoKeyDelayMs, currentConfig.autoKeyPressMs, currentConfig.autoKeyBetweenKeysMs);
     }
     
     // 进入 VM 主循环
     // Enter VM Loop
+    LOG_INFO("Calling vmLoop()");
     vmLoop();
+    LOG_INFO("vmLoop() returned");
 }
 
 void J2MEVM::findAndRunInit() {
@@ -338,8 +346,17 @@ void J2MEVM::vmLoop() {
     // 移除了指令限速，依靠按键事件频率限制游戏速度
     // Throttling State Removed as per user request
     // We rely on Key Event Frequency Limiting for game speed control
-
+#ifdef __SWITCH__
+    LOG_INFO("Entering Switch main loop");
+    int loopCount = 0;
+    while (!eventLoop.shouldExit() && appletMainLoop()) {
+        loopCount++;
+        if (loopCount % 100 == 0) {
+            LOG_INFO("Switch main loop iteration: " + std::to_string(loopCount));
+        }
+#else
     while (!eventLoop.shouldExit()) {
+#endif
         try {
             auto now = clock::now();
             
@@ -504,6 +521,7 @@ void J2MEVM::vmLoop() {
             return;
         }
     }
+    LOG_INFO("Exiting VM Event Loop...");
 }
 
 bool J2MEVM::isMIDletClass(std::shared_ptr<JavaClass> cls) {

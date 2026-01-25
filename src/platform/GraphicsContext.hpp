@@ -12,6 +12,7 @@
 #include <array>
 #include <limits>
 #include <string>
+#include <cmath>
 
 namespace j2me {
 namespace platform {
@@ -30,54 +31,112 @@ public:
         
         // 创建渲染器
         // Create Renderer
+        printf("Creating renderer with logical size: %dx%d\n", logicalWidth, logicalHeight);
         renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
         if (!renderer) {
-            std::cerr << "SDL_CreateRenderer Error: " << SDL_GetError() << std::endl;
+            printf("SDL_CreateRenderer Error: %s\n", SDL_GetError());
             // 回退到软件渲染
+            printf("Falling back to software renderer\n");
             renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
         }
 
         if (renderer) {
+            printf("Renderer created successfully\n");
              // 我们不设置逻辑大小，所以 SDL_RenderCopy 会拉伸以填充窗口
              // We do NOT set logical size, so SDL_RenderCopy will stretch to fill window
              // 创建流式纹理，用于将后端缓冲区上传到 GPU
              // Create Texture for display (Source size is logical size)
+             printf("Creating texture with format RGBA32 and size: %dx%d\n", logicalWidth, logicalHeight);
              texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STREAMING, logicalWidth, logicalHeight);
              if (texture) {
+                 printf("Texture created successfully\n");
                  SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_NONE);
+             } else {
+                 printf("SDL_CreateTexture Error: %s\n", SDL_GetError());
              }
         }
         
         // 后端缓冲区 (绘图目标) - 保持在软件中
         // Back Buffer (Drawing Target) - Keep in Software
+        printf("Creating back buffer surface with size: %dx%d\n", logicalWidth, logicalHeight);
         surface = SDL_CreateRGBSurfaceWithFormat(0, logicalWidth, logicalHeight, 32, SDL_PIXELFORMAT_RGBA32);
+        if (!surface) {
+            printf("SDL_CreateRGBSurfaceWithFormat Error (back): %s\n", SDL_GetError());
+        } else {
+            printf("Back buffer surface created successfully\n");
+        }
         
         // 前端缓冲区 (显示目标) - 保持在软件中
         // Front Buffer (Display Target) - Keep in Software
+        printf("Creating display surface with size: %dx%d\n", logicalWidth, logicalHeight);
         displaySurface = SDL_CreateRGBSurfaceWithFormat(0, logicalWidth, logicalHeight, 32, SDL_PIXELFORMAT_RGBA32);
+        if (!displaySurface) {
+            printf("SDL_CreateRGBSurfaceWithFormat Error (display): %s\n", SDL_GetError());
+        } else {
+            printf("Display surface created successfully\n");
+        }
         
         // 填充白色背景
         // Fill white
-        SDL_FillRect(surface, nullptr, SDL_MapRGBA(surface->format, 255, 255, 255, 255));
-        SDL_FillRect(displaySurface, nullptr, SDL_MapRGBA(displaySurface->format, 255, 255, 255, 255));
+        if (surface) {
+            SDL_FillRect(surface, nullptr, SDL_MapRGBA(surface->format, 255, 255, 255, 255));
+            printf("Back buffer filled with white\n");
+        }
+        if (displaySurface) {
+            SDL_FillRect(displaySurface, nullptr, SDL_MapRGBA(displaySurface->format, 255, 255, 255, 255));
+            printf("Display surface filled with white\n");
+        }
         
         // 初始显示
         // Initial Present
+        printf("Performing initial update\n");
         updateNoLock();
+        printf("Initial update completed\n");
 
         // 初始化 TTF 字体引擎
         // Init TTF
+        printf("Initializing TTF...\n");
         if (TTF_Init() == -1) {
             std::cerr << "TTF_Init: " << TTF_GetError() << std::endl;
+            printf("TTF_Init failed: %s\n", TTF_GetError());
         } else {
+            printf("TTF_Init succeeded!\n");
             auto tryOpen = [](const char* path, int pt) -> TTF_Font* {
+                printf("Trying to open font: %s, size: %d\n", path, pt);
                 TTF_Font* f = TTF_OpenFont(path, pt);
+                if (f) {
+                    printf("Successfully opened font: %s\n", path);
+                } else {
+                    printf("Failed to open font: %s, error: %s\n", path, TTF_GetError());
+                }
                 return f;
             };
 
+            // 在 Windows 系统上添加系统字体目录的搜索路径
+            #ifdef _WIN32
+            printf("Searching for Windows system fonts...\n");
+            const char* windowsFonts[] = {
+                "C:\\Windows\\Fonts\\SimSun.ttc",     // 宋体
+                "C:\\Windows\\Fonts\\SimHei.ttf",     // 黑体
+                "C:\\Windows\\Fonts\\Microsoft YaHei.ttf", // 微软雅黑
+                "C:\\Windows\\Fonts\\Arial.ttf",      // Arial
+            };
+
+            for (const char* p : windowsFonts) {
+                if (!fontMedium) fontMedium = tryOpen(p, 16);
+                if (!fontSmall) fontSmall = tryOpen(p, 14);
+                if (!fontLarge) fontLarge = tryOpen(p, 22);
+                if (fontMedium && fontSmall && fontLarge) break;
+            }
+            #else
+            printf("Not on Windows, skipping system font search...\n");
+            #endif
+
+            printf("Searching for other fonts...\n");
             const char* paths[] = {
                 "/System/Library/Fonts/Hiragino Sans GB.ttc",
                 "fonts/s60snr.ttf",
+                "fonts/Tahoma.ttf",
                 "/Library/Fonts/Arial.ttf",
             };
 
@@ -97,6 +156,13 @@ public:
 
             if (!font) {
                 std::cerr << "TTF_OpenFont failed: " << TTF_GetError() << std::endl;
+                printf("TTF_OpenFont failed: %s\n", TTF_GetError());
+            } else {
+                printf("Fonts loaded successfully!\n");
+                printf("fontMedium: %p\n", fontMedium);
+                printf("fontSmall: %p\n", fontSmall);
+                printf("fontLarge: %p\n", fontLarge);
+                printf("font: %p\n", font);
             }
         }
     }
@@ -202,9 +268,9 @@ public:
                     case 2: sx = width - 1 - dx; sy = dy; break; // TRANS_MIRROR
                     case 3: sx = width - 1 - dx; sy = height - 1 - dy; break; // TRANS_ROT180
                     case 1: sx = dx; sy = height - 1 - dy; break; // TRANS_MIRROR_ROT180
-                    case 5: sx = dy; sy = height - 1 - dx; break; // TRANS_ROT90
-                    case 7: sx = width - 1 - dy; sy = height - 1 - dx; break; // TRANS_MIRROR_ROT90
-                    case 6: sx = width - 1 - dy; sy = dx; break; // TRANS_ROT270
+                    case 5: sx = dy; sy = width - 1 - dx; break; // TRANS_ROT90
+                    case 7: sx = height - 1 - dy; sy = width - 1 - dx; break; // TRANS_MIRROR_ROT90
+                    case 6: sx = height - 1 - dy; sy = dx; break; // TRANS_ROT270
                     case 4: sx = dy; sy = dx; break; // TRANS_MIRROR_ROT270
                     default: sx = dx; sy = dy; break;
                 }
@@ -1022,13 +1088,29 @@ private:
     void updateNoLock() {
         if (renderer && texture && displaySurface) {
              // 更新纹理
-             SDL_UpdateTexture(texture, nullptr, displaySurface->pixels, displaySurface->pitch);
+             if (SDL_UpdateTexture(texture, nullptr, displaySurface->pixels, displaySurface->pitch) < 0) {
+                 printf("SDL_UpdateTexture Error: %s\n", SDL_GetError());
+             }
              // 清除渲染器
-             SDL_RenderClear(renderer);
+             if (SDL_RenderClear(renderer) < 0) {
+                 printf("SDL_RenderClear Error: %s\n", SDL_GetError());
+             }
              // 复制纹理到渲染器 (自动缩放以填充窗口)
-             SDL_RenderCopy(renderer, texture, nullptr, nullptr); // Stretches to fill target
+             if (SDL_RenderCopy(renderer, texture, nullptr, nullptr) < 0) {
+                 printf("SDL_RenderCopy Error: %s\n", SDL_GetError());
+             }
              // 显示
              SDL_RenderPresent(renderer);
+        } else {
+            if (!renderer) {
+                printf("Renderer not initialized\n");
+            }
+            if (!texture) {
+                printf("Texture not initialized\n");
+            }
+            if (!displaySurface) {
+                printf("Display surface not initialized\n");
+            }
         }
     }
 

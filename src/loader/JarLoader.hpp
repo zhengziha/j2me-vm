@@ -5,7 +5,8 @@
 #include <map>
 #include <memory>
 #include <optional>
-#include <zip.h>
+#include <minizip/unzip.h>
+#include <cstdint>
 
 namespace j2me {
 namespace loader {
@@ -31,8 +32,10 @@ public:
     void close();
 
 private:
-    zip_t* archive = nullptr;
+    unzFile archive = nullptr;
     std::string jarPath;
+    std::map<std::string, unz_file_pos> fileMap;
+    void buildFileMap();
 };
 
 } // namespace loader

@@ -1,0 +1,74 @@
+# Windows Makefile for j2me-vm
+
+# Compiler settings
+CXX = D:\msys64\mingw64\bin\g++
+CXXFLAGS = -std=c++17 -Wall -Wextra -I./src -IE:/sdl2 -ID:\msys64\mingw64\include
+LDFLAGS = -LE:/sdl2/lib -LD:\msys64\mingw64\lib
+LIBS = -lSDL2 -lSDL2_mixer -lSDL2_image -lSDL2_ttf -lz -lminizip -mconsole
+
+# Source files (explicit list)
+SOURCES = \
+    src/main.cpp \
+    src/core/EventLoop.cpp \
+    src/core/J2MEVM.cpp \
+    src/core/Interpreter.cpp \
+    src/core/ClassParser.cpp \
+    src/core/HeapManager.cpp \
+    src/core/NativeRegistry.cpp \
+    src/core/Diagnostics.cpp \
+    src/core/Logger.cpp \
+    src/core/StackFrame.cpp \
+    src/core/RuntimeTypes.cpp \
+    src/core/Interpreter_ClassLoader.cpp \
+    src/core/instructions/Instructions_Comparisons.cpp \
+    src/core/instructions/Instructions_Constants.cpp \
+    src/core/instructions/Instructions_Control.cpp \
+    src/core/instructions/Instructions_Conversions.cpp \
+    src/core/instructions/Instructions_Extended.cpp \
+    src/core/instructions/Instructions_Loads.cpp \
+    src/core/instructions/Instructions_Math.cpp \
+    src/core/instructions/Instructions_References.cpp \
+    src/core/instructions/Instructions_Stack.cpp \
+    src/core/instructions/Instructions_Stores.cpp \
+    src/loader/JarLoader.cpp \
+    src/platform/GraphicsContext.cpp \
+    src/native/java_lang_String.cpp \
+    src/native/java_lang_System.cpp \
+    src/native/java_lang_Thread.cpp \
+    src/native/java_lang_Class.cpp \
+    src/native/java_lang_StringBuffer.cpp \
+    src/native/java_lang_Object.cpp \
+    src/native/java_io_PrintStream.cpp \
+    src/native/java_io_InputStream.cpp \
+    src/native/java_util_Timer.cpp \
+    src/native/NativeInputStream.cpp \
+    src/native/ImageCommon.cpp \
+    src/native/javax_microedition_lcdui_Graphics.cpp \
+    src/native/javax_microedition_lcdui_Display.cpp \
+    src/native/javax_microedition_lcdui_Image.cpp \
+    src/native/javax_microedition_lcdui_Font.cpp \
+    src/native/javax_microedition_lcdui_game_GameCanvas.cpp \
+    src/native/javax_microedition_media_Manager.cpp \
+    src/native/javax_microedition_rms_RecordStore.cpp \
+    src/native/javax_microedition_io_Connector.cpp \
+    src/util/FileUtils.cpp
+
+# Object files
+OBJECTS = $(SOURCES:.cpp=.o)
+
+# Executable name
+TARGET = j2me-vm.exe
+
+# Build rules
+all: $(TARGET)
+
+$(TARGET): $(OBJECTS)
+	$(CXX) $(LDFLAGS) -o $@ $^ $(LIBS)
+
+%.o: %.cpp
+	$(CXX) $(CXXFLAGS) -c -o $@ $<
+
+clean:
+	rm -f $(OBJECTS) $(TARGET)
+
+.PHONY: all clean

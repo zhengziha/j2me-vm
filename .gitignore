@@ -23,7 +23,11 @@ CMakeCache.txt
 cmake_install.cmake
 Makefile
 compile_commands.json
-
+cmake-build-debug/
+*.elf
+*.nro
+*.nacp
+*.jar
 # IDE / Editor
 .vscode/
 .idea/

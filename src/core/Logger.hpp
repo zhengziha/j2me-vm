@@ -3,6 +3,7 @@
 #include <iostream>
 #include <string>
 #include <sstream>
+#include <fstream>
 
 namespace j2me {
 namespace core {
@@ -42,6 +43,7 @@ private:
     Logger& operator=(const Logger&) = delete;
 
     LogLevel level;
+    std::ofstream logFile;
 
     void log(LogLevel level, const std::string& message);
 

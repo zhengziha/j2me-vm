@@ -35,7 +35,11 @@ std::string getRecordStorePath(const std::string& name) {
 void ensureRmsDir() {
     struct stat st;
     if (stat(g_rmsDir.c_str(), &st) != 0) {
+#ifdef _WIN32
+        mkdir(g_rmsDir.c_str());
+#else
         mkdir(g_rmsDir.c_str(), 0755);
+#endif
     }
 }
 

@@ -5,36 +5,12 @@
 #include "../core/Interpreter.hpp"
 #include <iostream>
 #include <string>
-#include <iconv.h>
 #include <vector>
 #include <algorithm>
 #include <cctype>
 
 namespace j2me {
 namespace natives {
-
-static std::string normalizeIconvCharset(std::string s) {
-    s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](unsigned char ch) { return !std::isspace(ch); }));
-    s.erase(std::find_if(s.rbegin(), s.rend(), [](unsigned char ch) { return !std::isspace(ch); }).base(), s.end());
-
-    std::string key;
-    key.reserve(s.size());
-    for (unsigned char ch : s) {
-        if (ch == '-' || ch == '_' || ch == ' ') continue;
-        key.push_back((char)std::toupper(ch));
-    }
-
-    if (key == "UTF8") return "UTF-8";
-    if (key == "UTF16") return "UTF-16";
-    if (key == "UTF16LE") return "UTF-16LE";
-    if (key == "UTF16BE") return "UTF-16BE";
-    if (key == "ISO88591" || key == "ISO8859-1") return "ISO-8859-1";
-    if (key == "GB2312" || key == "CP936" || key == "MS936") return "GBK";
-    if (key == "GB18030") return "GB18030";
-    if (key == "BIG5") return "BIG5";
-
-    return s.empty() ? "UTF-8" : s;
-}
 
 static bool isValidUtf8(const std::vector<uint8_t>& bytes, bool& hasMultibyte) {
     hasMultibyte = false;
@@ -68,40 +44,53 @@ static bool isValidUtf8(const std::vector<uint8_t>& bytes, bool& hasMultibyte) {
     return true;
 }
 
-static bool iconvToUtf16LE(const std::vector<uint8_t>& bytes, const std::string& charsetName, std::vector<uint16_t>& out) {
+static bool utf8ToUtf16LE(const std::vector<uint8_t>& bytes, std::vector<uint16_t>& out) {
     out.clear();
     if (bytes.empty()) return true;
-    std::string charset = normalizeIconvCharset(charsetName);
-    iconv_t cd = iconv_open("UTF-16LE", charset.c_str());
-    if (cd == (iconv_t)-1) return false;
 
-    std::vector<char> inBuf(bytes.begin(), bytes.end());
-    std::vector<char> outBuf(inBuf.size() * 4 + 8);
-    char* inPtr = inBuf.data();
-    size_t inBytes = inBuf.size();
-    char* outPtr = outBuf.data();
-    size_t outBytes = outBuf.size();
-
-    size_t ret = iconv(cd, &inPtr, &inBytes, &outPtr, &outBytes);
-    iconv_close(cd);
-    if (ret == (size_t)-1) return false;
-
-    size_t convertedBytes = outBuf.size() - outBytes;
-    size_t charCount = convertedBytes / 2;
-    out.resize(charCount);
-    const uint16_t* u16Ptr = (const uint16_t*)outBuf.data();
-    for (size_t i = 0; i < charCount; i++) out[i] = u16Ptr[i];
+    size_t i = 0;
+    while (i < bytes.size()) {
+        uint8_t c = bytes[i];
+        if (c <= 0x7F) {
+            // 1-byte UTF-8
+            out.push_back(c);
+            i++;
+        } else if ((c & 0xE0) == 0xC0) {
+            // 2-byte UTF-8
+            if (i + 1 >= bytes.size()) return false;
+            uint8_t c1 = bytes[i + 1];
+            if ((c1 & 0xC0) != 0x80) return false;
+            uint16_t code = ((c & 0x1F) << 6) | (c1 & 0x3F);
+            out.push_back(code);
+            i += 2;
+        } else if ((c & 0xF0) == 0xE0) {
+            // 3-byte UTF-8
+            if (i + 2 >= bytes.size()) return false;
+            uint8_t c1 = bytes[i + 1], c2 = bytes[i + 2];
+            if ((c1 & 0xC0) != 0x80 || (c2 & 0xC0) != 0x80) return false;
+            uint16_t code = ((c & 0x0F) << 12) | ((c1 & 0x3F) << 6) | (c2 & 0x3F);
+            out.push_back(code);
+            i += 3;
+        } else {
+            // 4-byte UTF-8 or invalid
+            return false;
+        }
+    }
     return true;
+}
+
+static bool iconvToUtf16LE(const std::vector<uint8_t>& bytes, const std::string& charsetName, std::vector<uint16_t>& out) {
+    // 只支持UTF-8编码
+    return utf8ToUtf16LE(bytes, out);
 }
 
 static std::vector<uint16_t> decodeBytesGuessCharset(const std::vector<uint8_t>& bytes) {
     std::vector<uint16_t> out;
     bool hasMultibyte = false;
     if (isValidUtf8(bytes, hasMultibyte) && hasMultibyte) {
-        if (iconvToUtf16LE(bytes, "UTF-8", out)) return out;
+        if (utf8ToUtf16LE(bytes, out)) return out;
     }
-    if (iconvToUtf16LE(bytes, "GBK", out)) return out;
-    if (iconvToUtf16LE(bytes, "GB18030", out)) return out;
+    // 回退到ISO-8859-1编码
     out.resize(bytes.size());
     for (size_t i = 0; i < bytes.size(); i++) out[i] = (uint16_t)bytes[i];
     return out;
@@ -205,43 +194,29 @@ std::string getJavaString(j2me::core::JavaObject* strObj) {
             // If the string contains only characters <= 0xFF (Latin-1), and has high bytes (> 0x7F),
             // it's likely a GBK byte stream interpreted as ISO-8859-1.
             // We try to convert it back to UTF-8 using GBK decoding.
+            // 由于没有iconv库，我们暂时跳过这个功能
             if (offset < arrayObj->fields.size()) {
                 size_t actualCount = std::min(count, arrayObj->fields.size() - offset);
                 
-                bool potentialGBK = false;
-                bool hasHighByte = false;
                 bool hasNonLatin1 = false;
-                std::vector<char> rawBytes;
-                rawBytes.reserve(actualCount);
-                
                 for (size_t i = 0; i < actualCount; i++) {
                     uint16_t ch = (uint16_t)arrayObj->fields[offset + i];
                     if (ch > 0xFF) {
                         hasNonLatin1 = true;
                         break;
                     }
-                    if (ch > 0x7F) hasHighByte = true;
-                    rawBytes.push_back((char)ch);
                 }
                 
-                if (!hasNonLatin1 && hasHighByte && !rawBytes.empty()) {
-                     iconv_t cd = iconv_open("UTF-8", "GBK");
-                     if (cd != (iconv_t)-1) {
-                         std::vector<char> outBuf(rawBytes.size() * 4 + 1); 
-                         char* inPtr = rawBytes.data();
-                         size_t inBytes = rawBytes.size();
-                         char* outPtr = outBuf.data();
-                         size_t outBytes = outBuf.size();
-                         
-                         // We use a temporary copy because iconv modifies pointers
-                         if (iconv(cd, &inPtr, &inBytes, &outPtr, &outBytes) != (size_t)-1) {
-                             iconv_close(cd);
-                             std::string converted(outBuf.data(), outBuf.size() - outBytes);
-                             std::cout << "[getJavaString] Repaired GBK double-encoding: " << converted << std::endl;
-                             return converted;
-                         }
-                         iconv_close(cd);
-                     }
+                // 暂时跳过GBK修复功能
+                if (!hasNonLatin1) {
+                    // 直接返回原始字节
+                    std::string res;
+                    res.reserve(actualCount);
+                    for (size_t i = 0; i < actualCount; i++) {
+                        uint16_t ch = (uint16_t)arrayObj->fields[offset + i];
+                        res += (char)ch;
+                    }
+                    return res;
                 }
             }
 
@@ -566,64 +541,44 @@ void registerStringNatives(j2me::core::NativeRegistry& registry) {
                         bool converted = false;
                         
                         // GBK Heuristic: Check if chars are actually bytes (<= 0xFF) and contain GBK
+                        // 由于没有iconv库，我们暂时跳过这个功能
                         bool allLatin1 = true;
-                        bool hasHigh = false;
-                        std::vector<char> inBuf;
-                        inBuf.reserve(length);
-                        
                         for(int i=0; i<length; i++) {
                             uint16_t c = charArrayObj->fields[offset+i];
                             if (c > 0xFF) {
                                 allLatin1 = false;
                                 break;
                             }
-                            if (c > 0x7F) hasHigh = true;
-                            inBuf.push_back((char)c);
                         }
                         
-                        if (allLatin1 && hasHigh && !inBuf.empty()) {
-                            std::vector<char> outBuf(inBuf.size() * 2 + 2);
-                            iconv_t cd = iconv_open("UTF-16LE", "GBK");
+                        // 暂时跳过GBK修复功能
+                        if (allLatin1) {
+                            // 直接使用原始字节
+                            auto interpreter = j2me::core::NativeRegistry::getInstance().getInterpreter();
+                            auto newCharArrayCls = interpreter->resolveClass("[C");
                             
-                            if (cd != (iconv_t)-1) {
-                                char* inPtr = inBuf.data();
-                                size_t inBytes = inBuf.size();
-                                char* outPtr = outBuf.data();
-                                size_t outBytes = outBuf.size();
+                            if (newCharArrayCls) {
+                                auto newCharArrayObj = j2me::core::HeapManager::getInstance().allocate(newCharArrayCls);
+                                newCharArrayObj->fields.resize(length);
                                 
-                                if (iconv(cd, &inPtr, &inBytes, &outPtr, &outBytes) != (size_t)-1) {
-                                    size_t convertedBytes = outBuf.size() - outBytes;
-                                    size_t charCount = convertedBytes / 2;
-                                    
-                                    auto interpreter = j2me::core::NativeRegistry::getInstance().getInterpreter();
-                                    auto newCharArrayCls = interpreter->resolveClass("[C");
-                                    
-                                    if (newCharArrayCls) {
-                                        auto newCharArrayObj = j2me::core::HeapManager::getInstance().allocate(newCharArrayCls);
-                                        newCharArrayObj->fields.resize(charCount);
-                                        
-                                        uint16_t* u16Ptr = (uint16_t*)outBuf.data();
-                                        for (size_t i = 0; i < charCount; i++) {
-                                            newCharArrayObj->fields[i] = u16Ptr[i];
-                                        }
-                                        
-                                        auto valueIt = thisObj->cls->fieldOffsets.find("value|[C");
-                                        if (valueIt == thisObj->cls->fieldOffsets.end()) valueIt = thisObj->cls->fieldOffsets.find("value|[B");
-                                        if (valueIt != thisObj->cls->fieldOffsets.end()) {
-                                            thisObj->fields[valueIt->second] = reinterpret_cast<intptr_t>(newCharArrayObj);
-                                        }
-                                        
-                                        auto countIt = thisObj->cls->fieldOffsets.find("count|I");
-                                        if (countIt != thisObj->cls->fieldOffsets.end()) thisObj->fields[countIt->second] = charCount;
-                                        
-                                        auto offsetIt = thisObj->cls->fieldOffsets.find("offset|I");
-                                        if (offsetIt != thisObj->cls->fieldOffsets.end()) thisObj->fields[offsetIt->second] = 0;
-                                        
-                                        converted = true;
-                                        std::cout << "[String.<init>([CII)] Repaired GBK chars: converted " << length << " Latin1 chars to " << charCount << " UTF-16 chars" << std::endl;
-                                    }
+                                for (int i = 0; i < length; i++) {
+                                    newCharArrayObj->fields[i] = charArrayObj->fields[offset+i];
                                 }
-                                iconv_close(cd);
+                                
+                                auto valueIt = thisObj->cls->fieldOffsets.find("value|[C");
+                                if (valueIt == thisObj->cls->fieldOffsets.end()) valueIt = thisObj->cls->fieldOffsets.find("value|[B");
+                                if (valueIt != thisObj->cls->fieldOffsets.end()) {
+                                    thisObj->fields[valueIt->second] = reinterpret_cast<intptr_t>(newCharArrayObj);
+                                }
+                                
+                                auto countIt = thisObj->cls->fieldOffsets.find("count|I");
+                                if (countIt != thisObj->cls->fieldOffsets.end()) thisObj->fields[countIt->second] = length;
+                                
+                                auto offsetIt = thisObj->cls->fieldOffsets.find("offset|I");
+                                if (offsetIt != thisObj->cls->fieldOffsets.end()) thisObj->fields[offsetIt->second] = 0;
+                                
+                                converted = true;
+                                std::cout << "[String.<init>([CII)] Using original Latin1 chars" << std::endl;
                             }
                         }
                         

@@ -2,13 +2,38 @@
 #include <thread>
 #include <chrono>
 #include <cstdlib>
-#include <SDL2/SDL.h>
 #include <algorithm>
 #include <string>
 #include <vector>
 #include <sys/stat.h>
 #include <csignal>
 #include <sstream>
+
+// 告诉 SDL2 我们会处理自己的入口点，不要将 main 替换为 SDL_main
+#define SDL_MAIN_HANDLED
+
+// 声明 main 函数，以便在 WinMain 中调用
+int main(int argc, char* argv[]);
+
+#ifdef _WIN32
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+// 取消定义可能与 LogLevel 冲突的宏
+#undef ERROR
+#undef NONE
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+    int argc = 1;
+    char* argv[] = {"j2me-vm.exe", nullptr};
+    return main(argc, argv);
+}
+#endif
+
+#include <SDL2/SDL.h>
+
+#ifdef __SWITCH__
+#include <switch.h>
+#endif
 
 #include "core/VMConfig.hpp"
 #include "core/J2MEVM.hpp"
@@ -80,18 +105,26 @@ static int parseAutoKeyToken(const std::string& t) {
 }
 
 int main(int argc, char* argv[]) {
-    if (argc < 2) {
-        std::cout << "Usage: j2me-vm [--log-level LEVEL] [--timeout-ms MS] [--auto-key [SEQ]] [--no-auto-key] [--auto-key-delay-ms MS] <path_to_jar_or_class>" << std::endl;
-        std::cout << "  LEVEL: debug, info, error, none (default: info)" << std::endl;
-        std::cout << "  MS: auto exit after MS milliseconds (0 disables, minimum: 15000)" << std::endl;
-        std::cout << "  SEQ: comma-separated keys, e.g. soft1,fire or fire (default: soft1,fire when enabled)" << std::endl;
-        return 1;
-    }
 
+    // if (argc < 2) {
+    //     std::cout << "Usage: j2me-vm [--log-level LEVEL] [--timeout-ms MS] [--auto-key [SEQ]] [--no-auto-key] [--auto-key-delay-ms MS] <path_to_jar_or_class>" << std::endl;
+    //     std::cout << "  LEVEL: debug, info, error, none (default: info)" << std::endl;
+    //     std::cout << "  MS: auto exit after MS milliseconds (0 disables, minimum: 15000)" << std::endl;
+    //     std::cout << "  SEQ: comma-separated keys, e.g. soft1,fire or fire (default: soft1,fire when enabled)" << std::endl;
+    //     return 1;
+    // }
+    #ifdef __SWITCH__
+    LOG_INFO("Initializing romfs");
+    romfsInit();
+    LOG_INFO("Changing directory to romfs:/");
+    chdir("romfs:/");
+    LOG_INFO("romfs initialized successfully");
+#endif
     // 解析命令行参数
     // Parse command line arguments
     j2me::core::VMConfig config;
     config.logLevel = j2me::core::LogLevel::INFO;
+    config.filePath = "fr.jar";
     int64_t timeoutMs = 0;
     constexpr int64_t MIN_TIMEOUT_MS = 15000;
     bool autoKeyForcedOn = false;
@@ -220,11 +253,17 @@ int main(int argc, char* argv[]) {
         size_t lastSlash = config.filePath.find_last_of("/\\");
         if (lastSlash != std::string::npos) {
             std::string jarDir = config.filePath.substr(0, lastSlash);
+            libraryPaths.push_back(jarDir + "/rt.jar");
             libraryPaths.push_back(jarDir + "/stubs/rt.jar");
             libraryPaths.push_back(jarDir + "/../stubs/rt.jar");
         }
     }
-    libraryPaths.push_back("/Users/zhengzihang/my-src/j2me-vm/stubs/rt.jar");
+    // 添加Switch平台特有的路径
+    #ifdef __SWITCH__
+    libraryPaths.push_back("romfs/rt.jar");
+    libraryPaths.push_back("rt.jar");
+    #endif
+    // 添加通用路径
     libraryPaths.push_back("stubs/rt.jar");
     libraryPaths.push_back("../stubs/rt.jar");
     
@@ -305,14 +344,45 @@ int main(int argc, char* argv[]) {
 
     // 运行虚拟机
     // Run VM
-    j2me::core::J2MEVM vm;
-    int result = vm.run(config);
+    LOG_INFO("Starting VM with config: filePath='" + config.filePath + "', mainClassName='" + config.mainClassName + "'");
+    int result = 1;
+    
+    try {
+        j2me::core::J2MEVM vm;
+        LOG_INFO("Calling vm.run()");
+        result = vm.run(config);
+        LOG_INFO("VM run completed with result: " + std::to_string(result));
+        std::cout << "[INFO] VM run completed with result: " << result << std::endl;
+    } catch (const std::exception& e) {
+        LOG_ERROR("VM crashed with exception: " + std::string(e.what()));
+        std::cerr << "[ERROR] VM crashed with exception: " << e.what() << std::endl;
+        // 尝试将错误信息写入文件
+        std::ofstream errorFile("j2me-vm-error.log");
+        if (errorFile.is_open()) {
+            errorFile << "VM crashed with exception: " << e.what() << std::endl;
+            errorFile.close();
+        }
+    } catch (...) {
+        LOG_ERROR("VM crashed with unknown exception");
+        std::cerr << "[ERROR] VM crashed with unknown exception" << std::endl;
+        // 尝试将错误信息写入文件
+        std::ofstream errorFile("j2me-vm-error.log");
+        if (errorFile.is_open()) {
+            errorFile << "VM crashed with unknown exception" << std::endl;
+            errorFile.close();
+        }
+    }
     
     LOG_INFO("VM Stopped. Cleaning up SDL.");
 
     SDL_DestroyWindow(window);
     SDL_Quit();
     
-    LOG_INFO("Shutdown complete.");
+    #ifdef __SWITCH__
+    romfsExit();
+    LOG_INFO("Exited romfs");
+    #endif
+    
+    LOG_INFO("Shutdown complete. Exiting with code: " + std::to_string(result));
     return result;
 }

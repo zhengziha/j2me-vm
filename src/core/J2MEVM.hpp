@@ -6,6 +6,10 @@
 #include <memory>
 #include <string>
 
+#ifdef __SWITCH__
+#include <switch.h>
+#endif
+
 namespace j2me {
 namespace core {
 

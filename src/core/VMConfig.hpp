@@ -6,6 +6,7 @@
 #include <memory>
 #include "Logger.hpp"
 #include "../loader/JarLoader.hpp"
+#include <cstdint>
 
 namespace j2me {
 namespace core {
