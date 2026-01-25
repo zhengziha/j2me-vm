@@ -82,9 +82,9 @@ public:
             };
 
             for (const char* p : paths) {
-                if (!fontMedium) fontMedium = tryOpen(p, 12);
-                if (!fontSmall) fontSmall = tryOpen(p, 10);
-                if (!fontLarge) fontLarge = tryOpen(p, 18);
+                if (!fontMedium) fontMedium = tryOpen(p, 16);
+                if (!fontSmall) fontSmall = tryOpen(p, 14);
+                if (!fontLarge) fontLarge = tryOpen(p, 22);
                 if (fontMedium && fontSmall && fontLarge) break;
             }
 
@@ -137,6 +137,7 @@ public:
         std::lock_guard<std::mutex> lock(surfaceMutex);
         if (!target) target = surface;
         if (!src || !target) return;
+        SDL_SetSurfaceBlendMode(src, SDL_BLENDMODE_BLEND);
         markDrawNoLock();
         lastOpType = 5;
         lastOpMs = nowMsNoLock();
@@ -213,8 +214,33 @@ public:
 
                 if (sx >= 0 && sx < src->w && sy >= 0 && sy < src->h) {
                     uint32_t color = srcPixels[sy * srcPitch + sx];
-                    if ((color & src->format->Amask) != 0) {
+                    uint32_t aMask = src->format->Amask;
+                    if (aMask == 0) {
                         dstPixels[destY * dstPitch + destX] = color;
+                    } else {
+                        uint32_t aVal = (color & aMask) >> src->format->Ashift;
+                        if (aVal == 0) {
+                            continue;
+                        }
+                        if (aVal >= 255) {
+                            uint32_t r = (color & src->format->Rmask) >> src->format->Rshift;
+                            uint32_t g = (color & src->format->Gmask) >> src->format->Gshift;
+                            uint32_t b = (color & src->format->Bmask) >> src->format->Bshift;
+                            dstPixels[destY * dstPitch + destX] = SDL_MapRGBA(target->format, (Uint8)r, (Uint8)g, (Uint8)b, 255);
+                        } else {
+                            uint32_t srcR = (color & src->format->Rmask) >> src->format->Rshift;
+                            uint32_t srcG = (color & src->format->Gmask) >> src->format->Gshift;
+                            uint32_t srcB = (color & src->format->Bmask) >> src->format->Bshift;
+                            uint32_t dst = dstPixels[destY * dstPitch + destX];
+                            uint32_t dstR = (dst & target->format->Rmask) >> target->format->Rshift;
+                            uint32_t dstG = (dst & target->format->Gmask) >> target->format->Gshift;
+                            uint32_t dstB = (dst & target->format->Bmask) >> target->format->Bshift;
+                            uint32_t invA = 255 - aVal;
+                            uint32_t outR = (srcR * aVal + dstR * invA) / 255;
+                            uint32_t outG = (srcG * aVal + dstG * invA) / 255;
+                            uint32_t outB = (srcB * aVal + dstB * invA) / 255;
+                            dstPixels[destY * dstPitch + destX] = SDL_MapRGBA(target->format, (Uint8)outR, (Uint8)outG, (Uint8)outB, 255);
+                        }
                     }
                 }
             }
@@ -263,8 +289,19 @@ public:
                 uint8_t bb = (argb) & 0xFF;
                 if (!processAlpha) a = 255;
 
-                if (a != 0) {
-                    dstPixels[destY * dstPitch + destX] = SDL_MapRGBA(target->format, rr, gg, bb, a);
+                if (a == 0) continue;
+                if (a >= 255) {
+                    dstPixels[destY * dstPitch + destX] = SDL_MapRGBA(target->format, rr, gg, bb, 255);
+                } else {
+                    uint32_t dst = dstPixels[destY * dstPitch + destX];
+                    uint32_t dstR = (dst & target->format->Rmask) >> target->format->Rshift;
+                    uint32_t dstG = (dst & target->format->Gmask) >> target->format->Gshift;
+                    uint32_t dstB = (dst & target->format->Bmask) >> target->format->Bshift;
+                    uint32_t invA = 255 - a;
+                    uint32_t outR = (rr * a + dstR * invA) / 255;
+                    uint32_t outG = (gg * a + dstG * invA) / 255;
+                    uint32_t outB = (bb * a + dstB * invA) / 255;
+                    dstPixels[destY * dstPitch + destX] = SDL_MapRGBA(target->format, (Uint8)outR, (Uint8)outG, (Uint8)outB, 255);
                 }
             }
         }
@@ -1107,6 +1144,7 @@ public:
 
 private:
     void renderSurface(SDL_Surface* src, int x, int y, int anchor, SDL_Surface* destSurf) {
+        SDL_SetSurfaceBlendMode(src, SDL_BLENDMODE_BLEND);
         int tx = x;
         int ty = y;
         

@@ -49,7 +49,7 @@ public class Font {
     }
 
     public int getHeight() {
-        return size == SIZE_SMALL ? 10 : (size == SIZE_LARGE ? 20 : 14);
+        return size == SIZE_SMALL ? 12 : (size == SIZE_LARGE ? 22 : 16);
     }
 
     public int getBaselinePosition() {
@@ -69,7 +69,7 @@ public class Font {
     }
 
     public int stringWidth(String str) {
-        return str.length() * (size == SIZE_SMALL ? 6 : (size == SIZE_LARGE ? 12 : 8));
+        return str.length() * (size == SIZE_SMALL ? 7 : (size == SIZE_LARGE ? 13 : 9));
     }
 
     public boolean isBold() {

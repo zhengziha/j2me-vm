@@ -260,6 +260,7 @@ void registerImageNatives(j2me::core::NativeRegistry& registry) {
                 
                 SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, SDL_PIXELFORMAT_RGBA32);
                 if (surface) {
+                    SDL_SetSurfaceBlendMode(surface, SDL_BLENDMODE_BLEND);
                     SDL_LockSurface(surface);
                     uint32_t* targetPixels = (uint32_t*)surface->pixels;
                     
@@ -304,6 +305,7 @@ void registerImageNatives(j2me::core::NativeRegistry& registry) {
             SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, SDL_PIXELFORMAT_RGBA32);
             
             if (surface) {
+                SDL_SetSurfaceBlendMode(surface, SDL_BLENDMODE_BLEND);
                 SDL_FillRect(surface, NULL, SDL_MapRGBA(surface->format, 255, 255, 255, 255));
                 
                 int32_t imgId = nextImageId++;
@@ -390,6 +392,7 @@ void registerImageNatives(j2me::core::NativeRegistry& registry) {
                     // Create SDL Surface
                     SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormat(0, w, h, 32, SDL_PIXELFORMAT_RGBA32);
                     if (surface) {
+                        SDL_SetSurfaceBlendMode(surface, SDL_BLENDMODE_BLEND);
                         SDL_LockSurface(surface);
                         
                         uint32_t* targetPixels = (uint32_t*)surface->pixels;
