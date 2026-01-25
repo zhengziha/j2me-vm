@@ -68,13 +68,13 @@ static std::vector<std::string> splitCommaTokens(const std::string& s) {
 static int parseAutoKeyToken(const std::string& t) {
     std::string s = t;
     std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return (char)std::tolower(c); });
-    if (s == "fire" || s == "enter" || s == "ok") return 8;
+    if (s == "fire" || s == "enter" || s == "ok") return -5;
     if (s == "soft1" || s == "softleft" || s == "leftsoft" || s == "lsoft") return -6;
     if (s == "soft2" || s == "softright" || s == "rightsoft" || s == "rsoft") return -7;
-    if (s == "up") return 1;
-    if (s == "down") return 6;
-    if (s == "left") return 2;
-    if (s == "right") return 5;
+    if (s == "up") return -1;
+    if (s == "down") return -2;
+    if (s == "left") return -3;
+    if (s == "right") return -4;
     if (s.size() == 1 && s[0] >= '0' && s[0] <= '9') return (int)s[0];
     return 0;
 }
@@ -142,7 +142,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    if (!autoKeyForcedOff && (autoKeyForcedOn || timeoutMs > 0)) {
+    if (!autoKeyForcedOff && autoKeyForcedOn) {
         config.autoKeyEnabled = true;
         std::string seq = autoKeySeq.empty() ? "soft1,fire" : autoKeySeq;
         for (const auto& token : splitCommaTokens(seq)) {
@@ -150,7 +150,7 @@ int main(int argc, char* argv[]) {
             if (key != 0) config.autoKeyCodes.push_back(key);
         }
         if (config.autoKeyCodes.empty()) {
-            config.autoKeyCodes = {-6, 8};
+            config.autoKeyCodes = {-6, -5};
         }
     }
 
@@ -179,17 +179,20 @@ int main(int argc, char* argv[]) {
     // Create window
     // 初始大小设置为 3 倍缩放 (240x320) 以适应现代屏幕
     // Initial size set to 3x scale (240x320) for better visibility on modern screens   
-    // SDL_WINDOW_RESIZABLE: 允许用户调整窗口大小
     // SDL_WINDOW_ALLOW_HIGHDPI: 支持高 DPI 显示器 (如 Retina 屏幕)
     SDL_Window* window = SDL_CreateWindow("J2ME Emulator",
                                           SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
                                           240, 320, 
-                                          SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
+                                          SDL_WINDOW_SHOWN | SDL_WINDOW_ALLOW_HIGHDPI);
     if (window == nullptr) {
         LOG_ERROR("Window could not be created! SDL_Error: " + std::string(SDL_GetError()));
         return 1;
     }
     LOG_INFO("Window Created.");
+
+    SDL_SetWindowResizable(window, SDL_FALSE);
+    SDL_SetWindowMinimumSize(window, 240, 320);
+    SDL_SetWindowMaximumSize(window, 240, 320);
     
     // 初始化图形上下文，设置逻辑分辨率 (240x320)
     // Init Graphics Context with Logical Resolution (240x320)

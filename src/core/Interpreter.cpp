@@ -66,86 +66,31 @@ int Interpreter::execute(std::shared_ptr<JavaThread> thread, int instructions) {
                 break;
             }
         } catch (const std::exception& e) {
-             LOG_ERROR("Runtime Exception: " + std::string(e.what()));
-             
-             if (frame && frame->classFile) {
-                 // 获取类名
-                 // Get Class Name
-                 std::string className = "Unknown";
-                 if (frame->classFile->constant_pool.size() > frame->classFile->this_class) {
-                     auto classInfo = std::dynamic_pointer_cast<ConstantClass>(frame->classFile->constant_pool[frame->classFile->this_class]);
-                     if (classInfo) {
-                         auto utf8 = std::dynamic_pointer_cast<ConstantUtf8>(frame->classFile->constant_pool[classInfo->name_index]);
-                         if (utf8) className = utf8->bytes;
-                     }
-                 }
-                 
-                 // 获取方法名
-                 // Get Method Name
-                 std::string methodName = "Unknown";
-                 if (frame->method.name_index < frame->classFile->constant_pool.size()) {
-                     auto utf8 = std::dynamic_pointer_cast<ConstantUtf8>(frame->classFile->constant_pool[frame->method.name_index]);
-                     if (utf8) methodName = utf8->bytes;
-                 }
-                 
-                 LOG_ERROR("Exception at " + className + "." + methodName + ", PC: " + std::to_string(frame->pc));
-                 
-                 if (frame->pc < frame->code.size()) {
-                     uint8_t op = frame->code[frame->pc];
-                      std::cerr << "Opcode at PC " << frame->pc << ": 0x" << std::hex << (int)op << std::dec << std::endl;
-                  }
-                  
-                  // Dump Operand Stack
-                  std::cerr << "Operand Stack (Top to Bottom):" << std::endl;
-                  if (frame->isStackEmpty()) {
-                      std::cerr << "  <empty>" << std::endl;
-                  } else {
-                      // We can't access private members directly unless we are friends or have getters.
-                      // StackFrame has no public iterator.
-                      // But we can peek.
-                      // Actually, let's just print the size for now, or add a debug method to StackFrame.
-                      std::cerr << "  Size: " << frame->stackSize() << std::endl;
-                      if (frame->stackSize() > 0) {
-                           JavaValue top = frame->peek();
-                           std::cerr << "  Top Type: " << top.type;
-                           if (top.type == JavaValue::REFERENCE) {
-                               std::cerr << " Val: " << top.val.ref;
-                           } else {
-                               std::cerr << " Val: " << top.val.i << " (hex " << std::hex << top.val.i << std::dec << ")";
-                           }
-                           std::cerr << std::endl;
-                       }
-                  }
+            std::string msg = e.what() ? std::string(e.what()) : std::string();
+            std::string exClass = "java/lang/RuntimeException";
+            if (msg.find("NullPointerException") != std::string::npos) exClass = "java/lang/NullPointerException";
+            else if (msg.find("ArrayIndexOutOfBoundsException") != std::string::npos) exClass = "java/lang/ArrayIndexOutOfBoundsException";
+            else if (msg.find("StringIndexOutOfBoundsException") != std::string::npos) exClass = "java/lang/StringIndexOutOfBoundsException";
+            else if (msg.find("ArithmeticException") != std::string::npos) exClass = "java/lang/ArithmeticException";
+            else if (msg.find("ClassCastException") != std::string::npos) exClass = "java/lang/ClassCastException";
+            else if (msg.find("NegativeArraySizeException") != std::string::npos) exClass = "java/lang/NegativeArraySizeException";
 
-                  // Print Stack Trace
-                 std::cerr << "Stack Trace:" << std::endl;
-                 auto currentThread = thread;
-                 while (currentThread) {
-                     auto currentFrame = currentThread->currentFrame();
-                     if (!currentFrame) break;
-                     
-                     std::string cName = "Unknown";
-                     std::string mName = "Unknown";
-                     if (currentFrame->classFile) {
-                         auto cls = std::dynamic_pointer_cast<ConstantClass>(currentFrame->classFile->constant_pool[currentFrame->classFile->this_class]);
-                         auto utf8 = std::dynamic_pointer_cast<ConstantUtf8>(currentFrame->classFile->constant_pool[cls->name_index]);
-                         cName = utf8->bytes;
-                         
-                         if (currentFrame->method.name_index < currentFrame->classFile->constant_pool.size()) {
-                             auto mUtf8 = std::dynamic_pointer_cast<ConstantUtf8>(currentFrame->classFile->constant_pool[currentFrame->method.name_index]);
-                             mName = mUtf8->bytes;
-                         }
-                     }
-                     std::cerr << "  at " << cName << "." << mName << " (PC: " << currentFrame->pc << ")" << std::endl;
-                     
-                     currentThread->popFrame(); // Unwind for trace (destructive but we are crashing anyway)
-                 }
-             }
-             
-             // 遇到异常时退出程序
-            // Exit the program when an exception is encountered
-            LOG_ERROR("VM terminated due to uncaught exception.");
-            std::exit(1); 
+            auto exCls = resolveClass(exClass);
+            if (!exCls) {
+                LOG_ERROR("Runtime Exception: " + msg);
+                thread->frames.clear();
+                thread->state = JavaThread::TERMINATED;
+                break;
+            }
+
+            JavaObject* exObj = HeapManager::getInstance().allocate(exCls);
+            bool handled = handleException(thread, exObj);
+            if (!handled) {
+                LOG_ERROR("VM terminated due to uncaught exception: " + exClass);
+                thread->frames.clear();
+                thread->state = JavaThread::TERMINATED;
+                break;
+            }
         }
     }
     return executed;

@@ -17,11 +17,12 @@ namespace core {
 
 static int mapKey(SDL_Keycode key) {
     switch (key) {
-        case SDLK_UP: return 1; // UP
-        case SDLK_DOWN: return 6; // DOWN
-        case SDLK_LEFT: return 2; // LEFT
-        case SDLK_RIGHT: return 5; // RIGHT
-        case SDLK_RETURN: return 8; // FIRE 8
+        case SDLK_UP: return -1;
+        case SDLK_DOWN: return -2;
+        case SDLK_LEFT: return -3;
+        case SDLK_RIGHT: return -4;
+        case SDLK_RETURN: return -5;
+        case SDLK_SPACE: return -5;
         case SDLK_0: return 48;
         case SDLK_1: return 49;
         case SDLK_2: return 50;
@@ -32,9 +33,29 @@ static int mapKey(SDL_Keycode key) {
         case SDLK_7: return 55;
         case SDLK_8: return 56;
         case SDLK_9: return 57;
+        case SDLK_q: return 49;
+        case SDLK_w: return 50;
+        case SDLK_e: return 51;
+        case SDLK_a: return 52;
+        case SDLK_s: return 53;
+        case SDLK_d: return 54;
+        case SDLK_z: return 55;
+        case SDLK_x: return 56;
+        case SDLK_c: return 57;
         case SDLK_F1: return -6; // Soft 1 (Left Soft)
         case SDLK_F2: return -7; // Soft 2 (Right Soft)
         // case SDLK_8: return 42; // STAR
+        default: return 0;
+    }
+}
+
+static int keyStateIndexForKeyCode(int keyCode) {
+    switch (keyCode) {
+        case -1: return 1;
+        case -2: return 6;
+        case -3: return 2;
+        case -4: return 5;
+        case -5: return 8;
         default: return 0;
     }
 }
@@ -52,8 +73,9 @@ void EventLoop::pollSDL() {
                 
                 // 更新按键状态位 (用于 GameCanvas)
                 // Update keyStates (GameCanvas)
-                if (keyCode > 0 && keyCode <= 31) { // Safety check
-                    keyStates |= (1 << keyCode);
+                int idx = keyStateIndexForKeyCode(keyCode);
+                if (idx > 0 && idx <= 31) {
+                    keyStates |= (1 << idx);
                 }
             }
         } else if (e.type == SDL_KEYUP) {
@@ -63,8 +85,9 @@ void EventLoop::pollSDL() {
                 eventQueue.push({KeyEvent::RELEASED, keyCode});
 
                 // 更新按键状态位 (用于 GameCanvas)
-                if (keyCode > 0 && keyCode <= 31) {
-                    keyStates &= ~(1 << keyCode);
+                int idx = keyStateIndexForKeyCode(keyCode);
+                if (idx > 0 && idx <= 31) {
+                    keyStates &= ~(1 << idx);
                 }
             }
         }
@@ -80,9 +103,10 @@ void EventLoop::pollSDL() {
             if (ev.type == KeyEvent::PRESSED) {
                 LOG_DEBUG("[AutoKey] pressed keyCode=" + std::to_string(ev.keyCode));
             }
-            if (ev.keyCode > 0 && ev.keyCode <= 31) {
-                if (ev.type == KeyEvent::PRESSED) keyStates |= (1 << ev.keyCode);
-                else if (ev.type == KeyEvent::RELEASED) keyStates &= ~(1 << ev.keyCode);
+            int idx = keyStateIndexForKeyCode(ev.keyCode);
+            if (idx > 0 && idx <= 31) {
+                if (ev.type == KeyEvent::PRESSED) keyStates |= (1 << idx);
+                else if (ev.type == KeyEvent::RELEASED) keyStates &= ~(1 << idx);
             }
             autoKeyEvents.erase(autoKeyEvents.begin());
         }
