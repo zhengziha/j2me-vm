@@ -130,3 +130,10 @@
 ./javax/wireless/messaging/MessageConnection.java
 ./j2me/media/DummyPlayer.java
 ./j2me/media/DummyVolumeControl.java
+./javax/wireless/messaging/MockTextMessage.java
+./javax/wireless/messaging/MockMessageConnection.java
+./com/nokia/mid/ui/FullCanvas.java
+./com/nokia/mid/ui/DirectGraphics.java
+./com/nokia/mid/ui/DirectGraphicsImpl.java
+./com/nokia/mid/ui/DirectUtils.java
+./com/nokia/mid/ui/DeviceControl.java

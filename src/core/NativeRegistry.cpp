@@ -18,6 +18,7 @@
 #include "../native/javax_microedition_media_Manager.hpp"
 #include "../native/javax_microedition_rms_RecordStore.hpp"
 #include "../native/java_util_Timer.hpp"
+#include "../native/javax_microedition_io_Connector.hpp"
 #include "../native/java_lang_Class.hpp"
 #include <iostream>
 
@@ -47,6 +48,7 @@ NativeRegistry::NativeRegistry() {
     j2me::natives::registerMediaNatives(*this);
     j2me::natives::registerRecordStoreNatives(*this);
     j2me::natives::registerTimerNatives(*this);
+    j2me::natives::registerConnectorNatives(*this);
 
     // java/lang/StringBuilder.initNative()V
     registerNative("java/lang/StringBuilder", "initNative", "()V", [](std::shared_ptr<JavaThread> thread, std::shared_ptr<StackFrame> frame) {

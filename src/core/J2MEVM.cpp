@@ -18,6 +18,11 @@
 namespace j2me {
 namespace core {
 
+static void abortOnUnhandledException(const std::string& where, const std::string& what) {
+    LOG_ERROR("Unhandled exception in " + where + ": " + what);
+    EventLoop::getInstance().requestExit("unhandled exception in " + where + ": " + what);
+}
+
 J2MEVM::J2MEVM() {}
 J2MEVM::~J2MEVM() {}
 
@@ -45,19 +50,35 @@ int J2MEVM::run(const VMConfig& config) {
         return 1;
     }
 
-    bool isMIDlet = isMIDletClass(mainClass);
-    bool hasMain = hasMainMethod(mainClass);
+    try {
+        bool isMIDlet = isMIDletClass(mainClass);
+        bool hasMain = hasMainMethod(mainClass);
 
-    if (hasMain && !isMIDlet) {
-        // 如果有 main 方法且不是 MIDlet，则以标准 Java 程序模式运行
-        // If it has a main method and is not a MIDlet, run as a standard Java program
-        runHeadless();
-    } else if (isMIDlet) {
-        // 否则作为 MIDlet (J2ME 应用) 运行
-        // Otherwise run as a MIDlet (J2ME application)
-        runMIDlet();
-    } else {
-        LOG_ERROR("Class is not a MIDlet and has no main method. Cannot run.");
+        if (hasMain && !isMIDlet) {
+            // 如果有 main 方法且不是 MIDlet，则以标准 Java 程序模式运行
+            // If it has a main method and is not a MIDlet, run as a standard Java program
+            runHeadless();
+        } else if (isMIDlet) {
+            // 否则作为 MIDlet (J2ME 应用) 运行
+            // Otherwise run as a MIDlet (J2ME application)
+            runMIDlet();
+        } else {
+            LOG_ERROR("Class is not a MIDlet and has no main method. Cannot run.");
+            return 1;
+        }
+    } catch (const std::exception& e) {
+        abortOnUnhandledException("J2MEVM::run", e.what());
+        NativeRegistry::getInstance().setInterpreter(nullptr);
+        return 1;
+    } catch (...) {
+        abortOnUnhandledException("J2MEVM::run", "<non-std exception>");
+        NativeRegistry::getInstance().setInterpreter(nullptr);
+        return 1;
+    }
+
+    if (Diagnostics::getInstance().getUncaughtExceptionCount() > 0) {
+        LOG_ERROR("VM exiting due to uncaught exception: " + Diagnostics::getInstance().getLastUncaughtException());
+        NativeRegistry::getInstance().setInterpreter(nullptr);
         return 1;
     }
 
@@ -155,14 +176,26 @@ void J2MEVM::runHeadless() {
             
             // 主循环：执行指令直到线程结束
             // Main loop: execute instructions until thread finishes
-            while (!mainThread->isFinished()) {
-                 auto t = ThreadManager::getInstance().nextThread();
-                 if (t) interpreter->execute(t, 20000);
-                 ThreadManager::getInstance().removeFinishedThreads();
-                 
-                 if (EventLoop::getInstance().shouldExit()) break;
+            try {
+                while (!mainThread->isFinished()) {
+                    auto t = ThreadManager::getInstance().nextThread();
+                    if (t) interpreter->execute(t, 20000);
+                    ThreadManager::getInstance().removeFinishedThreads();
+
+                    if (EventLoop::getInstance().shouldExit()) break;
+                }
+            } catch (const std::exception& e) {
+                abortOnUnhandledException("headless main()", e.what());
+                return;
+            } catch (...) {
+                abortOnUnhandledException("headless main()", "<non-std exception>");
+                return;
             }
             
+            if (EventLoop::getInstance().shouldExit()) {
+                return;
+            }
+
             LOG_INFO("main method completed.");
             return;
         }
@@ -210,15 +243,23 @@ void J2MEVM::findAndRunInit() {
              
              // 运行直到 <init> 完成
              // Run until <init> completes
-             while (!initThread->isFinished()) {
-                  EventLoop::getInstance().pollSDL();
-                  EventLoop::getInstance().dispatchEvents(interpreter.get());
-                  TimerManager::getInstance().tick(interpreter.get());
-                  EventLoop::getInstance().render(interpreter.get());
-                  
-                  auto t = ThreadManager::getInstance().nextThread();
-                  if (t) interpreter->execute(t, 10000);
-                  ThreadManager::getInstance().removeFinishedThreads();
+             try {
+                 while (!initThread->isFinished()) {
+                     EventLoop::getInstance().pollSDL();
+                     EventLoop::getInstance().dispatchEvents(interpreter.get());
+                     TimerManager::getInstance().tick(interpreter.get());
+                     EventLoop::getInstance().render(interpreter.get());
+
+                     auto t = ThreadManager::getInstance().nextThread();
+                     if (t) interpreter->execute(t, 10000);
+                     ThreadManager::getInstance().removeFinishedThreads();
+                 }
+             } catch (const std::exception& e) {
+                 abortOnUnhandledException("MIDlet <init>()", e.what());
+                 return;
+             } catch (...) {
+                 abortOnUnhandledException("MIDlet <init>()", "<non-std exception>");
+                 return;
              }
              found = true;
              break;
@@ -251,15 +292,23 @@ void J2MEVM::findAndRunStartApp() {
                     // 这里我们运行直到它结束，同时处理事件。
                     // Note: In real J2ME, startApp might return quickly, or block. 
                     // Here we run it until finished, pumping events.
-                    while (!startThread->isFinished()) {
-                             if (EventLoop::getInstance().shouldExit()) break;
-                             EventLoop::getInstance().pollSDL();
-                             EventLoop::getInstance().dispatchEvents(interpreter.get());
-                             TimerManager::getInstance().tick(interpreter.get());
-                             EventLoop::getInstance().render(interpreter.get());
-                             auto t = ThreadManager::getInstance().nextThread();
-                             if (t) interpreter->execute(t, 10000);
-                             ThreadManager::getInstance().removeFinishedThreads();
+                    try {
+                        while (!startThread->isFinished()) {
+                            if (EventLoop::getInstance().shouldExit()) break;
+                            EventLoop::getInstance().pollSDL();
+                            EventLoop::getInstance().dispatchEvents(interpreter.get());
+                            TimerManager::getInstance().tick(interpreter.get());
+                            EventLoop::getInstance().render(interpreter.get());
+                            auto t = ThreadManager::getInstance().nextThread();
+                            if (t) interpreter->execute(t, 10000);
+                            ThreadManager::getInstance().removeFinishedThreads();
+                        }
+                    } catch (const std::exception& e) {
+                        abortOnUnhandledException("MIDlet startApp()", e.what());
+                        return;
+                    } catch (...) {
+                        abortOnUnhandledException("MIDlet startApp()", "<non-std exception>");
+                        return;
                     }
                     
                     startAppFound = true;
@@ -441,15 +490,18 @@ void J2MEVM::vmLoop() {
                 // Execute a batch of instructions
                 // 每批 20000 条指令提供良好的粒度
                 // 20000 instructions per batch provides good granularity
-                interpreter->execute(thread, 20000); 
+                interpreter->execute(thread, 5000); 
             } else {
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
             ThreadManager::getInstance().removeFinishedThreads();
             
         } catch (const std::exception& e) {
-             LOG_ERROR("Exception in VM Loop: " + std::string(e.what()));
+             abortOnUnhandledException("VM loop", e.what());
              return;
+        } catch (...) {
+            abortOnUnhandledException("VM loop", "<non-std exception>");
+            return;
         }
     }
 }

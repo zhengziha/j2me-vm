@@ -4,6 +4,7 @@
 #include "../core/HeapManager.hpp"
 #include "../core/Interpreter.hpp"
 #include "../core/ThreadManager.hpp"
+#include "../core/Diagnostics.hpp"
 #include "java_lang_String.hpp"
 #include <iostream>
 #include <chrono>
@@ -114,7 +115,7 @@ void registerObjectNatives(j2me::core::NativeRegistry& registry) {
                  thread->wakeTime = 0;
              } else {
                  thread->state = j2me::core::JavaThread::TIMED_WAITING;
-                 auto now = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+                 int64_t now = j2me::core::Diagnostics::getInstance().getNowMs();
                  thread->wakeTime = now + timeout;
              }
              

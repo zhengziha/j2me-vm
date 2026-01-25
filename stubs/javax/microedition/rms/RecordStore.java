@@ -31,6 +31,26 @@ public class RecordStore {
         return getRecordNative(name, recordId);
     }
 
+    public int getRecord(int recordId, byte[] buffer, int offset) throws RecordStoreNotOpenException, InvalidRecordIDException, RecordStoreException {
+        if (nativePtr == 0) {
+            throw new RecordStoreNotOpenException();
+        }
+        byte[] data = getRecordNative(name, recordId);
+        if (data == null) return 0;
+        if (buffer == null) {
+            throw new NullPointerException();
+        }
+        if (offset < 0 || offset > buffer.length) {
+            throw new ArrayIndexOutOfBoundsException(offset);
+        }
+        int len = data.length;
+        if (len > buffer.length - offset) {
+            len = buffer.length - offset;
+        }
+        System.arraycopy(data, 0, buffer, offset, len);
+        return len;
+    }
+
     public void deleteRecord(int recordId) throws RecordStoreNotOpenException, InvalidRecordIDException, RecordStoreException {
         if (nativePtr == 0) {
             throw new RecordStoreNotOpenException();

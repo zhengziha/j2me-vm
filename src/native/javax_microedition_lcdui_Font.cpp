@@ -9,12 +9,23 @@
 namespace j2me {
 namespace natives {
 
+static int getFontSizeTag(j2me::core::JavaValue thisVal) {
+    if (thisVal.type != j2me::core::JavaValue::REFERENCE || thisVal.val.ref == nullptr) return 0;
+    auto fontObj = static_cast<j2me::core::JavaObject*>(thisVal.val.ref);
+    if (!fontObj || !fontObj->cls) return 0;
+    auto it = fontObj->cls->fieldOffsets.find("size|I");
+    if (it == fontObj->cls->fieldOffsets.end()) it = fontObj->cls->fieldOffsets.find("size");
+    if (it == fontObj->cls->fieldOffsets.end()) return 0;
+    return (int)fontObj->fields[it->second];
+}
+
 void registerFontNatives(j2me::core::NativeRegistry& registry) {
     // javax/microedition/lcdui/Font.getHeight()I
     registry.registerNative("javax/microedition/lcdui/Font", "getHeight", "()I", 
         [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             j2me::core::JavaValue thisVal = frame->pop();
-            int height = j2me::platform::GraphicsContext::getInstance().getFontHeight();
+            int sizeTag = getFontSizeTag(thisVal);
+            int height = j2me::platform::GraphicsContext::getInstance().getFontHeight(sizeTag);
             if (height <= 0) height = 14;
             
             j2me::core::JavaValue result;
@@ -40,7 +51,8 @@ void registerFontNatives(j2me::core::NativeRegistry& registry) {
                     text = j2me::natives::getJavaString(strObj);
                 }
             }
-            width = j2me::platform::GraphicsContext::getInstance().measureTextWidth(text);
+            int sizeTag = getFontSizeTag(thisVal);
+            width = j2me::platform::GraphicsContext::getInstance().measureTextWidth(text, sizeTag);
             
             j2me::core::JavaValue result;
             result.type = j2me::core::JavaValue::INT;

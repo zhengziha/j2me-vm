@@ -289,6 +289,8 @@ void EventLoop::render(Interpreter* interpreter) {
 
                         // 启动绘制线程
                         j2me::platform::GraphicsContext::getInstance().beginFrame();
+                        lastPaintCommittedDrawCount = j2me::platform::GraphicsContext::getInstance().getDrawCount();
+                        lastPaintPartialCommitMs = 0;
                         auto thread = std::make_shared<JavaThread>(frame);
                         paintingThread = thread;
                         isPainting = true;
@@ -306,11 +308,12 @@ void EventLoop::render(Interpreter* interpreter) {
 }
 
 void EventLoop::checkPaintFinished() {
+    auto& gc = j2me::platform::GraphicsContext::getInstance();
     if (isPainting) {
         if (paintingThread.expired()) {
             // 线程已销毁，意味着绘制完成
             // Thread destroyed, meaning paint finished
-            j2me::platform::GraphicsContext::getInstance().commit();
+            gc.commit();
             j2me::core::Diagnostics::getInstance().onPaintCommit();
             isPainting = false;
         } else {
@@ -318,9 +321,20 @@ void EventLoop::checkPaintFinished() {
             if (ptr && ptr->isFinished()) {
                 // 线程存在但已完成
                 // Thread exists but finished
-                j2me::platform::GraphicsContext::getInstance().commit();
+                gc.commit();
                 j2me::core::Diagnostics::getInstance().onPaintCommit();
                 isPainting = false;
+            } else if (ptr && !ptr->isFinished()) {
+                uint64_t drawCount = gc.getDrawCount();
+                int64_t nowMs = gc.getNowMs();
+                if (lastPaintPartialCommitMs == 0) lastPaintPartialCommitMs = nowMs;
+                int64_t lastDrawMs = gc.getLastDrawMs();
+                if (drawCount > lastPaintCommittedDrawCount && ((nowMs - lastDrawMs) >= 12 || (nowMs - lastPaintPartialCommitMs) >= 200)) {
+                    gc.commit();
+                    j2me::core::Diagnostics::getInstance().onPaintCommit();
+                    lastPaintCommittedDrawCount = drawCount;
+                    lastPaintPartialCommitMs = nowMs;
+                }
             }
         }
     }

@@ -4,6 +4,7 @@
 #include "../core/HeapManager.hpp"
 #include "../core/Interpreter.hpp"
 #include "../core/Logger.hpp"
+#include "../core/Diagnostics.hpp"
 #include "java_lang_String.hpp"
 #include <iostream>
 #include <fstream>
@@ -20,6 +21,8 @@ struct RecordStoreData {
     std::map<int, std::vector<uint8_t>> records;
     int nextRecordId;
     int size;
+    int version;
+    int64_t lastModifiedMs;
 };
 
 static std::map<std::string, RecordStoreData> g_recordStores;
@@ -132,21 +135,14 @@ void registerRecordStoreNatives(j2me::core::NativeRegistry& registry) {
                 LOG_DEBUG("[RMS] Opening record store: " + name + " (create: " + (createIfNecessary ? "true" : "false") + ")");
                 
                 if (g_recordStores.find(name) == g_recordStores.end()) {
-                    if (createIfNecessary) {
-                        RecordStoreData store;
-                        store.nextRecordId = 1;
-                        store.size = 0;
-                        g_recordStores[name] = store;
-                        saveRecordStore(name);
-                        LOG_DEBUG("[RMS] Created new record store: " + name);
-                    } else {
-                        LOG_ERROR("[RMS] Record store not found: " + name);
-                        j2me::core::JavaValue ret;
-                        ret.type = j2me::core::JavaValue::INT;
-                        ret.val.i = 0;
-                        frame->push(ret);
-                        return;
-                    }
+                    RecordStoreData store;
+                    store.nextRecordId = 1;
+                    store.size = 0;
+                    store.version = 0;
+                    store.lastModifiedMs = 0;
+                    g_recordStores[name] = store;
+                    saveRecordStore(name);
+                    LOG_DEBUG("[RMS] Created new record store: " + name + " (create flag: " + (createIfNecessary ? "true" : "false") + ")");
                 }
                 
                 result = reinterpret_cast<intptr_t>(&g_recordStores[name]);
@@ -200,6 +196,8 @@ void registerRecordStoreNatives(j2me::core::NativeRegistry& registry) {
                         recordId = it->second.nextRecordId++;
                         it->second.records[recordId] = data;
                         it->second.size += data.size();
+                        it->second.version++;
+                        it->second.lastModifiedMs = j2me::core::Diagnostics::getInstance().getNowMs();
                         saveRecordStore(name);
                         LOG_DEBUG("[RMS] Added record " + std::to_string(recordId) + " to " + name + " (size: " + std::to_string(data.size()) + ")");
                     }
@@ -213,6 +211,153 @@ void registerRecordStoreNatives(j2me::core::NativeRegistry& registry) {
             j2me::core::JavaValue ret;
             ret.type = j2me::core::JavaValue::INT;
             ret.val.i = recordId;
+            frame->push(ret);
+        }
+    );
+
+    // javax/microedition/rms/RecordStore.setRecordNative(Ljava/lang/String;I[BII)V
+    registry.registerNative("javax/microedition/rms/RecordStore", "setRecordNative", "(Ljava/lang/String;I[BII)V",
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
+            int numBytes = frame->pop().val.i;
+            int offset = frame->pop().val.i;
+            j2me::core::JavaValue dataVal = frame->pop();
+            int recordId = frame->pop().val.i;
+            j2me::core::JavaValue nameVal = frame->pop();
+
+            std::string name;
+            if (nameVal.type == j2me::core::JavaValue::REFERENCE && nameVal.val.ref != nullptr) {
+                if (!nameVal.strVal.empty()) name = nameVal.strVal;
+                else name = j2me::natives::getJavaString(static_cast<j2me::core::JavaObject*>(nameVal.val.ref));
+            }
+            if (name.empty()) return;
+
+            std::vector<uint8_t> data;
+            if (dataVal.type == j2me::core::JavaValue::REFERENCE && dataVal.val.ref != nullptr) {
+                auto dataObj = static_cast<j2me::core::JavaObject*>(dataVal.val.ref);
+                if (dataObj) {
+                    for (int i = offset; i < offset + numBytes && i < (int)dataObj->fields.size(); i++) {
+                        data.push_back(static_cast<uint8_t>(dataObj->fields[i]));
+                    }
+                }
+            }
+
+            auto it = g_recordStores.find(name);
+            if (it == g_recordStores.end()) {
+                RecordStoreData store;
+                store.nextRecordId = 1;
+                store.size = 0;
+                store.version = 0;
+                store.lastModifiedMs = 0;
+                it = g_recordStores.emplace(name, store).first;
+            }
+
+            auto& store = it->second;
+            auto existing = store.records.find(recordId);
+            if (existing != store.records.end()) {
+                store.size -= (int)existing->second.size();
+            }
+            store.records[recordId] = data;
+            store.size += (int)data.size();
+            if (recordId >= store.nextRecordId) store.nextRecordId = recordId + 1;
+            store.version++;
+            store.lastModifiedMs = j2me::core::Diagnostics::getInstance().getNowMs();
+            saveRecordStore(name);
+        }
+    );
+
+    // javax/microedition/rms/RecordStore.getRecordSizeNative(Ljava/lang/String;I)I
+    registry.registerNative("javax/microedition/rms/RecordStore", "getRecordSizeNative", "(Ljava/lang/String;I)I",
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
+            int recordId = frame->pop().val.i;
+            j2me::core::JavaValue nameVal = frame->pop();
+
+            int size = 0;
+            std::string name;
+            if (nameVal.type == j2me::core::JavaValue::REFERENCE && nameVal.val.ref != nullptr) {
+                if (!nameVal.strVal.empty()) name = nameVal.strVal;
+                else name = j2me::natives::getJavaString(static_cast<j2me::core::JavaObject*>(nameVal.val.ref));
+            }
+
+            auto it = g_recordStores.find(name);
+            if (it != g_recordStores.end()) {
+                auto recIt = it->second.records.find(recordId);
+                if (recIt != it->second.records.end()) size = (int)recIt->second.size();
+            }
+
+            j2me::core::JavaValue ret;
+            ret.type = j2me::core::JavaValue::INT;
+            ret.val.i = size;
+            frame->push(ret);
+        }
+    );
+
+    // javax/microedition/rms/RecordStore.getRecordIdsNative(Ljava/lang/String;)[I
+    registry.registerNative("javax/microedition/rms/RecordStore", "getRecordIdsNative", "(Ljava/lang/String;)[I",
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
+            j2me::core::JavaValue nameVal = frame->pop();
+
+            j2me::core::JavaValue result;
+            result.type = j2me::core::JavaValue::REFERENCE;
+            result.val.ref = nullptr;
+
+            std::string name;
+            if (nameVal.type == j2me::core::JavaValue::REFERENCE && nameVal.val.ref != nullptr) {
+                if (!nameVal.strVal.empty()) name = nameVal.strVal;
+                else name = j2me::natives::getJavaString(static_cast<j2me::core::JavaObject*>(nameVal.val.ref));
+            }
+
+            auto it = g_recordStores.find(name);
+            if (it != g_recordStores.end()) {
+                auto interpreter = j2me::core::NativeRegistry::getInstance().getInterpreter();
+                auto arrayCls = interpreter->resolveClass("[I");
+                if (arrayCls) {
+                    auto arrayObj = j2me::core::HeapManager::getInstance().allocate(arrayCls);
+                    arrayObj->fields.resize(it->second.records.size());
+                    size_t idx = 0;
+                    for (const auto& rec : it->second.records) {
+                        arrayObj->fields[idx++] = (int64_t)rec.first;
+                    }
+                    result.val.ref = arrayObj;
+                }
+            }
+            frame->push(result);
+        }
+    );
+
+    // javax/microedition/rms/RecordStore.getLastModifiedNative(Ljava/lang/String;)J
+    registry.registerNative("javax/microedition/rms/RecordStore", "getLastModifiedNative", "(Ljava/lang/String;)J",
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
+            j2me::core::JavaValue nameVal = frame->pop();
+            int64_t v = 0;
+            std::string name;
+            if (nameVal.type == j2me::core::JavaValue::REFERENCE && nameVal.val.ref != nullptr) {
+                if (!nameVal.strVal.empty()) name = nameVal.strVal;
+                else name = j2me::natives::getJavaString(static_cast<j2me::core::JavaObject*>(nameVal.val.ref));
+            }
+            auto it = g_recordStores.find(name);
+            if (it != g_recordStores.end()) v = it->second.lastModifiedMs;
+            j2me::core::JavaValue ret;
+            ret.type = j2me::core::JavaValue::LONG;
+            ret.val.l = v;
+            frame->push(ret);
+        }
+    );
+
+    // javax/microedition/rms/RecordStore.getVersionNative(Ljava/lang/String;)I
+    registry.registerNative("javax/microedition/rms/RecordStore", "getVersionNative", "(Ljava/lang/String;)I",
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
+            j2me::core::JavaValue nameVal = frame->pop();
+            int v = 0;
+            std::string name;
+            if (nameVal.type == j2me::core::JavaValue::REFERENCE && nameVal.val.ref != nullptr) {
+                if (!nameVal.strVal.empty()) name = nameVal.strVal;
+                else name = j2me::natives::getJavaString(static_cast<j2me::core::JavaObject*>(nameVal.val.ref));
+            }
+            auto it = g_recordStores.find(name);
+            if (it != g_recordStores.end()) v = it->second.version;
+            j2me::core::JavaValue ret;
+            ret.type = j2me::core::JavaValue::INT;
+            ret.val.i = v;
             frame->push(ret);
         }
     );
@@ -324,6 +469,8 @@ void registerRecordStoreNatives(j2me::core::NativeRegistry& registry) {
                     if (recordIt != it->second.records.end()) {
                         it->second.size -= recordIt->second.size();
                         it->second.records.erase(recordIt);
+                        it->second.version++;
+                        it->second.lastModifiedMs = j2me::core::Diagnostics::getInstance().getNowMs();
                         saveRecordStore(name);
                         LOG_DEBUG("[RMS] Deleted record " + std::to_string(recordId) + " from " + name);
                     } else {
@@ -476,9 +623,13 @@ void registerRecordStoreNatives(j2me::core::NativeRegistry& registry) {
     registry.registerNative("javax/microedition/rms/RecordStore", "closeRecordStoreNative", "(Ljava/lang/String;)V",
         [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             j2me::core::JavaValue nameVal = frame->pop();
-            
-            if (nameVal.type == j2me::core::JavaValue::REFERENCE && !nameVal.strVal.empty()) {
-                std::string name = nameVal.strVal;
+
+            std::string name;
+            if (nameVal.type == j2me::core::JavaValue::REFERENCE && nameVal.val.ref != nullptr) {
+                if (!nameVal.strVal.empty()) name = nameVal.strVal;
+                else name = j2me::natives::getJavaString(static_cast<j2me::core::JavaObject*>(nameVal.val.ref));
+            }
+            if (!name.empty()) {
                 saveRecordStore(name);
                 LOG_DEBUG("[RMS] Closed record store: " + name);
             }

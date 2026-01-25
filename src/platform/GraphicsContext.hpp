@@ -70,19 +70,31 @@ public:
         if (TTF_Init() == -1) {
             std::cerr << "TTF_Init: " << TTF_GetError() << std::endl;
         } else {
-            // 尝试加载字体
-            // Try to load font
-            // 优先使用 Tahoma (如请求)
-            // Prioritize Tahoma as requested
-            font = TTF_OpenFont("/System/Library/Fonts/Hiragino Sans GB.ttc", 12);
+            auto tryOpen = [](const char* path, int pt) -> TTF_Font* {
+                TTF_Font* f = TTF_OpenFont(path, pt);
+                return f;
+            };
 
-            // font = TTF_OpenFont("fonts/Tahoma.ttf", 12);
-            if (!font) {
-                font = TTF_OpenFont("fonts/s60snr.ttf", 12);
+            const char* paths[] = {
+                "/System/Library/Fonts/Hiragino Sans GB.ttc",
+                "fonts/s60snr.ttf",
+                "/Library/Fonts/Arial.ttf",
+            };
+
+            for (const char* p : paths) {
+                if (!fontMedium) fontMedium = tryOpen(p, 12);
+                if (!fontSmall) fontSmall = tryOpen(p, 10);
+                if (!fontLarge) fontLarge = tryOpen(p, 18);
+                if (fontMedium && fontSmall && fontLarge) break;
             }
-            if (!font) {
-                font = TTF_OpenFont("/Library/Fonts/Arial.ttf", 12);
-            }
+
+            if (!fontMedium && fontSmall) fontMedium = fontSmall;
+            if (!fontMedium && fontLarge) fontMedium = fontLarge;
+            if (!fontSmall) fontSmall = fontMedium;
+            if (!fontLarge) fontLarge = fontMedium;
+
+            font = fontMedium;
+
             if (!font) {
                 std::cerr << "TTF_OpenFont failed: " << TTF_GetError() << std::endl;
             }
@@ -725,10 +737,32 @@ private:
         return w;
     }
 
+    int measureTextWidth(const std::string& utf8, int sizeTag) {
+        std::lock_guard<std::mutex> lock(surfaceMutex);
+        TTF_Font* f = fontForSizeTagNoLock(sizeTag);
+        if (!f || utf8.empty()) return 0;
+        int w = 0, h = 0;
+        if (TTF_SizeUTF8(f, utf8.c_str(), &w, &h) != 0) return 0;
+        return w;
+    }
+
     int getFontHeight() {
         std::lock_guard<std::mutex> lock(surfaceMutex);
         if (!font) return 0;
         return TTF_FontHeight(font);
+    }
+
+    int getFontHeight(int sizeTag) {
+        std::lock_guard<std::mutex> lock(surfaceMutex);
+        TTF_Font* f = fontForSizeTagNoLock(sizeTag);
+        if (!f) return 0;
+        return TTF_FontHeight(f);
+    }
+
+    void setCurrentFontSizeTag(int sizeTag) {
+        std::lock_guard<std::mutex> lock(surfaceMutex);
+        TTF_Font* f = fontForSizeTagNoLock(sizeTag);
+        if (f) font = f;
     }
 
     uint32_t getScreenLastDrawImageARGB() {
@@ -833,6 +867,12 @@ private:
     }
 
 private:
+    TTF_Font* fontForSizeTagNoLock(int sizeTag) {
+        if (sizeTag == 8) return fontSmall ? fontSmall : fontMedium;
+        if (sizeTag == 16) return fontLarge ? fontLarge : fontMedium;
+        return fontMedium;
+    }
+
     int64_t nowMsNoLock() const {
         auto now = std::chrono::steady_clock::now();
         return (int64_t)std::chrono::duration_cast<std::chrono::milliseconds>(now - startTime).count();
@@ -1111,6 +1151,9 @@ private:
     SDL_Color currentSDLColor = {0, 0, 0, 255};
     std::mutex surfaceMutex;
     TTF_Font* font = nullptr;
+    TTF_Font* fontSmall = nullptr;
+    TTF_Font* fontMedium = nullptr;
+    TTF_Font* fontLarge = nullptr;
     std::chrono::steady_clock::time_point startTime{};
     uint64_t drawCount = 0;
     uint64_t commitCount = 0;

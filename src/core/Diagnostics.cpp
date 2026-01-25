@@ -43,6 +43,12 @@ void Diagnostics::onImageDecodeFailed(const std::string& name, const std::string
     lastImageDecodeFailed = name + "|" + headerHex;
 }
 
+void Diagnostics::onUncaughtException(const std::string& exClass) {
+    uncaughtExceptionCount.fetch_add(1, std::memory_order_relaxed);
+    std::lock_guard<std::mutex> lock(messageMutex);
+    lastUncaughtException = exClass;
+}
+
 uint64_t Diagnostics::getGameCanvasFlushCount() const {
     return gameCanvasFlushCount.load(std::memory_order_relaxed);
 }
@@ -57,6 +63,10 @@ uint64_t Diagnostics::getResourceNotFoundCount() const {
 
 uint64_t Diagnostics::getImageDecodeFailedCount() const {
     return imageDecodeFailedCount.load(std::memory_order_relaxed);
+}
+
+uint64_t Diagnostics::getUncaughtExceptionCount() const {
+    return uncaughtExceptionCount.load(std::memory_order_relaxed);
 }
 
 int64_t Diagnostics::getLastGameCanvasFlushMs() const {
@@ -75,6 +85,11 @@ std::string Diagnostics::getLastResourceNotFound() const {
 std::string Diagnostics::getLastImageDecodeFailed() const {
     std::lock_guard<std::mutex> lock(messageMutex);
     return lastImageDecodeFailed;
+}
+
+std::string Diagnostics::getLastUncaughtException() const {
+    std::lock_guard<std::mutex> lock(messageMutex);
+    return lastUncaughtException;
 }
 
 } // namespace core

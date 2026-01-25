@@ -5,6 +5,7 @@
 #include "NativeRegistry.hpp"
 #include "Logger.hpp"
 #include "EventLoop.hpp"
+#include "Diagnostics.hpp"
 #include <iostream>
 #include <sstream>
 #include <cmath>
@@ -78,6 +79,8 @@ int Interpreter::execute(std::shared_ptr<JavaThread> thread, int instructions) {
             auto exCls = resolveClass(exClass);
             if (!exCls) {
                 LOG_ERROR("Runtime Exception: " + msg);
+                Diagnostics::getInstance().onUncaughtException(exClass);
+                EventLoop::getInstance().requestExit("uncaught exception: " + exClass);
                 thread->frames.clear();
                 thread->state = JavaThread::TERMINATED;
                 break;
@@ -87,6 +90,8 @@ int Interpreter::execute(std::shared_ptr<JavaThread> thread, int instructions) {
             bool handled = handleException(thread, exObj);
             if (!handled) {
                 LOG_ERROR("VM terminated due to uncaught exception: " + exClass);
+                Diagnostics::getInstance().onUncaughtException(exClass);
+                EventLoop::getInstance().requestExit("uncaught exception: " + exClass);
                 thread->frames.clear();
                 thread->state = JavaThread::TERMINATED;
                 break;

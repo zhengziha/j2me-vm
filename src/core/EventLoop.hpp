@@ -88,6 +88,8 @@ private:
     // 跟踪当前的绘制线程，避免绘制请求堆积
     std::weak_ptr<JavaThread> paintingThread;
     bool isPainting = false; // 是否正在绘制中
+    uint64_t lastPaintCommittedDrawCount = 0;
+    int64_t lastPaintPartialCommitMs = 0;
 };
 
 } // namespace core

@@ -211,9 +211,18 @@ void registerGraphicsNatives(j2me::core::NativeRegistry& registry) {
     // javax/microedition/lcdui/Graphics.setFontNative(Ljavax/microedition/lcdui/Font;)V
     registry.registerNative("javax/microedition/lcdui/Graphics", "setFontNative", "(Ljavax/microedition/lcdui/Font;)V", 
         [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
-            frame->pop(); // Font parameter
+            j2me::core::JavaValue fontVal = frame->pop();
             frame->pop(); // this
-            // Mock implementation: do nothing for now, as we don't have font support yet
+            int sizeTag = 0;
+            if (fontVal.type == j2me::core::JavaValue::REFERENCE && fontVal.val.ref != nullptr) {
+                auto fontObj = static_cast<j2me::core::JavaObject*>(fontVal.val.ref);
+                if (fontObj && fontObj->cls) {
+                    auto it = fontObj->cls->fieldOffsets.find("size|I");
+                    if (it == fontObj->cls->fieldOffsets.end()) it = fontObj->cls->fieldOffsets.find("size");
+                    if (it != fontObj->cls->fieldOffsets.end()) sizeTag = (int)fontObj->fields[it->second];
+                }
+            }
+            j2me::platform::GraphicsContext::getInstance().setCurrentFontSizeTag(sizeTag);
         }
     );
 

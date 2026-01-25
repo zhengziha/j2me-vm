@@ -66,31 +66,25 @@ public:
     std::shared_ptr<JavaThread> nextThread() {
         if (threads.empty()) return nullptr;
 
-        // Simple Round Robin
-        // Move current front to back if it's not finished
-        // But we need to handle waiting threads
-        
-        // Find first RUNNABLE thread
+        int64_t now = j2me::core::Diagnostics::getInstance().getNowMs();
+
+        for (auto& thread : threads) {
+            if (thread && thread->state == JavaThread::TIMED_WAITING && now >= thread->wakeTime) {
+                thread->state = JavaThread::RUNNABLE;
+                thread->waitingOn = nullptr;
+            }
+        }
+
         for (auto it = threads.begin(); it != threads.end(); ++it) {
             auto thread = *it;
+            if (!thread) continue;
             if (thread->state == JavaThread::RUNNABLE) {
-                // Move this thread to back to ensure fairness (Round Robin)
                 threads.erase(it);
                 threads.push_back(thread);
                 return thread;
-            } else if (thread->state == JavaThread::TIMED_WAITING) {
-                // Check if time is up
-                int64_t now = j2me::core::Diagnostics::getInstance().getNowMs();
-                
-                if (now >= thread->wakeTime) {
-                    thread->state = JavaThread::RUNNABLE;
-                    threads.erase(it);
-                    threads.push_back(thread);
-                    return thread;
-                }
             }
         }
-        
+
         return nullptr;
     }
     
