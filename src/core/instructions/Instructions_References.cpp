@@ -1,9 +1,11 @@
 #include "../Interpreter.hpp"
+#include "../RuntimeTypes.hpp"
 #include "../Opcodes.hpp"
 #include "../HeapManager.hpp"
 #include "../ClassFile.hpp"
 #include "../NativeRegistry.hpp"
 #include "../Logger.hpp"
+#include "../../native/java_lang_String.hpp"
 #include <iostream>
 #include <cstring>
 #include <algorithm>
@@ -100,14 +102,69 @@ void Interpreter::initReferences() {
         do {
             JavaValue exceptionVal = frame->pop();
             if (exceptionVal.val.ref == nullptr) {
+                // Throw NullPointerException
+                // TODO: Create NPE object properly
+                // For now, print error and throw runtime error to stop VM
+                std::cerr << "Error: ATHROW with null exception object (NullPointerException)" << std::endl;
                 throw std::runtime_error("NullPointerException in ATHROW");
             }
             
             JavaObject* exObj = (JavaObject*)exceptionVal.val.ref;
-            std::string exClass = "Unknown";
-            if (exObj->cls) exClass = exObj->cls->name;
             
-            throw std::runtime_error("Unhandled Java Exception: " + exClass);
+            // Log exception details before handling
+            std::string exClass = "Unknown";
+            if (exObj->cls) {
+                exClass = exObj->cls->name;
+                std::string fieldKey = "detailMessage|Ljava/lang/String;";
+                if (exObj->cls->fieldOffsets.find(fieldKey) != exObj->cls->fieldOffsets.end()) {
+                     size_t offset = exObj->cls->fieldOffsets[fieldKey];
+                     if (offset < exObj->fields.size()) {
+                         int64_t msgRef = exObj->fields[offset];
+                         if (msgRef != 0) {
+                             JavaObject* msgObj = (JavaObject*)msgRef;
+                             std::string msg = j2me::natives::getJavaString(msgObj);
+                             exClass += " (" + msg + ")";
+                         }
+                     }
+                }
+            }
+            // LOG_DEBUG("ATHROW: " + exClass);
+
+            if (handleException(thread, exObj)) {
+                // Exception handled, PC updated in handleException
+                // We need to update codeReader to new PC
+                // But codeReader is local to executeInstruction.
+                // execute() loop updates frame->pc from codeReader.tell().
+                // So we need to sync codeReader to frame->pc.
+                
+                // However, handleException might have popped frames!
+                // So 'frame' variable might be invalid or stale if we popped it.
+                // 'thread->currentFrame()' is the new frame.
+                
+                auto newFrame = thread->currentFrame();
+                if (newFrame != frame) {
+                    // Frame changed (popped), we return true to continue loop.
+                    // But wait, execute() loop uses 'frame' variable which is the old frame?
+                    // No, execute() loop gets currentFrame() at start of loop.
+                    // But executeInstruction takes 'frame' as argument.
+                    // And execute() updates 'frame->pc = codeReader.tell()'.
+                    
+                    // If we popped the frame, 'frame' is now removed from stack.
+                    // Updating 'frame->pc' is pointless but harmless (shared_ptr keeps it alive).
+                    // The main loop will start next iteration, get new currentFrame(), and continue.
+                    // So we just need to return true.
+                    return true; 
+                } else {
+                    // Same frame (handler found in same method)
+                    // We need to update codeReader to jump to handler
+                    codeReader.seek(frame->pc);
+                    return true;
+                }
+            } else {
+                // Unhandled exception
+                throw std::runtime_error("Unhandled Java Exception: " + exClass);
+            }
+            
             break;
         } while(0);
         return true;
@@ -345,11 +402,23 @@ void Interpreter::initReferences() {
                  
                  auto descriptor = std::dynamic_pointer_cast<ConstantUtf8>(frame->classFile->constant_pool[nameAndType->descriptor_index]);
                  auto it = cls->staticFields.find(name->bytes + "|" + descriptor->bytes);
+                 
+                 char typeChar = descriptor ? descriptor->bytes[0] : 'I';
+                 
                  if (it == cls->staticFields.end()) {
                      JavaValue val;
-                     if (descriptor && descriptor->bytes[0] == 'L') {
+                     if (typeChar == 'L' || typeChar == '[') {
                          val.type = JavaValue::REFERENCE;
                          val.val.ref = nullptr;
+                     } else if (typeChar == 'J') {
+                         val.type = JavaValue::LONG;
+                         val.val.l = 0;
+                     } else if (typeChar == 'D') {
+                         val.type = JavaValue::DOUBLE;
+                         val.val.d = 0.0;
+                     } else if (typeChar == 'F') {
+                         val.type = JavaValue::FLOAT;
+                         val.val.f = 0.0f;
                      } else {
                          val.type = JavaValue::INT;
                          val.val.i = 0;
@@ -357,12 +426,23 @@ void Interpreter::initReferences() {
                      frame->push(val);
                  } else {
                      JavaValue val;
-                     if (descriptor && descriptor->bytes[0] == 'L') {
+                     if (typeChar == 'L' || typeChar == '[') {
                          val.type = JavaValue::REFERENCE;
                          val.val.ref = (void*)it->second;
-                     } else {
+                     } else if (typeChar == 'J') {
                          val.type = JavaValue::LONG;
                          val.val.l = it->second;
+                     } else if (typeChar == 'D') {
+                         val.type = JavaValue::DOUBLE;
+                         int64_t bits = it->second;
+                         memcpy(&val.val.d, &bits, sizeof(double));
+                     } else if (typeChar == 'F') {
+                         val.type = JavaValue::FLOAT;
+                         int32_t bits = (int32_t)it->second;
+                         memcpy(&val.val.f, &bits, sizeof(float));
+                     } else {
+                         val.type = JavaValue::INT;
+                         val.val.i = (int32_t)it->second;
                      }
                      frame->push(val);
                  }
@@ -399,10 +479,25 @@ void Interpreter::initReferences() {
                  
                  JavaValue val = frame->pop();
                  std::string key = name->bytes + "|" + descriptor->bytes;
+                 
                  if (val.type == JavaValue::REFERENCE) {
                      cls->staticFields[key] = (int64_t)val.val.ref;
                  } else {
-                     cls->staticFields[key] = val.val.l;
+                     char typeChar = descriptor->bytes[0];
+                     if (typeChar == 'J') {
+                         cls->staticFields[key] = val.val.l;
+                     } else if (typeChar == 'D') {
+                         int64_t bits;
+                         memcpy(&bits, &val.val.d, sizeof(double));
+                         cls->staticFields[key] = bits;
+                     } else if (typeChar == 'F') {
+                         int32_t bits;
+                         memcpy(&bits, &val.val.f, sizeof(float));
+                         cls->staticFields[key] = (int64_t)bits;
+                     } else {
+                         // Int, Short, Byte, Char, Boolean
+                         cls->staticFields[key] = (int64_t)val.val.i;
+                     }
                  }
                  break;
             }
@@ -651,7 +746,6 @@ void Interpreter::initReferences() {
                          
                          if (mName->bytes == name->bytes && mDesc->bytes == descriptor->bytes) {
                              bool isNative = (m.access_flags & 0x0100) != 0;
-                             if (currentClass->name == "java/lang/StringBuffer") isNative = true;
                              if (NativeRegistry::getInstance().getNative(currentClass->name, name->bytes, descriptor->bytes)) isNative = true;
 
                              if (isNative) {

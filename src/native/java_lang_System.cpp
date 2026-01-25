@@ -14,9 +14,9 @@ void registerSystemNatives(j2me::core::NativeRegistry& registry) {
     // java/lang/System.currentTimeMillis()J
     registry.registerNative("java/lang/System", "currentTimeMillis", "()J",
         [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
-            auto now = std::chrono::system_clock::now();
-            auto duration = now.time_since_epoch();
-            auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
+            static auto start = std::chrono::steady_clock::now();
+            auto now = std::chrono::steady_clock::now();
+            auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(now - start).count();
             
             j2me::core::JavaValue ret;
             ret.type = j2me::core::JavaValue::LONG;
@@ -36,9 +36,9 @@ void registerSystemNatives(j2me::core::NativeRegistry& registry) {
     // java/lang/System.currentTimeMillisNative()J - kept for backward compatibility if used elsewhere
     registry.registerNative("java/lang/System", "currentTimeMillisNative", "()J",
         [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
-            auto now = std::chrono::system_clock::now();
-            auto duration = now.time_since_epoch();
-            auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
+            static auto start = std::chrono::steady_clock::now();
+            auto now = std::chrono::steady_clock::now();
+            auto millis = std::chrono::duration_cast<std::chrono::milliseconds>(now - start).count();
             
             j2me::core::JavaValue ret;
             ret.type = j2me::core::JavaValue::LONG;

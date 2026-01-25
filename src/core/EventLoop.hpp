@@ -6,6 +6,9 @@
 #include <mutex>
 #include <atomic>
 #include <memory>
+#include <string>
+#include <vector>
+#include <cstdint>
 
 namespace j2me {
 namespace core {
@@ -41,6 +44,11 @@ public:
     // 检查绘制线程是否完成，并提交帧缓冲区
     void checkPaintFinished();
     
+    void requestExit(const std::string& reason);
+    std::string getExitReason() const;
+
+    void scheduleAutoKeys(const std::vector<int>& keyCodes, int64_t startDelayMs = 1200, int64_t keyPressMs = 40, int64_t betweenKeysMs = 200);
+
     // 检查是否收到退出请求
     bool shouldExit() const { return quit; }
     
@@ -61,10 +69,20 @@ public:
     }
 
 private:
+    struct AutoKeyEvent {
+        int64_t atMs;
+        KeyEvent::Type type;
+        int keyCode;
+    };
+
     std::queue<KeyEvent> eventQueue; // Stores mapped keyCodes with type / 存储按键事件的队列
     std::mutex queueMutex;           // Protects eventQueue / 保护事件队列的互斥锁
     std::atomic<bool> quit{false};   // Exit flag / 退出标志
     std::atomic<int> keyStates{0};   // Bitmask of pressed keys / 按键状态位掩码
+    std::atomic<bool> exitLogged{false};
+    mutable std::mutex exitMutex;
+    std::string exitReason;
+    std::vector<AutoKeyEvent> autoKeyEvents;
     
     // Track current painting thread to avoid flooding
     // 跟踪当前的绘制线程，避免绘制请求堆积

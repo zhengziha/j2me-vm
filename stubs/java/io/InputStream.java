@@ -59,19 +59,13 @@ public class InputStream {
         return n - remaining;
     }
 
-    public int available() throws IOException {
-        return 0;
-    }
+    public native int available() throws IOException;
 
     public void close() throws IOException {}
 
-    public synchronized void mark(int readlimit) {}
+    public native void mark(int readlimit);
 
-    public synchronized void reset() throws IOException {
-        throw new IOException("mark/reset not supported");
-    }
+    public native void reset() throws IOException;
 
-    public boolean markSupported() {
-        return false;
-    }
+    public native boolean markSupported();
 }

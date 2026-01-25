@@ -6,6 +6,9 @@
 #include "NativeRegistry.hpp"
 #include "ThreadManager.hpp"
 #include "TimerManager.hpp"
+#include "Diagnostics.hpp"
+#include "../native/javax_microedition_lcdui_Display.hpp"
+#include "../platform/GraphicsContext.hpp"
 #include "../util/FileUtils.hpp"
 #include <iostream>
 #include <algorithm>
@@ -180,6 +183,10 @@ void J2MEVM::runMIDlet() {
     // 运行 startApp()
     // Run startApp
     findAndRunStartApp();
+
+    if (currentConfig.autoKeyEnabled) {
+        EventLoop::getInstance().scheduleAutoKeys(currentConfig.autoKeyCodes, currentConfig.autoKeyDelayMs, currentConfig.autoKeyPressMs, currentConfig.autoKeyBetweenKeysMs);
+    }
     
     // 进入 VM 主循环
     // Enter VM Loop
@@ -275,6 +282,9 @@ void J2MEVM::vmLoop() {
     using clock = std::chrono::steady_clock;
     auto lastFrameTime = clock::now();
     const auto FRAME_INTERVAL = std::chrono::milliseconds(33); // ~30 FPS
+    auto lastWatchdogTime = clock::now();
+    uint64_t lastDrawCount = 0;
+    uint64_t lastCommitCount = 0;
 
     // 移除了指令限速，依靠按键事件频率限制游戏速度
     // Throttling State Removed as per user request
@@ -297,6 +307,133 @@ void J2MEVM::vmLoop() {
 
             eventLoop.checkPaintFinished();
             TimerManager::getInstance().tick(interpreter.get());
+
+            if (j2me::core::Logger::getInstance().getLevel() == j2me::core::LogLevel::DEBUG) {
+                if (now - lastWatchdogTime >= std::chrono::seconds(1)) {
+                    auto stats = ThreadManager::getInstance().getStats();
+                    auto* displayable = j2me::natives::getCurrentDisplayable();
+                    std::string displayableName = displayable && displayable->cls ? displayable->cls->name : "<null>";
+
+                    auto& gc = j2me::platform::GraphicsContext::getInstance();
+                    int64_t nowMs = gc.getNowMs();
+                    uint64_t drawCount = gc.getDrawCount();
+                    uint64_t commitCount = gc.getCommitCount();
+                    uint64_t updateCount = gc.getUpdateCount();
+                    uint64_t drawImgCount = gc.getDrawImageCount();
+                    uint64_t drawRgbCount = gc.getDrawRGBCount();
+                    uint64_t fillRectCount = gc.getFillRectCount();
+                    uint64_t drawStrCount = gc.getDrawStringCount();
+                    uint32_t lastDrawImgSample = gc.getLastDrawImageSampleARGB();
+                    uint32_t lastDrawStrSample = gc.getLastDrawStringSampleARGB();
+                    uint32_t lastFillRectColor = gc.getLastFillRectColorARGB();
+                    uint32_t lastDrawImgMaxA = gc.getLastDrawImageMaxA();
+                    uint32_t lastDrawImgNonZeroA = gc.getLastDrawImageNonZeroA();
+                    int lastOpType = gc.getLastOpType();
+                    int64_t lastOpMs = gc.getLastOpMs();
+                    uint64_t sDrawImg = gc.getScreenDrawImageCount();
+                    uint64_t sDrawRGB = gc.getScreenDrawRGBCount();
+                    uint64_t sFillRect = gc.getScreenFillRectCount();
+                    uint64_t sDrawStr = gc.getScreenDrawStringCount();
+                    uint64_t drawRegionCount = gc.getDrawRegionCount();
+                    uint64_t drawRegionNonZero = gc.getDrawRegionNonZeroTransformCount();
+                    int lastDrawRegionTransform = gc.getLastDrawRegionTransform();
+                    uint32_t sLastDrawImg = gc.getScreenLastDrawImageARGB();
+                    uint32_t sLastDrawImgMaxA = gc.getScreenLastDrawImageMaxA();
+                    uint32_t sLastDrawImgNonZeroA = gc.getScreenLastDrawImageNonZeroA();
+                    uint32_t sLastDrawImgNonBlack = gc.getScreenLastDrawImageNonBlack();
+                    uint32_t sLastFillRect = gc.getScreenLastFillRectARGB();
+                    int sLastOp = gc.getScreenLastOpType();
+                    int64_t sLastOpMs = gc.getScreenLastOpMs();
+                    uint64_t backHash = gc.getBackHash();
+                    uint64_t frontHash = gc.getFrontHash();
+                    uint32_t backFmt = gc.getBackPixelFormat();
+                    uint32_t frontFmt = gc.getFrontPixelFormat();
+                    uint32_t backSample = gc.getBackSampleARGB();
+                    uint32_t frontSample = gc.getFrontSampleARGB();
+                    auto backClip = gc.getBackClipRect();
+                    auto frameBounds = gc.getLastFrameBounds();
+                    int64_t lastDrawMs = gc.getLastDrawMs();
+                    int64_t lastCommitMs = gc.getLastCommitMs();
+                    int64_t lastUpdateMs = gc.getLastUpdateMs();
+
+                    auto& diag = j2me::core::Diagnostics::getInstance();
+                    uint64_t flushCount = diag.getGameCanvasFlushCount();
+                    uint64_t paintCommitCount = diag.getPaintCommitCount();
+                    int64_t lastFlushMs = diag.getLastGameCanvasFlushMs();
+                    int64_t lastPaintCommitMs = diag.getLastPaintCommitMs();
+                    uint64_t resMiss = diag.getResourceNotFoundCount();
+                    uint64_t imgDecFail = diag.getImageDecodeFailedCount();
+                    std::string lastResMiss = diag.getLastResourceNotFound();
+                    std::string lastImgDecFail = diag.getLastImageDecodeFailed();
+
+                    LOG_DEBUG("[Watchdog] displayable=" + displayableName +
+                              " threads=" + std::to_string(stats.total) +
+                              " runnable=" + std::to_string(stats.runnable) +
+                              " waiting=" + std::to_string(stats.waiting) +
+                              " timed=" + std::to_string(stats.timedWaiting) +
+                              " nowMs=" + std::to_string(nowMs) +
+                              " draw=" + std::to_string(drawCount) +
+                              " commit=" + std::to_string(commitCount) +
+                              " update=" + std::to_string(updateCount) +
+                              " drawImg=" + std::to_string(drawImgCount) +
+                              " drawRGB=" + std::to_string(drawRgbCount) +
+                              " fillRect=" + std::to_string(fillRectCount) +
+                              " drawStr=" + std::to_string(drawStrCount) +
+                              " lastDrawImgARGB=" + std::to_string(lastDrawImgSample) +
+                              " lastDrawImgMaxA=" + std::to_string(lastDrawImgMaxA) +
+                              " lastDrawImgNonZeroA=" + std::to_string(lastDrawImgNonZeroA) +
+                              " lastDrawStrARGB=" + std::to_string(lastDrawStrSample) +
+                              " lastFillRectARGB=" + std::to_string(lastFillRectColor) +
+                              " lastOp=" + std::to_string(lastOpType) +
+                              " ageLastOpMs=" + std::to_string(nowMs - lastOpMs) +
+                              " sDrawImg=" + std::to_string(sDrawImg) +
+                              " sDrawRGB=" + std::to_string(sDrawRGB) +
+                              " sFillRect=" + std::to_string(sFillRect) +
+                              " sDrawStr=" + std::to_string(sDrawStr) +
+                              " drawRegion=" + std::to_string(drawRegionCount) +
+                              " drawRegionNZ=" + std::to_string(drawRegionNonZero) +
+                              " lastDrawRegionT=" + std::to_string(lastDrawRegionTransform) +
+                              " sLastDrawImgARGB=" + std::to_string(sLastDrawImg) +
+                              " sLastDrawImgMaxA=" + std::to_string(sLastDrawImgMaxA) +
+                              " sLastDrawImgNonZeroA=" + std::to_string(sLastDrawImgNonZeroA) +
+                              " sLastDrawImgNonBlack=" + std::to_string(sLastDrawImgNonBlack) +
+                              " sLastFillRectARGB=" + std::to_string(sLastFillRect) +
+                              " sLastOp=" + std::to_string(sLastOp) +
+                              " ageSLastOpMs=" + std::to_string(nowMs - sLastOpMs) +
+                              " flush=" + std::to_string(flushCount) +
+                              " paintCommit=" + std::to_string(paintCommitCount) +
+                              " resMiss=" + std::to_string(resMiss) +
+                              " imgDecFail=" + std::to_string(imgDecFail) +
+                              " lastResMiss=" + lastResMiss +
+                              " lastImgDecFail=" + lastImgDecFail +
+                              " backFmt=" + std::to_string(backFmt) +
+                              " frontFmt=" + std::to_string(frontFmt) +
+                              " backHash=" + std::to_string(backHash) +
+                              " frontHash=" + std::to_string(frontHash) +
+                              " backSampleARGB=" + std::to_string(backSample) +
+                              " frontSampleARGB=" + std::to_string(frontSample) +
+                              " backClip=" + std::to_string(backClip[0]) + "," + std::to_string(backClip[1]) + "," + std::to_string(backClip[2]) + "," + std::to_string(backClip[3]) +
+                              " frameBounds=" + std::to_string(frameBounds[0]) + "," + std::to_string(frameBounds[1]) + "," + std::to_string(frameBounds[2]) + "," + std::to_string(frameBounds[3]) +
+                              " lastDrawMs=" + std::to_string(lastDrawMs) +
+                              " lastCommitMs=" + std::to_string(lastCommitMs) +
+                              " lastUpdateMs=" + std::to_string(lastUpdateMs) +
+                              " lastFlushMs=" + std::to_string(lastFlushMs) +
+                              " lastPaintCommitMs=" + std::to_string(lastPaintCommitMs) +
+                              " ageDrawMs=" + std::to_string(nowMs - lastDrawMs) +
+                              " ageCommitMs=" + std::to_string(nowMs - lastCommitMs) +
+                              " ageUpdateMs=" + std::to_string(nowMs - lastUpdateMs) +
+                              " ageFlushMs=" + std::to_string(nowMs - lastFlushMs) +
+                              " agePaintCommitMs=" + std::to_string(nowMs - lastPaintCommitMs));
+
+                    if (drawCount != lastDrawCount && commitCount == lastCommitCount) {
+                        LOG_DEBUG("[Watchdog] draw increased but commit unchanged");
+                    }
+
+                    lastDrawCount = drawCount;
+                    lastCommitCount = commitCount;
+                    lastWatchdogTime = now;
+                }
+            }
             
             auto thread = ThreadManager::getInstance().nextThread();
             if (thread) {

@@ -198,10 +198,25 @@ void registerInputStreamNatives(j2me::core::NativeRegistry& registry) {
     // java/io/InputStream.markSupported()Z
     registry.registerNative("java/io/InputStream", "markSupported", "()Z", 
         [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
-            frame->pop(); // this
+            j2me::core::JavaValue thisVal = frame->pop(); // this
+            
+            bool supported = false;
+            if (thisVal.type == j2me::core::JavaValue::REFERENCE && thisVal.val.ref != nullptr) {
+                j2me::core::JavaObject* inputStreamObj = (j2me::core::JavaObject*)thisVal.val.ref;
+                if (inputStreamObj->fields.size() > 0) {
+                     // Check if it's our NativeInputStream
+                     // Ideally we should check class type, but for now we assume if it has handle it is ours.
+                     int streamId = (int)inputStreamObj->fields[0];
+                     auto stream = j2me::core::HeapManager::getInstance().getStream(streamId);
+                     if (stream) {
+                         supported = stream->markSupported();
+                     }
+                }
+            }
+
             j2me::core::JavaValue result;
             result.type = j2me::core::JavaValue::INT;
-            result.val.i = 0; // false
+            result.val.i = supported ? 1 : 0;
             frame->push(result);
         }
     );
@@ -209,15 +224,37 @@ void registerInputStreamNatives(j2me::core::NativeRegistry& registry) {
     // java/io/InputStream.mark(I)V
     registry.registerNative("java/io/InputStream", "mark", "(I)V", 
         [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
-            frame->pop(); // readlimit
-            frame->pop(); // this
+            int readlimit = frame->pop().val.i;
+            j2me::core::JavaValue thisVal = frame->pop(); // this
+            
+            if (thisVal.type == j2me::core::JavaValue::REFERENCE && thisVal.val.ref != nullptr) {
+                j2me::core::JavaObject* inputStreamObj = (j2me::core::JavaObject*)thisVal.val.ref;
+                if (inputStreamObj->fields.size() > 0) {
+                    int streamId = (int)inputStreamObj->fields[0];
+                    auto stream = j2me::core::HeapManager::getInstance().getStream(streamId);
+                    if (stream) {
+                        stream->mark(readlimit);
+                    }
+                }
+            }
         }
     );
 
     // java/io/InputStream.reset()V
     registry.registerNative("java/io/InputStream", "reset", "()V", 
         [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
-            frame->pop(); // this
+            j2me::core::JavaValue thisVal = frame->pop(); // this
+            
+            if (thisVal.type == j2me::core::JavaValue::REFERENCE && thisVal.val.ref != nullptr) {
+                j2me::core::JavaObject* inputStreamObj = (j2me::core::JavaObject*)thisVal.val.ref;
+                if (inputStreamObj->fields.size() > 0) {
+                    int streamId = (int)inputStreamObj->fields[0];
+                    auto stream = j2me::core::HeapManager::getInstance().getStream(streamId);
+                    if (stream) {
+                        stream->reset();
+                    }
+                }
+            }
         }
     );
 }

@@ -124,3 +124,9 @@
 ./javax/microedition/media/control/ToneControl.java
 ./javax/microedition/media/control/VolumeControl.java
 ./javax/microedition/media/Controllable.java
+./javax/wireless/messaging/Message.java
+./javax/wireless/messaging/TextMessage.java
+./javax/wireless/messaging/MessageListener.java
+./javax/wireless/messaging/MessageConnection.java
+./j2me/media/DummyPlayer.java
+./j2me/media/DummyVolumeControl.java

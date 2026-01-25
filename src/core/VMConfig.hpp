@@ -18,6 +18,11 @@ struct VMConfig {
     std::string mainClassName;
     bool isClass = false; // true if loading single class file
     std::optional<std::vector<uint8_t>> classData; // if single class
+    bool autoKeyEnabled = false;
+    std::vector<int> autoKeyCodes;
+    int64_t autoKeyDelayMs = 1200;
+    int64_t autoKeyPressMs = 40;
+    int64_t autoKeyBetweenKeysMs = 200;
 };
 
 }

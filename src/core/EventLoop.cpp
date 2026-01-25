@@ -1,6 +1,8 @@
 #include "EventLoop.hpp"
 #include "NativeRegistry.hpp"
 #include "HeapManager.hpp"
+#include "Logger.hpp"
+#include "Diagnostics.hpp"
 #include "../native/javax_microedition_lcdui_Display.hpp"
 #include "../platform/GraphicsContext.hpp"
 #include "ThreadManager.hpp"
@@ -8,6 +10,7 @@
 #include <iostream>
 #include <thread>
 #include <chrono>
+#include <algorithm>
 
 namespace j2me {
 namespace core {
@@ -40,7 +43,7 @@ void EventLoop::pollSDL() {
     SDL_Event e;
     while (SDL_PollEvent(&e) != 0) {
         if (e.type == SDL_QUIT) {
-            quit = true;
+            requestExit("manual: SDL_QUIT");
         } else if (e.type == SDL_KEYDOWN) {
             int keyCode = mapKey(e.key.keysym.sym);
             if (keyCode != 0) {
@@ -66,12 +69,74 @@ void EventLoop::pollSDL() {
             }
         }
     }
+
+    {
+        int64_t nowMs = j2me::core::Diagnostics::getInstance().getNowMs();
+        std::lock_guard<std::mutex> lock(queueMutex);
+        while (!autoKeyEvents.empty()) {
+            const auto& ev = autoKeyEvents.front();
+            if (nowMs < ev.atMs) break;
+            eventQueue.push({ev.type, ev.keyCode});
+            if (ev.type == KeyEvent::PRESSED) {
+                LOG_DEBUG("[AutoKey] pressed keyCode=" + std::to_string(ev.keyCode));
+            }
+            if (ev.keyCode > 0 && ev.keyCode <= 31) {
+                if (ev.type == KeyEvent::PRESSED) keyStates |= (1 << ev.keyCode);
+                else if (ev.type == KeyEvent::RELEASED) keyStates &= ~(1 << ev.keyCode);
+            }
+            autoKeyEvents.erase(autoKeyEvents.begin());
+        }
+    }
     
     // 刷新屏幕 (主线程)
     // Refresh screen (Main Thread)
     // 确保窗口表面更新发生在主线程
     // This ensures window surface update happens on the main thread
     j2me::platform::GraphicsContext::getInstance().update();
+}
+
+void EventLoop::scheduleAutoKeys(const std::vector<int>& keyCodes, int64_t startDelayMs, int64_t keyPressMs, int64_t betweenKeysMs) {
+    if (keyCodes.empty()) return;
+    int64_t nowMs = j2me::core::Diagnostics::getInstance().getNowMs();
+    std::vector<AutoKeyEvent> newEvents;
+    newEvents.reserve(keyCodes.size() * 2);
+    int64_t t = nowMs + startDelayMs;
+    for (int keyCode : keyCodes) {
+        if (keyCode == 0) continue;
+        newEvents.push_back({t, KeyEvent::PRESSED, keyCode});
+        newEvents.push_back({t + keyPressMs, KeyEvent::RELEASED, keyCode});
+        t += betweenKeysMs;
+    }
+    std::lock_guard<std::mutex> lock(queueMutex);
+    autoKeyEvents.insert(autoKeyEvents.end(), newEvents.begin(), newEvents.end());
+    std::sort(autoKeyEvents.begin(), autoKeyEvents.end(), [](const AutoKeyEvent& a, const AutoKeyEvent& b) {
+        return a.atMs < b.atMs;
+    });
+    LOG_DEBUG("[AutoKey] scheduled keys=" + std::to_string(keyCodes.size()) + " delayMs=" + std::to_string(startDelayMs));
+}
+
+void EventLoop::requestExit(const std::string& reason) {
+    bool expected = false;
+    if (!quit.compare_exchange_strong(expected, true)) {
+        return;
+    }
+
+    j2me::platform::GraphicsContext::getInstance().saveFramesBMP("lastframe");
+
+    {
+        std::lock_guard<std::mutex> lock(exitMutex);
+        exitReason = reason;
+    }
+
+    bool logExpected = false;
+    if (exitLogged.compare_exchange_strong(logExpected, true)) {
+        LOG_INFO("[Exit] Requested: " + reason);
+    }
+}
+
+std::string EventLoop::getExitReason() const {
+    std::lock_guard<std::mutex> lock(exitMutex);
+    return exitReason;
 }
 
 void EventLoop::dispatchEvents(Interpreter* interpreter) {
@@ -143,6 +208,28 @@ void EventLoop::render(Interpreter* interpreter) {
             // Allocate Graphics object
             j2me::core::JavaObject* g = j2me::core::HeapManager::getInstance().allocate(graphicsCls);
             
+            // 初始化 Graphics 对象字段 (Clip, Color)
+            // Initialize Graphics object fields
+            j2me::platform::GraphicsContext& gc = j2me::platform::GraphicsContext::getInstance();
+            gc.resetClip(); // 重置 SDL 裁剪区域
+            
+            int w = gc.getWidth();
+            int h = gc.getHeight();
+            
+            auto setIntField = [&](const std::string& name, int val) {
+                 auto it = graphicsCls->fieldOffsets.find(name + "|I");
+                 if (it == graphicsCls->fieldOffsets.end()) it = graphicsCls->fieldOffsets.find(name);
+                 if (it != graphicsCls->fieldOffsets.end()) {
+                     g->fields[it->second] = val;
+                 }
+            };
+            
+            setIntField("clipX", 0);
+            setIntField("clipY", 0);
+            setIntField("clipWidth", w);
+            setIntField("clipHeight", h);
+            setIntField("color", 0); // Black
+            
             // 查找 paint 方法
             // Find paint method
             auto currentCls = displayable->cls;
@@ -151,9 +238,7 @@ void EventLoop::render(Interpreter* interpreter) {
                 for (const auto& method : currentCls->rawFile->methods) {
                     auto name = std::dynamic_pointer_cast<j2me::core::ConstantUtf8>(currentCls->rawFile->constant_pool[method.name_index]);
                     if (name->bytes == "paint") {
-                        static int paintCount = 0;
-                        if (paintCount++ % 60 == 0) std::cout << "[EventLoop] Calling paint()" << std::endl;
-
+                        // std::cout << "[EventLoop] Invoking paint() for class " << currentCls->name << std::endl;
                         auto frame = std::make_shared<j2me::core::StackFrame>(method, currentCls->rawFile);
                         
                         // 压入 'this' (Canvas)
@@ -179,6 +264,7 @@ void EventLoop::render(Interpreter* interpreter) {
                         }
 
                         // 启动绘制线程
+                        j2me::platform::GraphicsContext::getInstance().beginFrame();
                         auto thread = std::make_shared<JavaThread>(frame);
                         paintingThread = thread;
                         isPainting = true;
@@ -201,6 +287,7 @@ void EventLoop::checkPaintFinished() {
             // 线程已销毁，意味着绘制完成
             // Thread destroyed, meaning paint finished
             j2me::platform::GraphicsContext::getInstance().commit();
+            j2me::core::Diagnostics::getInstance().onPaintCommit();
             isPainting = false;
         } else {
             auto ptr = paintingThread.lock();
@@ -208,6 +295,7 @@ void EventLoop::checkPaintFinished() {
                 // 线程存在但已完成
                 // Thread exists but finished
                 j2me::platform::GraphicsContext::getInstance().commit();
+                j2me::core::Diagnostics::getInstance().onPaintCommit();
                 isPainting = false;
             }
         }

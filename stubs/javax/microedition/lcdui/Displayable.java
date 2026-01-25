@@ -47,6 +47,9 @@ public abstract class Displayable {
         return 240;
     }
 
+    public Displayable() {
+    }
+
     public int getHeight() {
         return 320;
     }

@@ -55,7 +55,9 @@ public class Image {
     public Graphics getGraphics() {
         if (!isMutable()) throw new IllegalStateException("Image is immutable");
         int gPtr = getGraphicsNative(nativePtr);
-        return new Graphics(gPtr);
+        Graphics g = new Graphics(gPtr);
+        g.setClip(0, 0, getWidth(), getHeight());
+        return g;
     }
 
     public boolean isMutable() {

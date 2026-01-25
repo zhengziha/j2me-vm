@@ -238,6 +238,17 @@ public class String {
         return true;
     }
 
+    public String concat(String str) {
+        int otherLen = str.length();
+        if (otherLen == 0) {
+            return this;
+        }
+        char buf[] = new char[count + otherLen];
+        System.arraycopy(value, offset, buf, 0, count);
+        System.arraycopy(str.value, str.offset, buf, count, otherLen);
+        return new String(buf);
+    }
+
     public String trim() {
         int len = count;
         int st = 0;
@@ -251,5 +262,24 @@ public class String {
             len--;
         }
         return ((st > 0) || (len < count)) ? substring(st, len) : this;
+    }
+
+    public int compareTo(String anotherString) {
+        int len1 = count;
+        int len2 = anotherString.count;
+        int lim = (len1 < len2) ? len1 : len2;
+        char v1[] = value;
+        char v2[] = anotherString.value;
+        int k1 = offset;
+        int k2 = anotherString.offset;
+
+        for (int i = 0; i < lim; i++) {
+            char c1 = v1[k1 + i];
+            char c2 = v2[k2 + i];
+            if (c1 != c2) {
+                return c1 - c2;
+            }
+        }
+        return len1 - len2;
     }
 }

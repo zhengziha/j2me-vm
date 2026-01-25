@@ -31,6 +31,7 @@ public class Graphics {
         this.tx += x;
         this.ty += y;
         translateNative(x, y);
+        setClipNative(clipX + tx, clipY + ty, clipWidth, clipHeight);
     }
 
     public int getTranslateX() {
@@ -62,26 +63,21 @@ public class Graphics {
         this.clipY = y;
         this.clipWidth = width;
         this.clipHeight = height;
-        setClipNative(x, y, width, height);
+        setClipNative(x + tx, y + ty, width, height);
     }
 
     public void clipRect(int x, int y, int width, int height) {
-        // Intersect with current clip
-        // Simplified intersection logic
-        int newX = x + tx;
-        int newY = y + ty;
-        
-        int x1 = Math.max(clipX, newX);
-        int y1 = Math.max(clipY, newY);
-        int x2 = Math.min(clipX + clipWidth, newX + width);
-        int y2 = Math.min(clipY + clipHeight, newY + height);
+        int x1 = Math.max(clipX, x);
+        int y1 = Math.max(clipY, y);
+        int x2 = Math.min(clipX + clipWidth, x + width);
+        int y2 = Math.min(clipY + clipHeight, y + height);
         
         this.clipX = x1;
         this.clipY = y1;
         this.clipWidth = Math.max(0, x2 - x1);
         this.clipHeight = Math.max(0, y2 - y1);
         
-        setClipNative(clipX, clipY, clipWidth, clipHeight);
+        setClipNative(clipX + tx, clipY + ty, clipWidth, clipHeight);
     }
 
     public void setColor(int red, int green, int blue) {

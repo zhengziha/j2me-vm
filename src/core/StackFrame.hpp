@@ -47,14 +47,29 @@ public:
     JavaValue pop();
     JavaValue peek();
     
-    // Debug helper
     // 调试辅助: 获取当前操作数栈的大小
     size_t size() const { return operandStack.size(); }
+
+    // Exception Table Entry
+    struct ExceptionTableEntry {
+        uint16_t startPc;
+        uint16_t endPc;
+        uint16_t handlerPc;
+        uint16_t catchType; // Index into constant pool
+    };
+
+    struct LineNumberTableEntry {
+        uint16_t startPc;
+        uint16_t lineNumber;
+    };
 
     // 局部变量表操作: 设置、获取指定索引的局部变量
     void setLocal(uint16_t index, JavaValue value);
     JavaValue getLocal(uint16_t index);
     
+    // Get line number for current PC
+    int getLineNumber(uint32_t pc) const;
+
     // 操作数栈大小和判空
     size_t stackSize() const { return operandStack.size(); }
     bool isStackEmpty() const { return operandStack.empty(); }
@@ -63,6 +78,8 @@ public:
     std::shared_ptr<ClassFile> classFile;   // 该方法所属的类文件
     uint32_t pc = 0;                        // 程序计数器 (Program Counter)，记录当前执行的字节码位置
     std::vector<uint8_t> code;              // 缓存的方法字节码数据
+    std::vector<ExceptionTableEntry> exceptionTable; // 异常处理表
+    std::vector<LineNumberTableEntry> lineNumberTable; // 行号表
 
 private:
     std::vector<JavaValue> operandStack;    // 操作数栈 (LIFO)

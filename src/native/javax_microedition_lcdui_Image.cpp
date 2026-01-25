@@ -4,7 +4,9 @@
 #include "../core/StackFrame.hpp"
 #include "../core/HeapManager.hpp"
 #include "../platform/GraphicsContext.hpp"
+#include "java_lang_String.hpp"
 #include "../platform/stb_image.h"
+#include "../core/Diagnostics.hpp"
 #include <SDL2/SDL.h>
 #include <iostream>
 #include <map>
@@ -22,12 +24,12 @@ void registerImageNatives(j2me::core::NativeRegistry& registry) {
             j2me::core::JavaValue nameVal = frame->pop(); // name string
             
             int32_t imgId = 0;
-            if (nameVal.type == j2me::core::JavaValue::REFERENCE && !nameVal.strVal.empty()) {
-                std::string resName = nameVal.strVal;
+            if (nameVal.type == j2me::core::JavaValue::REFERENCE && nameVal.val.ref != nullptr) {
+                j2me::core::JavaObject* strObj = (j2me::core::JavaObject*)nameVal.val.ref;
+                std::string resName = getJavaString(strObj);
+                
                 // Remove leading slash if present
                 if (resName.size() > 0 && resName[0] == '/') resName = resName.substr(1);
-                
-                std::cout << "[Image] Loading image: " << resName << std::endl;
                 
                 auto loader = j2me::core::NativeRegistry::getInstance().getJarLoader();
                 if (loader && loader->hasFile(resName)) {
@@ -44,16 +46,22 @@ void registerImageNatives(j2me::core::NativeRegistry& registry) {
                             // Print first few bytes for debugging
                             std::cerr << "Header bytes: ";
                             const unsigned char* bytes = data->data();
+                            std::string headerHex;
                             for (size_t i = 0; i < std::min((size_t)16, data->size()); ++i) {
+                                char buf[8];
+                                snprintf(buf, sizeof(buf), "%02X", bytes[i]);
+                                headerHex += buf;
                                 std::cerr << std::hex << std::setw(2) << std::setfill('0') << (int)bytes[i] << " ";
                             }
                             std::cerr << std::dec << std::endl;
+                            j2me::core::Diagnostics::getInstance().onImageDecodeFailed(resName, headerHex);
                         }
                     } else {
                         std::cerr << "[Image] Failed to read file data" << std::endl;
                     }
                 } else {
                     std::cerr << "[Image] Image file not found in JAR: " << resName << std::endl;
+                    j2me::core::Diagnostics::getInstance().onResourceNotFound(resName);
                 }
             }
             
@@ -155,10 +163,13 @@ void registerImageNatives(j2me::core::NativeRegistry& registry) {
                         for (int c = 0; c < width; c++) {
                             if (x + c >= 0 && x + c < surface->w && y + r >= 0 && y + r < surface->h) {
                                 uint32_t pixel = pixels[(y + r) * surface->w + (x + c)];
+                                uint8_t pr, pg, pb, pa;
+                                SDL_GetRGBA(pixel, surface->format, &pr, &pg, &pb, &pa);
+                                uint32_t argb = ((uint32_t)pa << 24) | ((uint32_t)pr << 16) | ((uint32_t)pg << 8) | (uint32_t)pb;
                                 
                                 int targetIndex = offset + r * scanlength + c;
                                 if (targetIndex >= 0 && targetIndex < (int)rgbArray->fields.size()) {
-                                    rgbArray->fields[targetIndex] = pixel;
+                                    rgbArray->fields[targetIndex] = argb;
                                 }
                             }
                         }
@@ -201,14 +212,13 @@ void registerImageNatives(j2me::core::NativeRegistry& registry) {
                         for (int c = 0; c < width; c++) {
                             if (x + c >= 0 && x + c < surface->w && y + r >= 0 && y + r < surface->h) {
                                 uint32_t pixel = pixels[(y + r) * surface->w + (x + c)];
-                                
-                                // Convert ARGB8888 to ARGB (Java format)
-                                // SDL_PIXELFORMAT_ARGB8888 is generally compatible with Java ARGB
-                                // But let's ensure alpha is preserved.
+                                uint8_t pr, pg, pb, pa;
+                                SDL_GetRGBA(pixel, surface->format, &pr, &pg, &pb, &pa);
+                                uint32_t argb = ((uint32_t)pa << 24) | ((uint32_t)pr << 16) | ((uint32_t)pg << 8) | (uint32_t)pb;
                                 
                                 int targetIndex = offset + r * scanlength + c;
                                 if (targetIndex >= 0 && targetIndex < (int)rgbArray->fields.size()) {
-                                    rgbArray->fields[targetIndex] = pixel;
+                                    rgbArray->fields[targetIndex] = argb;
                                 }
                             }
                         }
@@ -248,19 +258,19 @@ void registerImageNatives(j2me::core::NativeRegistry& registry) {
                      return;
                 }
                 
-                // Create SDL Surface
-                SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, SDL_PIXELFORMAT_ARGB8888);
+                SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, SDL_PIXELFORMAT_RGBA32);
                 if (surface) {
                     SDL_LockSurface(surface);
                     uint32_t* targetPixels = (uint32_t*)surface->pixels;
                     
                     for (int i = 0; i < width * height; i++) {
                         uint32_t argb = (uint32_t)rgbArray->fields[i];
-                        if (!processAlpha) {
-                            argb |= 0xFF000000; // Set alpha to 255
-                        }
-                        // SDL ARGB8888 matches Java ARGB
-                        targetPixels[i] = argb;
+                        uint8_t a = (argb >> 24) & 0xFF;
+                        uint8_t r = (argb >> 16) & 0xFF;
+                        uint8_t g = (argb >> 8) & 0xFF;
+                        uint8_t b = (argb) & 0xFF;
+                        if (!processAlpha) a = 255;
+                        targetPixels[i] = SDL_MapRGBA(surface->format, r, g, b, a);
                     }
                     
                     SDL_UnlockSurface(surface);
@@ -282,12 +292,18 @@ void registerImageNatives(j2me::core::NativeRegistry& registry) {
             int height = frame->pop().val.i;
             int width = frame->pop().val.i;
             
-            // Create a new SDL Surface
-            // Use ARGB8888 for consistency
-            SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, SDL_PIXELFORMAT_ARGB8888);
+            if (width <= 0) {
+                std::cout << "[Image] Warning: createMutableImageNative called with width=" << width << ", forcing to 240" << std::endl;
+                width = 240;
+            }
+            if (height <= 0) {
+                std::cout << "[Image] Warning: createMutableImageNative called with height=" << height << ", forcing to 320" << std::endl;
+                height = 320;
+            }
+
+            SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, SDL_PIXELFORMAT_RGBA32);
             
             if (surface) {
-                // Fill with white (usually mutable images start white)
                 SDL_FillRect(surface, NULL, SDL_MapRGBA(surface->format, 255, 255, 255, 255));
                 
                 int32_t imgId = nextImageId++;
@@ -372,7 +388,7 @@ void registerImageNatives(j2me::core::NativeRegistry& registry) {
                 
                 if (pixels) {
                     // Create SDL Surface
-                    SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormat(0, w, h, 32, SDL_PIXELFORMAT_ARGB8888);
+                    SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormat(0, w, h, 32, SDL_PIXELFORMAT_RGBA32);
                     if (surface) {
                         SDL_LockSurface(surface);
                         
@@ -402,6 +418,13 @@ void registerImageNatives(j2me::core::NativeRegistry& registry) {
                 } else {
                     std::cerr << "Failed to decode image data" << std::endl;
                     std::cout << "[Image] Failed to decode image data (stbi_load_from_memory returned null)" << std::endl;
+                    std::string headerHex;
+                    for (int i = 0; i < std::min(16, length); i++) {
+                        char buf[8];
+                        snprintf(buf, sizeof(buf), "%02X", buffer[i]);
+                        headerHex += buf;
+                    }
+                    j2me::core::Diagnostics::getInstance().onImageDecodeFailed("<data>", headerHex);
                 }
             } else {
                  std::cerr << "NullPointerException in createImageFromData" << std::endl;

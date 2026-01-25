@@ -5,6 +5,7 @@
 #include "../platform/GraphicsContext.hpp"
 #include "../core/EventLoop.hpp"
 #include "../core/StackFrame.hpp"
+#include "../core/Diagnostics.hpp"
 #include <iostream>
 #include <SDL2/SDL.h>
 
@@ -35,6 +36,8 @@ void registerGameCanvasNatives(j2me::core::NativeRegistry& registry) {
             int x = frame->pop().val.i;
             j2me::core::JavaValue imgVal = frame->pop();
             frame->pop(); // this
+
+            j2me::core::Diagnostics::getInstance().onGameCanvasFlush();
             
             if (imgVal.val.ref != nullptr) {
                 j2me::core::JavaObject* imgObj = (j2me::core::JavaObject*)imgVal.val.ref;
@@ -66,10 +69,13 @@ void registerGameCanvasNatives(j2me::core::NativeRegistry& registry) {
                          // Debug log
                          static int frameCount = 0;
                          if (frameCount++ % 60 == 0) {
-                             std::cout << "[GameCanvas] flushGraphicsNative called" << std::endl;
+                             // std::cout << "[GameCanvas] flushGraphicsNative called" << std::endl;
                          }
                          
-                         j2me::platform::GraphicsContext::getInstance().drawImage(srcSurface, 0, 0, 20); // TOP|LEFT = 16|4 = 20
+                         // Use drawRegion to support partial flush
+                         // flushGraphics(x, y, w, h) copies region (x,y,w,h) from buffer to screen at (x,y)
+                         j2me::platform::GraphicsContext::getInstance().drawRegion(srcSurface, x, y, w, h, 0, x, y, 20); // TOP|LEFT = 20
+                         j2me::platform::GraphicsContext::getInstance().commit();
 
                      }
                 }

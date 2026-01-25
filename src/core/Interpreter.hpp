@@ -59,6 +59,12 @@ private:
     // 验证字符串是否为有效的类名 (不是描述符)
     bool isValidClassName(const std::string& name);
 
+    // Handle exception throwing
+    // 处理异常抛出
+    // Returns true if exception was handled (caught in current or caller frame), false otherwise
+    // 如果异常被处理 (在当前或调用者栈帧中捕获)，返回 true；否则返回 false
+    bool handleException(std::shared_ptr<JavaThread> thread, JavaObject* exception);
+
     // Make friends for native access
     friend class j2me::core::NativeRegistry;
     friend void j2me::natives::registerMediaNatives(j2me::core::NativeRegistry& registry);

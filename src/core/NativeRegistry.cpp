@@ -48,10 +48,8 @@ NativeRegistry::NativeRegistry() {
     j2me::natives::registerRecordStoreNatives(*this);
     j2me::natives::registerTimerNatives(*this);
 
-    // java/lang/StringBuilder.<init>()V
-    registerNative("java/lang/StringBuilder", "<init>", "()V", [](std::shared_ptr<JavaThread> thread, std::shared_ptr<StackFrame> frame) {
-
-        std::cerr << "Native StringBuilder.<init>" << std::endl;
+    // java/lang/StringBuilder.initNative()V
+    registerNative("java/lang/StringBuilder", "initNative", "()V", [](std::shared_ptr<JavaThread> thread, std::shared_ptr<StackFrame> frame) {
         JavaValue thisVal = frame->pop();
         JavaObject* thisObj = (JavaObject*)thisVal.val.ref;
         if (thisObj) {
@@ -64,7 +62,6 @@ NativeRegistry::NativeRegistry() {
 
     // java/lang/StringBuilder.append(Ljava/lang/String;)Ljava/lang/StringBuilder;
     registerNative("java/lang/StringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/StringBuilder;", [](std::shared_ptr<JavaThread> thread, std::shared_ptr<StackFrame> frame) {
-        std::cerr << "Native StringBuilder.append(String)" << std::endl;
         JavaValue strVal = frame->pop();
         JavaValue thisVal = frame->pop();
         JavaObject* thisObj = (JavaObject*)thisVal.val.ref;
@@ -72,8 +69,10 @@ NativeRegistry::NativeRegistry() {
         if (thisObj && !thisObj->fields.empty()) {
             std::string* str = (std::string*)thisObj->fields[0];
             if (str) {
-                if (strVal.type == JavaValue::REFERENCE && !strVal.strVal.empty()) {
-                     str->append(strVal.strVal);
+                if (strVal.type == JavaValue::REFERENCE && strVal.val.ref != nullptr) {
+                     JavaObject* sObj = (JavaObject*)strVal.val.ref;
+                     std::string s = j2me::natives::getJavaString(sObj);
+                     str->append(s);
                 } else if (strVal.type == JavaValue::REFERENCE && strVal.val.ref == nullptr) {
                      str->append("null");
                 }
@@ -84,7 +83,6 @@ NativeRegistry::NativeRegistry() {
 
     // java/lang/StringBuilder.append(I)Ljava/lang/StringBuilder;
     registerNative("java/lang/StringBuilder", "append", "(I)Ljava/lang/StringBuilder;", [](std::shared_ptr<JavaThread> thread, std::shared_ptr<StackFrame> frame) {
-        std::cerr << "Native StringBuilder.append(int)" << std::endl;
         JavaValue intVal = frame->pop();
         JavaValue thisVal = frame->pop();
         JavaObject* thisObj = (JavaObject*)thisVal.val.ref;

@@ -25,7 +25,7 @@ include_directories(
 )
 
 # Source files
-file(GLOB_RECURSE SOURCES "src/*.cpp")
+file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS "src/*.cpp")
 
 # Executable
 add_executable(j2me-vm ${SOURCES})

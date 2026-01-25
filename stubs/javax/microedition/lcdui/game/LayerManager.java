@@ -48,28 +48,22 @@ public class LayerManager {
     }
 
     public void paint(Graphics g, int x, int y) {
-        g.translate(-this.x, -this.y); // View window translation
-        g.translate(x, y); // Destination translation? No, wait.
-        
-        // Spec: The LayerManager is rendered relative to the origin (0,0) of the Graphics object's coordinate system.
-        // The view window controls what part of the LM is visible.
-        
-        // Actually, paint(g, x, y) renders the view window to the graphics at (x,y).
-        
+        int oldTx = g.getTranslateX();
+        int oldTy = g.getTranslateY();
         int clipX = g.getClipX();
         int clipY = g.getClipY();
         int clipW = g.getClipWidth();
         int clipH = g.getClipHeight();
         
         g.translate(x - this.x, y - this.y);
-        g.clipRect(this.x, this.y, width, height);
-        
-        for (int i = count - 1; i >= 0; i--) {
+        g.setClip(this.x, this.y, width, height);
+
+        for (int i = 0; i < count; i++) {
             Layer l = layers[i];
             l.paint(g);
         }
         
-        g.translate(-(x - this.x), -(y - this.y));
+        g.translate(oldTx - g.getTranslateX(), oldTy - g.getTranslateY());
         g.setClip(clipX, clipY, clipW, clipH);
     }
 

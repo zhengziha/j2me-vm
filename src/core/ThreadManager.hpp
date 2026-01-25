@@ -1,13 +1,23 @@
 #pragma once
 
 #include "JavaThread.hpp"
+#include "Diagnostics.hpp"
 #include <list>
 #include <memory>
 #include <chrono>
 #include <map>
+#include <cstdint>
 
 namespace j2me {
 namespace core {
+
+struct ThreadStats {
+    size_t total = 0;
+    size_t runnable = 0;
+    size_t waiting = 0;
+    size_t timedWaiting = 0;
+    size_t finished = 0;
+};
 
 class ThreadManager {
 public:
@@ -70,9 +80,7 @@ public:
                 return thread;
             } else if (thread->state == JavaThread::TIMED_WAITING) {
                 // Check if time is up
-                auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
-                    std::chrono::system_clock::now().time_since_epoch()
-                ).count();
+                int64_t now = j2me::core::Diagnostics::getInstance().getNowMs();
                 
                 if (now >= thread->wakeTime) {
                     thread->state = JavaThread::RUNNABLE;
@@ -101,6 +109,22 @@ public:
 
     bool hasThreads() const {
         return !threads.empty();
+    }
+
+    ThreadStats getStats() const {
+        ThreadStats stats;
+        stats.total = threads.size();
+        for (const auto& t : threads) {
+            if (!t) continue;
+            if (t->isFinished()) stats.finished++;
+            switch (t->state) {
+                case JavaThread::RUNNABLE: stats.runnable++; break;
+                case JavaThread::WAITING: stats.waiting++; break;
+                case JavaThread::TIMED_WAITING: stats.timedWaiting++; break;
+                default: break;
+            }
+        }
+        return stats;
     }
 
 private:

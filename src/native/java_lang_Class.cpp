@@ -3,6 +3,7 @@
 #include "../core/StackFrame.hpp"
 #include "../core/HeapManager.hpp"
 #include "../core/Interpreter.hpp"
+#include "../core/Diagnostics.hpp"
 #include "../loader/JarLoader.hpp"
 #include "java_lang_String.hpp"
 #include <iostream>
@@ -52,11 +53,22 @@ void registerClassNatives(j2me::core::NativeRegistry& registry) {
                         
                         result.val.ref = streamObj;
                         std::cout << "[Class] Resource loaded successfully, stream ID: " << streamId << " Size: " << data->size() << std::endl;
+                        
+                        // Debug: Print first 16 bytes
+                        std::cout << "DEBUG_HEADER_PRINT: ";
+                        for (size_t i = 0; i < std::min((size_t)16, data->size()); i++) {
+                            char buf[16];
+                            snprintf(buf, sizeof(buf), "%02X ", (*data)[i]);
+                            std::cout << buf;
+                        }
+                        std::cout << std::endl;
                     } else {
                         std::cout << "[Class] Resource not found (data null): " << resName << std::endl;
+                        j2me::core::Diagnostics::getInstance().onResourceNotFound(resName);
                     }
                 } else {
                     std::cout << "[Class] Resource not found in JAR: " << resName << std::endl;
+                    j2me::core::Diagnostics::getInstance().onResourceNotFound(resName);
                 }
             }
             

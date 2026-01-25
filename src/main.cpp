@@ -7,10 +7,13 @@
 #include <string>
 #include <vector>
 #include <sys/stat.h>
+#include <csignal>
+#include <sstream>
 
 #include "core/VMConfig.hpp"
 #include "core/J2MEVM.hpp"
 #include "core/Logger.hpp"
+#include "core/EventLoop.hpp"
 #include "platform/GraphicsContext.hpp"
 #include "util/FileUtils.hpp"
 
@@ -49,10 +52,39 @@ std::string parseMidletClassName(const std::string& manifestContent) {
     return "";
 }
 
+static std::vector<std::string> splitCommaTokens(const std::string& s) {
+    std::vector<std::string> out;
+    std::stringstream ss(s);
+    std::string token;
+    while (std::getline(ss, token, ',')) {
+        size_t start = token.find_first_not_of(" \t\r\n");
+        if (start == std::string::npos) continue;
+        size_t end = token.find_last_not_of(" \t\r\n");
+        out.push_back(token.substr(start, end - start + 1));
+    }
+    return out;
+}
+
+static int parseAutoKeyToken(const std::string& t) {
+    std::string s = t;
+    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return (char)std::tolower(c); });
+    if (s == "fire" || s == "enter" || s == "ok") return 8;
+    if (s == "soft1" || s == "softleft" || s == "leftsoft" || s == "lsoft") return -6;
+    if (s == "soft2" || s == "softright" || s == "rightsoft" || s == "rsoft") return -7;
+    if (s == "up") return 1;
+    if (s == "down") return 6;
+    if (s == "left") return 2;
+    if (s == "right") return 5;
+    if (s.size() == 1 && s[0] >= '0' && s[0] <= '9') return (int)s[0];
+    return 0;
+}
+
 int main(int argc, char* argv[]) {
     if (argc < 2) {
-        std::cout << "Usage: j2me-vm [--log-level LEVEL] <path_to_jar_or_class>" << std::endl;
+        std::cout << "Usage: j2me-vm [--log-level LEVEL] [--timeout-ms MS] [--auto-key [SEQ]] [--no-auto-key] [--auto-key-delay-ms MS] <path_to_jar_or_class>" << std::endl;
         std::cout << "  LEVEL: debug, info, error, none (default: info)" << std::endl;
+        std::cout << "  MS: auto exit after MS milliseconds (0 disables, minimum: 15000)" << std::endl;
+        std::cout << "  SEQ: comma-separated keys, e.g. soft1,fire or fire (default: soft1,fire when enabled)" << std::endl;
         return 1;
     }
 
@@ -60,6 +92,11 @@ int main(int argc, char* argv[]) {
     // Parse command line arguments
     j2me::core::VMConfig config;
     config.logLevel = j2me::core::LogLevel::INFO;
+    int64_t timeoutMs = 0;
+    constexpr int64_t MIN_TIMEOUT_MS = 15000;
+    bool autoKeyForcedOn = false;
+    bool autoKeyForcedOff = false;
+    std::string autoKeySeq;
 
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
@@ -77,6 +114,24 @@ int main(int argc, char* argv[]) {
                 std::cerr << "Invalid log level: " << levelStr << std::endl;
                 return 1;
             }
+        } else if (arg == "--timeout-ms" && i + 1 < argc) {
+            timeoutMs = std::stoll(argv[++i]);
+            if (timeoutMs < 0) timeoutMs = 0;
+            if (timeoutMs > 0 && timeoutMs < MIN_TIMEOUT_MS) timeoutMs = MIN_TIMEOUT_MS;
+        } else if (arg == "--auto-key") {
+            autoKeyForcedOn = true;
+            if (i + 1 < argc) {
+                std::string next = argv[i + 1];
+                if (!next.empty() && next[0] != '-') {
+                    autoKeySeq = next;
+                    i++;
+                }
+            }
+        } else if (arg == "--no-auto-key") {
+            autoKeyForcedOff = true;
+        } else if (arg == "--auto-key-delay-ms" && i + 1 < argc) {
+            config.autoKeyDelayMs = std::stoll(argv[++i]);
+            if (config.autoKeyDelayMs < 0) config.autoKeyDelayMs = 0;
         } else if (arg[0] != '-') {
             config.filePath = arg;
         }
@@ -85,6 +140,18 @@ int main(int argc, char* argv[]) {
     if (config.filePath.empty()) {
         std::cerr << "Error: No file specified" << std::endl;
         return 1;
+    }
+
+    if (!autoKeyForcedOff && (autoKeyForcedOn || timeoutMs > 0)) {
+        config.autoKeyEnabled = true;
+        std::string seq = autoKeySeq.empty() ? "soft1,fire" : autoKeySeq;
+        for (const auto& token : splitCommaTokens(seq)) {
+            int key = parseAutoKeyToken(token);
+            if (key != 0) config.autoKeyCodes.push_back(key);
+        }
+        if (config.autoKeyCodes.empty()) {
+            config.autoKeyCodes = {-6, 8};
+        }
     }
 
     // 设置全局日志级别
@@ -100,6 +167,13 @@ int main(int argc, char* argv[]) {
     } else {
         LOG_INFO("SDL Initialized.");
     }
+
+    std::signal(SIGINT, [](int) {
+        j2me::core::EventLoop::getInstance().requestExit("manual: SIGINT");
+    });
+    std::signal(SIGTERM, [](int) {
+        j2me::core::EventLoop::getInstance().requestExit("manual: SIGTERM");
+    });
 
     // 创建窗口
     // Create window
@@ -216,6 +290,14 @@ int main(int argc, char* argv[]) {
             if (!config.appLoader->hasFile(config.mainClassName)) config.mainClassName = "RMSTest.class";
             if (!config.appLoader->hasFile(config.mainClassName)) config.mainClassName = "ImageTest.class";
         }
+    }
+
+    if (timeoutMs > 0) {
+        std::thread([timeoutMs]() {
+            std::this_thread::sleep_for(std::chrono::milliseconds(timeoutMs));
+            j2me::core::EventLoop::getInstance().requestExit("timeout: " + std::to_string(timeoutMs) + "ms");
+        }).detach();
+        LOG_INFO("[Exit] Auto-timeout enabled: " + std::to_string(timeoutMs) + "ms");
     }
 
     // 运行虚拟机

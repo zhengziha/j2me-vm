@@ -7,9 +7,105 @@
 #include <string>
 #include <iconv.h>
 #include <vector>
+#include <algorithm>
+#include <cctype>
 
 namespace j2me {
 namespace natives {
+
+static std::string normalizeIconvCharset(std::string s) {
+    s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](unsigned char ch) { return !std::isspace(ch); }));
+    s.erase(std::find_if(s.rbegin(), s.rend(), [](unsigned char ch) { return !std::isspace(ch); }).base(), s.end());
+
+    std::string key;
+    key.reserve(s.size());
+    for (unsigned char ch : s) {
+        if (ch == '-' || ch == '_' || ch == ' ') continue;
+        key.push_back((char)std::toupper(ch));
+    }
+
+    if (key == "UTF8") return "UTF-8";
+    if (key == "UTF16") return "UTF-16";
+    if (key == "UTF16LE") return "UTF-16LE";
+    if (key == "UTF16BE") return "UTF-16BE";
+    if (key == "ISO88591" || key == "ISO8859-1") return "ISO-8859-1";
+    if (key == "GB2312" || key == "CP936" || key == "MS936") return "GBK";
+    if (key == "GB18030") return "GB18030";
+    if (key == "BIG5") return "BIG5";
+
+    return s.empty() ? "UTF-8" : s;
+}
+
+static bool isValidUtf8(const std::vector<uint8_t>& bytes, bool& hasMultibyte) {
+    hasMultibyte = false;
+    size_t i = 0;
+    while (i < bytes.size()) {
+        uint8_t c = bytes[i];
+        if (c <= 0x7F) {
+            i++;
+            continue;
+        }
+        hasMultibyte = true;
+        if ((c & 0xE0) == 0xC0) {
+            if (i + 1 >= bytes.size()) return false;
+            uint8_t c1 = bytes[i + 1];
+            if ((c1 & 0xC0) != 0x80) return false;
+            i += 2;
+        } else if ((c & 0xF0) == 0xE0) {
+            if (i + 2 >= bytes.size()) return false;
+            uint8_t c1 = bytes[i + 1], c2 = bytes[i + 2];
+            if ((c1 & 0xC0) != 0x80 || (c2 & 0xC0) != 0x80) return false;
+            i += 3;
+        } else if ((c & 0xF8) == 0xF0) {
+            if (i + 3 >= bytes.size()) return false;
+            uint8_t c1 = bytes[i + 1], c2 = bytes[i + 2], c3 = bytes[i + 3];
+            if ((c1 & 0xC0) != 0x80 || (c2 & 0xC0) != 0x80 || (c3 & 0xC0) != 0x80) return false;
+            i += 4;
+        } else {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool iconvToUtf16LE(const std::vector<uint8_t>& bytes, const std::string& charsetName, std::vector<uint16_t>& out) {
+    out.clear();
+    if (bytes.empty()) return true;
+    std::string charset = normalizeIconvCharset(charsetName);
+    iconv_t cd = iconv_open("UTF-16LE", charset.c_str());
+    if (cd == (iconv_t)-1) return false;
+
+    std::vector<char> inBuf(bytes.begin(), bytes.end());
+    std::vector<char> outBuf(inBuf.size() * 4 + 8);
+    char* inPtr = inBuf.data();
+    size_t inBytes = inBuf.size();
+    char* outPtr = outBuf.data();
+    size_t outBytes = outBuf.size();
+
+    size_t ret = iconv(cd, &inPtr, &inBytes, &outPtr, &outBytes);
+    iconv_close(cd);
+    if (ret == (size_t)-1) return false;
+
+    size_t convertedBytes = outBuf.size() - outBytes;
+    size_t charCount = convertedBytes / 2;
+    out.resize(charCount);
+    const uint16_t* u16Ptr = (const uint16_t*)outBuf.data();
+    for (size_t i = 0; i < charCount; i++) out[i] = u16Ptr[i];
+    return true;
+}
+
+static std::vector<uint16_t> decodeBytesGuessCharset(const std::vector<uint8_t>& bytes) {
+    std::vector<uint16_t> out;
+    bool hasMultibyte = false;
+    if (isValidUtf8(bytes, hasMultibyte) && hasMultibyte) {
+        if (iconvToUtf16LE(bytes, "UTF-8", out)) return out;
+    }
+    if (iconvToUtf16LE(bytes, "GBK", out)) return out;
+    if (iconvToUtf16LE(bytes, "GB18030", out)) return out;
+    out.resize(bytes.size());
+    for (size_t i = 0; i < bytes.size(); i++) out[i] = (uint16_t)bytes[i];
+    return out;
+}
 
 j2me::core::JavaObject* createJavaString(j2me::core::Interpreter* interpreter, const std::string& str) {
     if (!interpreter) return nullptr;
@@ -26,10 +122,10 @@ j2me::core::JavaObject* createJavaString(j2me::core::Interpreter* interpreter, c
     
     if (arrayCls) {
         auto arrayObj = j2me::core::HeapManager::getInstance().allocate(arrayCls);
-        arrayObj->fields.resize(str.length());
-        for (size_t i = 0; i < str.length(); i++) {
-            arrayObj->fields[i] = (uint16_t)(uint8_t)str[i]; 
-        }
+        std::vector<uint8_t> bytes(str.begin(), str.end());
+        std::vector<uint16_t> u16 = decodeBytesGuessCharset(bytes);
+        arrayObj->fields.resize(u16.size());
+        for (size_t i = 0; i < u16.size(); i++) arrayObj->fields[i] = u16[i];
         
         // Set value field
         auto valueIt = stringCls->fieldOffsets.find("value|[C");
@@ -41,7 +137,7 @@ j2me::core::JavaObject* createJavaString(j2me::core::Interpreter* interpreter, c
         // Set count field (if exists)
         auto countIt = stringCls->fieldOffsets.find("count|I");
         if (countIt != stringCls->fieldOffsets.end()) {
-             stringObj->fields[countIt->second] = str.length();
+             stringObj->fields[countIt->second] = (int64_t)u16.size();
         }
         
         // Set offset field (if exists)
@@ -193,20 +289,62 @@ void registerStringNatives(j2me::core::NativeRegistry& registry) {
             auto interpreter = j2me::core::NativeRegistry::getInstance().getInterpreter();
             auto arrayCls = interpreter->resolveClass("[B");
             if (arrayCls) {
-                std::string strValue;
-                
-                if (thisVal.type == j2me::core::JavaValue::REFERENCE) {
-                    strValue = thisVal.strVal;
-                    std::cout << "[String.getBytes] String value: '" << strValue << "' (length: " << strValue.length() << ")" << std::endl;
-                }
-                
                 auto arrayObj = j2me::core::HeapManager::getInstance().allocate(arrayCls);
-                arrayObj->fields.resize(strValue.length());
-                for (size_t i = 0; i < strValue.length(); i++) {
-                    arrayObj->fields[i] = static_cast<uint8_t>(strValue[i]);
+                arrayObj->fields.clear();
+
+                if (thisVal.type == j2me::core::JavaValue::REFERENCE && thisVal.val.ref != nullptr) {
+                    auto strObj = static_cast<j2me::core::JavaObject*>(thisVal.val.ref);
+                    if (strObj && strObj->cls) {
+                        auto valueIt = strObj->cls->fieldOffsets.find("value|[C");
+                        bool isCharArray = true;
+                        if (valueIt == strObj->cls->fieldOffsets.end()) {
+                            valueIt = strObj->cls->fieldOffsets.find("value|[B");
+                            isCharArray = false;
+                        }
+                        if (valueIt == strObj->cls->fieldOffsets.end()) {
+                            valueIt = strObj->cls->fieldOffsets.find("value");
+                        }
+
+                        if (valueIt != strObj->cls->fieldOffsets.end()) {
+                            int64_t arrayRef = strObj->fields[valueIt->second];
+                            if (arrayRef != 0) {
+                                auto backingArray = reinterpret_cast<j2me::core::JavaObject*>(arrayRef);
+                                if (backingArray) {
+                                    size_t offset = 0;
+                                    size_t count = backingArray->fields.size();
+
+                                    auto offsetIt = strObj->cls->fieldOffsets.find("offset|I");
+                                    if (offsetIt == strObj->cls->fieldOffsets.end()) offsetIt = strObj->cls->fieldOffsets.find("offset");
+                                    if (offsetIt != strObj->cls->fieldOffsets.end()) {
+                                        offset = (size_t)strObj->fields[offsetIt->second];
+                                    }
+
+                                    auto countIt = strObj->cls->fieldOffsets.find("count|I");
+                                    if (countIt == strObj->cls->fieldOffsets.end()) countIt = strObj->cls->fieldOffsets.find("count");
+                                    if (countIt != strObj->cls->fieldOffsets.end()) {
+                                        count = (size_t)strObj->fields[countIt->second];
+                                    }
+
+                                    if (offset < backingArray->fields.size()) {
+                                        size_t actualCount = std::min(count, backingArray->fields.size() - offset);
+                                        arrayObj->fields.resize(actualCount);
+                                        for (size_t i = 0; i < actualCount; i++) {
+                                            uint8_t b = 0;
+                                            if (isCharArray) {
+                                                b = (uint8_t)((uint16_t)backingArray->fields[offset + i] & 0xFF);
+                                            } else {
+                                                b = (uint8_t)(backingArray->fields[offset + i] & 0xFF);
+                                            }
+                                            arrayObj->fields[i] = b;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
+
                 result.val.ref = arrayObj;
-                std::cout << "[String.getBytes] Created byte array with " << arrayObj->fields.size() << " bytes" << std::endl;
             }
             
             frame->push(result);
@@ -266,85 +404,36 @@ void registerStringNatives(j2me::core::NativeRegistry& registry) {
             if (thisVal.type == j2me::core::JavaValue::REFERENCE && thisVal.val.ref != nullptr) {
                 auto thisObj = static_cast<j2me::core::JavaObject*>(thisVal.val.ref);
                 if (thisObj && thisObj->cls) {
+                    auto interpreter = j2me::core::NativeRegistry::getInstance().getInterpreter();
+                    auto charArrayCls = interpreter ? interpreter->resolveClass("[C") : nullptr;
+                    if (!charArrayCls) return;
+
+                    auto charArrayObj = j2me::core::HeapManager::getInstance().allocate(charArrayCls);
+                    charArrayObj->fields.clear();
+
                     if (byteArrayVal.type == j2me::core::JavaValue::REFERENCE && byteArrayVal.val.ref != nullptr) {
                         auto byteArrayObj = static_cast<j2me::core::JavaObject*>(byteArrayVal.val.ref);
-                        
-                        // Try GBK conversion first
-                        bool converted = false;
-                        
-                        // Collect bytes
-                        std::vector<char> inBuf;
-                        inBuf.reserve(byteArrayObj->fields.size());
-                        for (auto val : byteArrayObj->fields) {
-                            inBuf.push_back((char)val);
-                        }
-                        
-                        if (!inBuf.empty()) {
-                            std::vector<char> outBuf(inBuf.size() * 2 + 2);
-                            iconv_t cd = iconv_open("UTF-16LE", "GBK");
-                            
-                            if (cd != (iconv_t)-1) {
-                                char* inPtr = inBuf.data();
-                                size_t inBytes = inBuf.size();
-                                char* outPtr = outBuf.data();
-                                size_t outBytes = outBuf.size();
-                                
-                                if (iconv(cd, &inPtr, &inBytes, &outPtr, &outBytes) != (size_t)-1) {
-                                    size_t convertedBytes = outBuf.size() - outBytes;
-                                    size_t charCount = convertedBytes / 2;
-                                    
-                                    auto interpreter = j2me::core::NativeRegistry::getInstance().getInterpreter();
-                                    auto charArrayCls = interpreter->resolveClass("[C");
-                                    
-                                    if (charArrayCls) {
-                                        auto charArrayObj = j2me::core::HeapManager::getInstance().allocate(charArrayCls);
-                                        charArrayObj->fields.resize(charCount);
-                                        
-                                        uint16_t* u16Ptr = (uint16_t*)outBuf.data();
-                                        for (size_t i = 0; i < charCount; i++) {
-                                            charArrayObj->fields[i] = u16Ptr[i];
-                                        }
-                                        
-                                        auto valueIt = thisObj->cls->fieldOffsets.find("value|[C");
-                                        if (valueIt == thisObj->cls->fieldOffsets.end()) valueIt = thisObj->cls->fieldOffsets.find("value|[B");
-                                        if (valueIt != thisObj->cls->fieldOffsets.end()) {
-                                            thisObj->fields[valueIt->second] = reinterpret_cast<intptr_t>(charArrayObj);
-                                        }
-                                        
-                                        auto countIt = thisObj->cls->fieldOffsets.find("count|I");
-                                        if (countIt != thisObj->cls->fieldOffsets.end()) thisObj->fields[countIt->second] = charCount;
-                                        
-                                        auto offsetIt = thisObj->cls->fieldOffsets.find("offset|I");
-                                        if (offsetIt != thisObj->cls->fieldOffsets.end()) thisObj->fields[offsetIt->second] = 0;
-                                        
-                                        converted = true;
-                                        std::cout << "[String.<init>([B)] Converted " << inBuf.size() << " GBK bytes to " << charCount << " UTF-16 chars" << std::endl;
-                                    }
-                                }
-                                iconv_close(cd);
-                            }
-                        }
-                        
-                        if (!converted) {
-                            // Fallback to ISO-8859-1 (original logic)
-                            auto valueIt = thisObj->cls->fieldOffsets.find("value|[C");
-                            if (valueIt == thisObj->cls->fieldOffsets.end()) valueIt = thisObj->cls->fieldOffsets.find("value|[B");
-                            if (valueIt != thisObj->cls->fieldOffsets.end()) {
-                                thisObj->fields[valueIt->second] = reinterpret_cast<intptr_t>(byteArrayObj);
-                                
-                                auto offsetIt = thisObj->cls->fieldOffsets.find("offset|I");
-                                if (offsetIt != thisObj->cls->fieldOffsets.end()) {
-                                    thisObj->fields[offsetIt->second] = 0;
-                                }
-                                
-                                auto countIt = thisObj->cls->fieldOffsets.find("count|I");
-                                if (countIt != thisObj->cls->fieldOffsets.end()) {
-                                    thisObj->fields[countIt->second] = byteArrayObj->fields.size();
-                                }
-                                std::cout << "[String.<init>([B)] Fallback: Created String from byte array (ISO-8859-1) with " << byteArrayObj->fields.size() << " bytes" << std::endl;
-                            }
+                        if (byteArrayObj) {
+                            std::vector<uint8_t> bytes;
+                            bytes.reserve(byteArrayObj->fields.size());
+                            for (auto v : byteArrayObj->fields) bytes.push_back((uint8_t)v);
+                            std::vector<uint16_t> u16 = decodeBytesGuessCharset(bytes);
+                            charArrayObj->fields.resize(u16.size());
+                            for (size_t i = 0; i < u16.size(); i++) charArrayObj->fields[i] = u16[i];
                         }
                     }
+
+                    auto valueIt = thisObj->cls->fieldOffsets.find("value|[C");
+                    if (valueIt == thisObj->cls->fieldOffsets.end()) valueIt = thisObj->cls->fieldOffsets.find("value|[B");
+                    if (valueIt != thisObj->cls->fieldOffsets.end()) {
+                        thisObj->fields[valueIt->second] = reinterpret_cast<intptr_t>(charArrayObj);
+                    }
+
+                    auto countIt = thisObj->cls->fieldOffsets.find("count|I");
+                    if (countIt != thisObj->cls->fieldOffsets.end()) thisObj->fields[countIt->second] = charArrayObj->fields.size();
+
+                    auto offsetIt = thisObj->cls->fieldOffsets.find("offset|I");
+                    if (offsetIt != thisObj->cls->fieldOffsets.end()) thisObj->fields[offsetIt->second] = 0;
                 }
             }
         }
@@ -361,103 +450,42 @@ void registerStringNatives(j2me::core::NativeRegistry& registry) {
             if (thisVal.type == j2me::core::JavaValue::REFERENCE && thisVal.val.ref != nullptr) {
                 auto thisObj = static_cast<j2me::core::JavaObject*>(thisVal.val.ref);
                 if (thisObj && thisObj->cls) {
+                    int offset = offsetVal.val.i;
+                    int length = lengthVal.val.i;
+
+                    auto interpreter = j2me::core::NativeRegistry::getInstance().getInterpreter();
+                    auto charArrayCls = interpreter ? interpreter->resolveClass("[C") : nullptr;
+                    if (!charArrayCls) return;
+
+                    auto charArrayObj = j2me::core::HeapManager::getInstance().allocate(charArrayCls);
+                    charArrayObj->fields.clear();
+
                     if (byteArrayVal.type == j2me::core::JavaValue::REFERENCE && byteArrayVal.val.ref != nullptr) {
                         auto byteArrayObj = static_cast<j2me::core::JavaObject*>(byteArrayVal.val.ref);
-                        
-                        int offset = offsetVal.val.i;
-                        int length = lengthVal.val.i;
-                        
-                        if (offset < 0 || length < 0 || offset + length > (int)byteArrayObj->fields.size()) {
-                            throw std::runtime_error("StringIndexOutOfBoundsException");
-                        }
-
-                        // Try GBK conversion first
-                        bool converted = false;
-                        
-                        // Collect bytes
-                        std::vector<char> inBuf;
-                        inBuf.reserve(length);
-                        for (int i = 0; i < length; i++) {
-                            inBuf.push_back((char)byteArrayObj->fields[offset + i]);
-                        }
-                        
-                        if (!inBuf.empty()) {
-                            std::vector<char> outBuf(inBuf.size() * 2 + 2);
-                            iconv_t cd = iconv_open("UTF-16LE", "GBK");
-                            
-                            if (cd != (iconv_t)-1) {
-                                char* inPtr = inBuf.data();
-                                size_t inBytes = inBuf.size();
-                                char* outPtr = outBuf.data();
-                                size_t outBytes = outBuf.size();
-                                
-                                if (iconv(cd, &inPtr, &inBytes, &outPtr, &outBytes) != (size_t)-1) {
-                                    size_t convertedBytes = outBuf.size() - outBytes;
-                                    size_t charCount = convertedBytes / 2;
-                                    
-                                    auto interpreter = j2me::core::NativeRegistry::getInstance().getInterpreter();
-                                    auto charArrayCls = interpreter->resolveClass("[C");
-                                    
-                                    if (charArrayCls) {
-                                        auto charArrayObj = j2me::core::HeapManager::getInstance().allocate(charArrayCls);
-                                        charArrayObj->fields.resize(charCount);
-                                        
-                                        uint16_t* u16Ptr = (uint16_t*)outBuf.data();
-                                        for (size_t i = 0; i < charCount; i++) {
-                                            charArrayObj->fields[i] = u16Ptr[i];
-                                        }
-                                        
-                                        auto valueIt = thisObj->cls->fieldOffsets.find("value|[C");
-                                        if (valueIt == thisObj->cls->fieldOffsets.end()) valueIt = thisObj->cls->fieldOffsets.find("value|[B");
-                                        if (valueIt != thisObj->cls->fieldOffsets.end()) {
-                                            thisObj->fields[valueIt->second] = reinterpret_cast<intptr_t>(charArrayObj);
-                                        }
-                                        
-                                        auto countIt = thisObj->cls->fieldOffsets.find("count|I");
-                                        if (countIt != thisObj->cls->fieldOffsets.end()) thisObj->fields[countIt->second] = charCount;
-                                        
-                                        auto offsetIt = thisObj->cls->fieldOffsets.find("offset|I");
-                                        if (offsetIt != thisObj->cls->fieldOffsets.end()) thisObj->fields[offsetIt->second] = 0;
-                                        
-                                        converted = true;
-                                        std::cout << "[String.<init>([BII)] Converted " << inBuf.size() << " GBK bytes to " << charCount << " UTF-16 chars" << std::endl;
-                                    }
-                                }
-                                iconv_close(cd);
+                        if (byteArrayObj) {
+                            if (offset < 0 || length < 0 || offset + length > (int)byteArrayObj->fields.size()) {
+                                throw std::runtime_error("StringIndexOutOfBoundsException");
                             }
-                        }
-                        
-                        if (!converted) {
-                             // Fallback to ISO-8859-1: just copy the byte array slice
-                             // Since we can't just point to the original byte array (it might be larger),
-                             // we should create a new char array (or byte array) for the slice.
-                             
-                             auto interpreter = j2me::core::NativeRegistry::getInstance().getInterpreter();
-                             // Try to make a char array to be consistent with modern String
-                             auto charArrayCls = interpreter->resolveClass("[C");
-                             if (charArrayCls) {
-                                 auto charArrayObj = j2me::core::HeapManager::getInstance().allocate(charArrayCls);
-                                 charArrayObj->fields.resize(length);
-                                 for(int i=0; i<length; i++) {
-                                     charArrayObj->fields[i] = (uint16_t)(uint8_t)byteArrayObj->fields[offset+i];
-                                 }
-                                 
-                                 auto valueIt = thisObj->cls->fieldOffsets.find("value|[C");
-                                 if (valueIt == thisObj->cls->fieldOffsets.end()) valueIt = thisObj->cls->fieldOffsets.find("value|[B");
-                                 if (valueIt != thisObj->cls->fieldOffsets.end()) {
-                                     thisObj->fields[valueIt->second] = reinterpret_cast<intptr_t>(charArrayObj);
-                                 }
-                                 
-                                 auto countIt = thisObj->cls->fieldOffsets.find("count|I");
-                                 if (countIt != thisObj->cls->fieldOffsets.end()) thisObj->fields[countIt->second] = length;
-                                 
-                                 auto offsetIt = thisObj->cls->fieldOffsets.find("offset|I");
-                                 if (offsetIt != thisObj->cls->fieldOffsets.end()) thisObj->fields[offsetIt->second] = 0;
-                                 
-                                 std::cout << "[String.<init>([BII)] Fallback: Created String from byte slice (ISO-8859-1) with " << length << " chars" << std::endl;
-                             }
+                            std::vector<uint8_t> bytes;
+                            bytes.reserve(length);
+                            for (int i = 0; i < length; i++) bytes.push_back((uint8_t)byteArrayObj->fields[offset + i]);
+                            std::vector<uint16_t> u16 = decodeBytesGuessCharset(bytes);
+                            charArrayObj->fields.resize(u16.size());
+                            for (size_t i = 0; i < u16.size(); i++) charArrayObj->fields[i] = u16[i];
                         }
                     }
+
+                    auto valueIt = thisObj->cls->fieldOffsets.find("value|[C");
+                    if (valueIt == thisObj->cls->fieldOffsets.end()) valueIt = thisObj->cls->fieldOffsets.find("value|[B");
+                    if (valueIt != thisObj->cls->fieldOffsets.end()) {
+                        thisObj->fields[valueIt->second] = reinterpret_cast<intptr_t>(charArrayObj);
+                    }
+
+                    auto countIt = thisObj->cls->fieldOffsets.find("count|I");
+                    if (countIt != thisObj->cls->fieldOffsets.end()) thisObj->fields[countIt->second] = charArrayObj->fields.size();
+
+                    auto offsetIt = thisObj->cls->fieldOffsets.find("offset|I");
+                    if (offsetIt != thisObj->cls->fieldOffsets.end()) thisObj->fields[offsetIt->second] = 0;
                 }
             }
         }
@@ -470,105 +498,44 @@ void registerStringNatives(j2me::core::NativeRegistry& registry) {
             j2me::core::JavaValue byteArrayVal = frame->pop();
             j2me::core::JavaValue thisVal = frame->pop();
             
-            std::string charsetName = "GBK"; // Default to GBK if not provided or empty
+            std::string charsetName = "UTF-8"; // Default to UTF-8
             if (charsetVal.type == j2me::core::JavaValue::REFERENCE && charsetVal.val.ref != nullptr) {
                 auto charsetObj = static_cast<j2me::core::JavaObject*>(charsetVal.val.ref);
                 std::string s = getJavaString(charsetObj);
                 if (!s.empty()) charsetName = s;
             }
 
-            // Map common Java charset names to iconv names
-            if (charsetName == "UTF8") charsetName = "UTF-8";
-            // Add more mappings if needed
-
             if (thisVal.type == j2me::core::JavaValue::REFERENCE && thisVal.val.ref != nullptr) {
                 auto thisObj = static_cast<j2me::core::JavaObject*>(thisVal.val.ref);
                 if (thisObj && thisObj->cls) {
                     if (byteArrayVal.type == j2me::core::JavaValue::REFERENCE && byteArrayVal.val.ref != nullptr) {
                         auto byteArrayObj = static_cast<j2me::core::JavaObject*>(byteArrayVal.val.ref);
-                        
-                        bool converted = false;
-                        
-                        std::vector<char> inBuf;
-                        inBuf.reserve(byteArrayObj->fields.size());
-                        for (auto val : byteArrayObj->fields) {
-                            inBuf.push_back((char)val);
+                        std::vector<uint8_t> bytes;
+                        bytes.reserve(byteArrayObj->fields.size());
+                        for (auto v : byteArrayObj->fields) bytes.push_back((uint8_t)v);
+
+                        std::vector<uint16_t> u16;
+                        bool converted = iconvToUtf16LE(bytes, charsetName, u16);
+                        if (!converted) u16 = decodeBytesGuessCharset(bytes);
+
+                        auto interpreter = j2me::core::NativeRegistry::getInstance().getInterpreter();
+                        auto charArrayCls = interpreter->resolveClass("[C");
+                        if (!charArrayCls) return;
+                        auto charArrayObj = j2me::core::HeapManager::getInstance().allocate(charArrayCls);
+                        charArrayObj->fields.resize(u16.size());
+                        for (size_t i = 0; i < u16.size(); i++) charArrayObj->fields[i] = u16[i];
+
+                        auto valueIt = thisObj->cls->fieldOffsets.find("value|[C");
+                        if (valueIt == thisObj->cls->fieldOffsets.end()) valueIt = thisObj->cls->fieldOffsets.find("value|[B");
+                        if (valueIt != thisObj->cls->fieldOffsets.end()) {
+                            thisObj->fields[valueIt->second] = reinterpret_cast<intptr_t>(charArrayObj);
                         }
-                        
-                        if (!inBuf.empty()) {
-                            std::vector<char> outBuf(inBuf.size() * 2 + 2);
-                            iconv_t cd = iconv_open("UTF-16LE", charsetName.c_str());
-                            
-                            if (cd != (iconv_t)-1) {
-                                char* inPtr = inBuf.data();
-                                size_t inBytes = inBuf.size();
-                                char* outPtr = outBuf.data();
-                                size_t outBytes = outBuf.size();
-                                
-                                if (iconv(cd, &inPtr, &inBytes, &outPtr, &outBytes) != (size_t)-1) {
-                                    size_t convertedBytes = outBuf.size() - outBytes;
-                                    size_t charCount = convertedBytes / 2;
-                                    
-                                    auto interpreter = j2me::core::NativeRegistry::getInstance().getInterpreter();
-                                    auto charArrayCls = interpreter->resolveClass("[C");
-                                    
-                                    if (charArrayCls) {
-                                        auto charArrayObj = j2me::core::HeapManager::getInstance().allocate(charArrayCls);
-                                        charArrayObj->fields.resize(charCount);
-                                        
-                                        uint16_t* u16Ptr = (uint16_t*)outBuf.data();
-                                        for (size_t i = 0; i < charCount; i++) {
-                                            charArrayObj->fields[i] = u16Ptr[i];
-                                        }
-                                        
-                                        auto valueIt = thisObj->cls->fieldOffsets.find("value|[C");
-                                        if (valueIt == thisObj->cls->fieldOffsets.end()) valueIt = thisObj->cls->fieldOffsets.find("value|[B");
-                                        if (valueIt != thisObj->cls->fieldOffsets.end()) {
-                                            thisObj->fields[valueIt->second] = reinterpret_cast<intptr_t>(charArrayObj);
-                                        }
-                                        
-                                        auto countIt = thisObj->cls->fieldOffsets.find("count|I");
-                                        if (countIt != thisObj->cls->fieldOffsets.end()) thisObj->fields[countIt->second] = charCount;
-                                        
-                                        auto offsetIt = thisObj->cls->fieldOffsets.find("offset|I");
-                                        if (offsetIt != thisObj->cls->fieldOffsets.end()) thisObj->fields[offsetIt->second] = 0;
-                                        
-                                        converted = true;
-                                        std::cout << "[String.<init>([BLString;)] Converted " << inBuf.size() << " bytes using " << charsetName << " to " << charCount << " UTF-16 chars" << std::endl;
-                                    }
-                                }
-                                iconv_close(cd);
-                            } else {
-                                std::cerr << "[String.<init>] iconv_open failed for charset: " << charsetName << std::endl;
-                            }
-                        }
-                        
-                        if (!converted) {
-                             // Fallback to ISO-8859-1
-                             auto interpreter = j2me::core::NativeRegistry::getInstance().getInterpreter();
-                             auto charArrayCls = interpreter->resolveClass("[C");
-                             if (charArrayCls) {
-                                 auto charArrayObj = j2me::core::HeapManager::getInstance().allocate(charArrayCls);
-                                 charArrayObj->fields.resize(byteArrayObj->fields.size());
-                                 for(size_t i=0; i<byteArrayObj->fields.size(); i++) {
-                                     charArrayObj->fields[i] = (uint16_t)(uint8_t)byteArrayObj->fields[i];
-                                 }
-                                 
-                                 auto valueIt = thisObj->cls->fieldOffsets.find("value|[C");
-                                 if (valueIt == thisObj->cls->fieldOffsets.end()) valueIt = thisObj->cls->fieldOffsets.find("value|[B");
-                                 if (valueIt != thisObj->cls->fieldOffsets.end()) {
-                                     thisObj->fields[valueIt->second] = reinterpret_cast<intptr_t>(charArrayObj);
-                                 }
-                                 
-                                 auto countIt = thisObj->cls->fieldOffsets.find("count|I");
-                                 if (countIt != thisObj->cls->fieldOffsets.end()) thisObj->fields[countIt->second] = byteArrayObj->fields.size();
-                                 
-                                 auto offsetIt = thisObj->cls->fieldOffsets.find("offset|I");
-                                 if (offsetIt != thisObj->cls->fieldOffsets.end()) thisObj->fields[offsetIt->second] = 0;
-                                 
-                                 std::cout << "[String.<init>([BLString;)] Fallback: Created String from byte array (ISO-8859-1) with " << byteArrayObj->fields.size() << " bytes" << std::endl;
-                             }
-                        }
+
+                        auto countIt = thisObj->cls->fieldOffsets.find("count|I");
+                        if (countIt != thisObj->cls->fieldOffsets.end()) thisObj->fields[countIt->second] = (int64_t)u16.size();
+
+                        auto offsetIt = thisObj->cls->fieldOffsets.find("offset|I");
+                        if (offsetIt != thisObj->cls->fieldOffsets.end()) thisObj->fields[offsetIt->second] = 0;
                     }
                 }
             }
@@ -705,95 +672,28 @@ void registerStringNatives(j2me::core::NativeRegistry& registry) {
                         auto charArrayObj = static_cast<j2me::core::JavaObject*>(charArrayVal.val.ref);
                         
                         int length = charArrayObj->fields.size();
-                        bool converted = false;
                         
-                        // GBK Heuristic
-                        bool allLatin1 = true;
-                        bool hasHigh = false;
-                        std::vector<char> inBuf;
-                        inBuf.reserve(length);
-                        
-                        for(int i=0; i<length; i++) {
-                            uint16_t c = charArrayObj->fields[i];
-                            if (c > 0xFF) {
-                                allLatin1 = false;
-                                break;
+                        // Normal copy
+                        auto interpreter = j2me::core::NativeRegistry::getInstance().getInterpreter();
+                        auto newCharArrayCls = interpreter->resolveClass("[C");
+                        if (newCharArrayCls) {
+                            auto newCharArrayObj = j2me::core::HeapManager::getInstance().allocate(newCharArrayCls);
+                            newCharArrayObj->fields.resize(length);
+                            for(int i=0; i<length; i++) {
+                                newCharArrayObj->fields[i] = charArrayObj->fields[i];
                             }
-                            if (c > 0x7F) hasHigh = true;
-                            inBuf.push_back((char)c);
-                        }
-                        
-                        if (allLatin1 && hasHigh && !inBuf.empty()) {
-                            std::vector<char> outBuf(inBuf.size() * 2 + 2);
-                            iconv_t cd = iconv_open("UTF-16LE", "GBK");
                             
-                            if (cd != (iconv_t)-1) {
-                                char* inPtr = inBuf.data();
-                                size_t inBytes = inBuf.size();
-                                char* outPtr = outBuf.data();
-                                size_t outBytes = outBuf.size();
-                                
-                                if (iconv(cd, &inPtr, &inBytes, &outPtr, &outBytes) != (size_t)-1) {
-                                    size_t convertedBytes = outBuf.size() - outBytes;
-                                    size_t charCount = convertedBytes / 2;
-                                    
-                                    auto interpreter = j2me::core::NativeRegistry::getInstance().getInterpreter();
-                                    auto newCharArrayCls = interpreter->resolveClass("[C");
-                                    
-                                    if (newCharArrayCls) {
-                                        auto newCharArrayObj = j2me::core::HeapManager::getInstance().allocate(newCharArrayCls);
-                                        newCharArrayObj->fields.resize(charCount);
-                                        
-                                        uint16_t* u16Ptr = (uint16_t*)outBuf.data();
-                                        for (size_t i = 0; i < charCount; i++) {
-                                            newCharArrayObj->fields[i] = u16Ptr[i];
-                                        }
-                                        
-                                        auto valueIt = thisObj->cls->fieldOffsets.find("value|[C");
-                                        if (valueIt == thisObj->cls->fieldOffsets.end()) valueIt = thisObj->cls->fieldOffsets.find("value|[B");
-                                        if (valueIt != thisObj->cls->fieldOffsets.end()) {
-                                            thisObj->fields[valueIt->second] = reinterpret_cast<intptr_t>(newCharArrayObj);
-                                        }
-                                        
-                                        auto countIt = thisObj->cls->fieldOffsets.find("count|I");
-                                        if (countIt != thisObj->cls->fieldOffsets.end()) thisObj->fields[countIt->second] = charCount;
-                                        
-                                        auto offsetIt = thisObj->cls->fieldOffsets.find("offset|I");
-                                        if (offsetIt != thisObj->cls->fieldOffsets.end()) thisObj->fields[offsetIt->second] = 0;
-                                        
-                                        converted = true;
-                                        std::cout << "[String.<init>([C)] Repaired GBK chars: converted " << length << " Latin1 chars to " << charCount << " UTF-16 chars" << std::endl;
-                                    }
-                                }
-                                iconv_close(cd);
+                            auto valueIt = thisObj->cls->fieldOffsets.find("value|[C");
+                            if (valueIt == thisObj->cls->fieldOffsets.end()) valueIt = thisObj->cls->fieldOffsets.find("value|[B");
+                            if (valueIt != thisObj->cls->fieldOffsets.end()) {
+                                thisObj->fields[valueIt->second] = reinterpret_cast<intptr_t>(newCharArrayObj);
                             }
-                        }
-                        
-                        if (!converted) {
-                             // Normal copy
-                             auto interpreter = j2me::core::NativeRegistry::getInstance().getInterpreter();
-                             auto newCharArrayCls = interpreter->resolveClass("[C");
-                             if (newCharArrayCls) {
-                                 auto newCharArrayObj = j2me::core::HeapManager::getInstance().allocate(newCharArrayCls);
-                                 newCharArrayObj->fields.resize(length);
-                                 for(int i=0; i<length; i++) {
-                                     newCharArrayObj->fields[i] = charArrayObj->fields[i];
-                                 }
-                                 
-                                 auto valueIt = thisObj->cls->fieldOffsets.find("value|[C");
-                                 if (valueIt == thisObj->cls->fieldOffsets.end()) valueIt = thisObj->cls->fieldOffsets.find("value|[B");
-                                 if (valueIt != thisObj->cls->fieldOffsets.end()) {
-                                     thisObj->fields[valueIt->second] = reinterpret_cast<intptr_t>(newCharArrayObj);
-                                 }
-                                 
-                                 auto countIt = thisObj->cls->fieldOffsets.find("count|I");
-                                 if (countIt != thisObj->cls->fieldOffsets.end()) thisObj->fields[countIt->second] = length;
-                                 
-                                 auto offsetIt = thisObj->cls->fieldOffsets.find("offset|I");
-                                 if (offsetIt != thisObj->cls->fieldOffsets.end()) thisObj->fields[offsetIt->second] = 0;
-                                 
-                                 // std::cout << "[String.<init>([C)] Standard copy" << std::endl;
-                             }
+                            
+                            auto countIt = thisObj->cls->fieldOffsets.find("count|I");
+                            if (countIt != thisObj->cls->fieldOffsets.end()) thisObj->fields[countIt->second] = length;
+                            
+                            auto offsetIt = thisObj->cls->fieldOffsets.find("offset|I");
+                            if (offsetIt != thisObj->cls->fieldOffsets.end()) thisObj->fields[offsetIt->second] = 0;
                         }
                     }
                 }

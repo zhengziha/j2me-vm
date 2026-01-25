@@ -6,6 +6,7 @@
 #include "Logger.hpp"
 #include "EventLoop.hpp"
 #include <iostream>
+#include <sstream>
 #include <cmath>
 #include <cstring>
 #include <algorithm>
@@ -141,10 +142,10 @@ int Interpreter::execute(std::shared_ptr<JavaThread> thread, int instructions) {
                  }
              }
              
-             // 不要重新抛出异常，优雅地退出线程以防止进程终止
-             // Do not rethrow, just exit the thread gracefully to prevent process termination
-             LOG_ERROR("Thread terminated due to uncaught exception.");
-             break; 
+             // 遇到异常时退出程序
+            // Exit the program when an exception is encountered
+            LOG_ERROR("VM terminated due to uncaught exception.");
+            std::exit(1); 
         }
     }
     return executed;
@@ -212,6 +213,141 @@ bool Interpreter::executeInstruction(std::shared_ptr<JavaThread> thread, std::sh
 }
 
 // isValidClassName is implemented in Interpreter_ClassLoader.cpp
+
+bool Interpreter::handleException(std::shared_ptr<JavaThread> thread, JavaObject* exception) {
+    if (!thread || !exception) return false;
+    
+    // First, verify if we can handle this exception
+    // We do a dry run of stack unwinding to find a handler without modifying the thread state yet.
+    // However, our logic modifies thread state (popFrame).
+    // So we should capture the stack trace first, but only print it if UNCAUGHT.
+    
+    std::string exName = "Unknown";
+    if (exception->cls) exName = exception->cls->name;
+
+    std::stringstream stackTraceBuffer;
+    stackTraceBuffer << "Exception thrown: " << exName << std::endl;
+    stackTraceBuffer << "Stack Trace:" << std::endl;
+    
+    for (auto it = thread->frames.rbegin(); it != thread->frames.rend(); ++it) {
+        auto f = *it;
+        std::string cName = "Unknown";
+        std::string mName = "Unknown";
+        if (f->classFile) {
+            auto cls = std::dynamic_pointer_cast<ConstantClass>(f->classFile->constant_pool[f->classFile->this_class]);
+            if (cls) {
+                auto utf8 = std::dynamic_pointer_cast<ConstantUtf8>(f->classFile->constant_pool[cls->name_index]);
+                if (utf8) cName = utf8->bytes;
+            }
+            if (f->method.name_index < f->classFile->constant_pool.size()) {
+                auto mUtf8 = std::dynamic_pointer_cast<ConstantUtf8>(f->classFile->constant_pool[f->method.name_index]);
+                if (mUtf8) mName = mUtf8->bytes;
+            }
+        }
+        int lineNum = f->getLineNumber(f->pc);
+        stackTraceBuffer << "  at " << cName << "." << mName << " (PC: " << f->pc << ", Line: " << lineNum << ")" << std::endl;
+    }
+
+    bool isTopFrame = true;
+    while (true) {
+        auto frame = thread->currentFrame();
+        if (!frame) {
+             // Uncaught! Print the buffered stack trace and return false
+             std::cerr << stackTraceBuffer.str();
+             return false; 
+        }
+
+        int searchPc = frame->pc;
+        if (!isTopFrame) {
+            // For caller frames, pc is the return address (next instruction).
+            // We need the pc of the invoke instruction, which is definitely before current pc.
+            // Using pc - 1 is sufficient to find the correct range.
+            if (searchPc > 0) searchPc--;
+        }
+
+        // Search for exception handler in current frame
+        int handlerPc = -1;
+        
+        for (const auto& entry : frame->exceptionTable) {
+            // Check if PC is within range [startPc, endPc)
+            
+            if (searchPc >= entry.startPc && searchPc < entry.endPc) {
+                // Check catch type
+                if (entry.catchType == 0) {
+                    // catch_type 0 means finally (matches any exception)
+                    handlerPc = entry.handlerPc;
+                    break;
+                } else {
+                    // Resolve catch type class
+                    auto classRef = std::dynamic_pointer_cast<ConstantClass>(frame->classFile->constant_pool[entry.catchType]);
+                    if (classRef) {
+                        auto className = std::dynamic_pointer_cast<ConstantUtf8>(frame->classFile->constant_pool[classRef->name_index]);
+                        if (className) {
+                            // Check if exception is instance of catch type
+                            // We need to resolve the catch class first
+                            auto catchClass = resolveClass(className->bytes);
+                            if (catchClass) {
+                                // Manual instanceof check
+                                bool isInstance = false;
+                                if (exception->cls) {
+                                     std::function<bool(std::shared_ptr<JavaClass>, const std::string&)> isAssignable = 
+                                         [&](std::shared_ptr<JavaClass> sub, const std::string& target) -> bool {
+                                             if (!sub) return false;
+                                             if (sub->name == target) return true;
+                                             if (isAssignable(sub->superClass, target)) return true;
+                                             for (auto& iface : sub->interfaces) {
+                                                  if (isAssignable(iface, target)) return true;
+                                             }
+                                             return false;
+                                         };
+                    
+                                     if (isAssignable(exception->cls, catchClass->name)) {
+                                         isInstance = true;
+                                     }
+                                }
+                                
+                                if (isInstance) {
+                                    handlerPc = entry.handlerPc;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (handlerPc != -1) {
+            // Found handler
+            
+            // Only log at debug level since it's caught
+            // LOG_DEBUG("Exception handled: " + exName + " at PC " + std::to_string(handlerPc));
+            
+            // Clear operand stack
+            while (!frame->isStackEmpty()) {
+                frame->pop();
+            }
+            // Push exception object
+            JavaValue val;
+            val.type = JavaValue::REFERENCE;
+            val.val.ref = exception;
+            frame->push(val);
+            
+            // Jump to handler
+            frame->pc = handlerPc;
+            return true;
+        }
+
+        // No handler in current frame, pop and continue in caller
+        thread->popFrame();
+        isTopFrame = false;
+        if (thread->isFinished()) {
+             // Uncaught! Print the buffered stack trace
+             std::cerr << stackTraceBuffer.str();
+             return false; 
+        }
+    }
+}
 
 void Interpreter::initInstructionTable() {
     instructionTable.resize(256);

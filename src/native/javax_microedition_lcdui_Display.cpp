@@ -1,5 +1,6 @@
 #include "javax_microedition_lcdui_Display.hpp"
 #include "../core/NativeRegistry.hpp"
+#include "../core/Logger.hpp"
 #include <iostream>
 
 namespace j2me {
@@ -74,9 +75,10 @@ void registerDisplayNatives(j2me::core::NativeRegistry& registry) {
             frame->pop(); // this (Display instance)
             
             g_currentDisplayable = (j2me::core::JavaObject*)displayableVal.val.ref;
-            std::cout << "[Display] Set current displayable: " << g_currentDisplayable << std::endl;
             if (g_currentDisplayable && g_currentDisplayable->cls) {
-                 std::cout << "[Display] Class: " << g_currentDisplayable->cls->name << std::endl;
+                LOG_INFO("[Display] setCurrent: " + g_currentDisplayable->cls->name);
+            } else {
+                LOG_INFO("[Display] setCurrent: <null>");
             }
         }
     );

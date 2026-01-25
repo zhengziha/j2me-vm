@@ -36,6 +36,8 @@ Thumbs.db
 *.tmp
 *.swp
 *.swo
+output*.txt
+test_output.txt
 
 # Coverage / analysis
 lcov.info
@@ -47,9 +49,15 @@ lcov.info
 # Generated jars/stubs
 rt.jar
 /stubs/**/*.class
+/classes/
 
 # Local runtime artifacts
 *.pid
 *.lock
+lastframe_*.bmp
+/rms_data/
+*.bytecode
+*.bin
+/j2me-vm
 
 build/CMakeFiles/j2me-vm.dir/link.txt

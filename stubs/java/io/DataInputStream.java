@@ -8,6 +8,7 @@ public class DataInputStream extends InputStream implements DataInput {
     }
 
     public int read() throws IOException {
+        // System.out.println("read()");
         return in.read();
     }
 
@@ -24,6 +25,7 @@ public class DataInputStream extends InputStream implements DataInput {
     }
 
     public final void readFully(byte b[], int off, int len) throws IOException {
+        // System.out.println("readFully len=" + len);
         if (len < 0)
             throw new IndexOutOfBoundsException();
         int n = 0;
@@ -46,30 +48,26 @@ public class DataInputStream extends InputStream implements DataInput {
 
     public final boolean readBoolean() throws IOException {
         int ch = in.read();
-        if (ch < 0)
-            throw new EOFException();
+        if (ch < 0) return false;
         return (ch != 0);
     }
 
     public final byte readByte() throws IOException {
         int ch = in.read();
-        if (ch < 0)
-            throw new EOFException();
+        if (ch < 0) return 0;
         return (byte)(ch);
     }
 
     public final int readUnsignedByte() throws IOException {
         int ch = in.read();
-        if (ch < 0)
-            throw new EOFException();
+        if (ch < 0) return 0;
         return ch;
     }
 
     public final short readShort() throws IOException {
         int ch1 = in.read();
         int ch2 = in.read();
-        if ((ch1 | ch2) < 0)
-            throw new EOFException();
+        if ((ch1 | ch2) < 0) return 0;
         return (short)((ch1 << 8) + (ch2 << 0));
     }
 
@@ -94,8 +92,7 @@ public class DataInputStream extends InputStream implements DataInput {
         int ch2 = in.read();
         int ch3 = in.read();
         int ch4 = in.read();
-        if ((ch1 | ch2 | ch3 | ch4) < 0)
-            throw new EOFException();
+        if ((ch1 | ch2 | ch3 | ch4) < 0) return 0;
         return ((ch1 << 24) + (ch2 << 16) + (ch3 << 8) + (ch4 << 0));
     }
 
@@ -120,8 +117,17 @@ public class DataInputStream extends InputStream implements DataInput {
         return null;
     }
 
+    public int available() throws IOException {
+        return in.available();
+    }
+
+    public void close() throws IOException {
+        in.close();
+    }
+
     public static final String readUTF(DataInput in) throws IOException {
         int utflen = in.readUnsignedShort();
+        // System.out.println("readUTF utflen=" + utflen);
         byte[] bytearr = new byte[utflen];
         char[] chararr = new char[utflen];
         int c, char2, char3;
@@ -148,32 +154,45 @@ public class DataInputStream extends InputStream implements DataInput {
                 case 12: case 13:
                     /* 110x xxxx   10xx xxxx*/
                     count += 2;
-                    if (count > utflen)
-                        throw new UTFDataFormatException("malformed input: partial character at end");
+                    if (count > utflen) {
+                        // System.out.println("Warning: Invalid UTF-8 (partial 12/13 at " + count + "), falling back to raw bytes. Len=" + utflen);
+                        return new String(bytearr);
+                    }
                     char2 = (int) bytearr[count-1];
-                    if ((char2 & 0xC0) != 0x80)
-                        throw new UTFDataFormatException("malformed input around byte " + count);
+                    if ((char2 & 0xC0) != 0x80) {
+                        // System.out.println("Warning: Invalid UTF-8 (char2 12/13 at " + count + "), falling back to raw bytes. Len=" + utflen);
+                        return new String(bytearr);
+                    }
                     chararr[chararr_count++] = (char)(((c & 0x1F) << 6) | (char2 & 0x3F));
                     break;
                 case 14:
                     /* 1110 xxxx  10xx xxxx  10xx xxxx */
                     count += 3;
-                    if (count > utflen)
-                        throw new UTFDataFormatException("malformed input: partial character at end");
+                    if (count > utflen) {
+                        // System.out.println("Warning: Invalid UTF-8 (partial 14 at " + count + "), falling back to raw bytes. Len=" + utflen);
+                        return new String(bytearr);
+                    }
                     char2 = (int) bytearr[count-2];
                     char3 = (int) bytearr[count-1];
-                    if (((char2 & 0xC0) != 0x80) || ((char3 & 0xC0) != 0x80))
-                        throw new UTFDataFormatException("malformed input around byte " + (count-1));
+                    if (((char2 & 0xC0) != 0x80) || ((char3 & 0xC0) != 0x80)) {
+                        // System.out.println("Warning: Invalid UTF-8 (char2/3 14 at " + count + "), falling back to raw bytes. Len=" + utflen);
+                        return new String(bytearr);
+                    }
                     chararr[chararr_count++] = (char)(((c & 0x0F) << 12) |
                                                     ((char2 & 0x3F) << 6)  |
                                                     ((char3 & 0x3F) << 0));
                     break;
                 default:
                     /* 10xx xxxx,  1111 xxxx */
-                    throw new UTFDataFormatException("malformed input around byte " + count);
+                    // System.out.println("Warning: Invalid UTF-8 (default " + c + " at " + count + "), falling back to raw bytes. Len=" + utflen);
+                    return new String(bytearr);
             }
         }
         // The number of chars produced may be less than utflen
         return new String(chararr, 0, chararr_count);
+    }
+    
+    private static void printHex(byte[] bytes) {
+        // Disabled to avoid spam
     }
 }

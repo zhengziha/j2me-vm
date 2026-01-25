@@ -2,15 +2,26 @@
 #include <cstring>
 #include <algorithm>
 
+#include <iostream>
+
 namespace j2me {
 namespace natives {
 
 NativeInputStream::NativeInputStream(const uint8_t* dataPtr, size_t size) 
     : data(dataPtr, dataPtr + size), position(0) {
+    std::cout << "[NativeInputStream] Created with size: " << size << std::endl;
+    if (size > 0) {
+        printf("[NativeInputStream] First 16 bytes: ");
+        for (size_t i = 0; i < std::min((size_t)16, size); i++) {
+            printf("%02X ", data[i]);
+        }
+        printf("\n");
+    }
 }
 
 int NativeInputStream::read() {
     if (position >= data.size()) {
+        // std::cout << "[NativeInputStream] read() EOF at pos " << position << " size " << data.size() << std::endl;
         return -1;
     }
     return data[position++];
@@ -47,6 +58,15 @@ int NativeInputStream::available() {
 }
 
 void NativeInputStream::close() {
+}
+
+void NativeInputStream::mark(int readlimit) {
+    // For a memory stream, readlimit is irrelevant, we can always reset.
+    markPosition = position;
+}
+
+void NativeInputStream::reset() {
+    position = markPosition;
 }
 
 } // namespace natives

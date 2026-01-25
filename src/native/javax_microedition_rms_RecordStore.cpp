@@ -4,6 +4,7 @@
 #include "../core/HeapManager.hpp"
 #include "../core/Interpreter.hpp"
 #include "../core/Logger.hpp"
+#include "java_lang_String.hpp"
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -115,8 +116,17 @@ void registerRecordStoreNatives(j2me::core::NativeRegistry& registry) {
             
             int result = 0;
             
-            if (nameVal.type == j2me::core::JavaValue::REFERENCE && !nameVal.strVal.empty()) {
-                std::string name = nameVal.strVal;
+            std::string name;
+            if (nameVal.type == j2me::core::JavaValue::REFERENCE) {
+                if (!nameVal.strVal.empty()) {
+                    name = nameVal.strVal;
+                } else if (nameVal.val.ref != nullptr) {
+                    auto nameObj = static_cast<j2me::core::JavaObject*>(nameVal.val.ref);
+                    name = j2me::natives::getJavaString(nameObj);
+                }
+            }
+
+            if (!name.empty()) {
                 bool createIfNecessary = (createVal.val.i != 0);
                 
                 LOG_DEBUG("[RMS] Opening record store: " + name + " (create: " + (createIfNecessary ? "true" : "false") + ")");
@@ -167,37 +177,9 @@ void registerRecordStoreNatives(j2me::core::NativeRegistry& registry) {
             std::string name;
             
             if (nameVal.type == j2me::core::JavaValue::REFERENCE && nameVal.val.ref != nullptr) {
-                if (!nameVal.strVal.empty()) {
-                    name = nameVal.strVal;
-                    LOG_DEBUG("[RMS]   Using strVal directly: " + name);
-                } else {
-                    auto nameObj = static_cast<j2me::core::JavaObject*>(nameVal.val.ref);
-                    LOG_DEBUG("[RMS]   nameObj=" + std::to_string(reinterpret_cast<uintptr_t>(nameObj)) + " cls=" + std::to_string(reinterpret_cast<uintptr_t>(nameObj ? nameObj->cls.get() : nullptr)));
-                    if (nameObj && nameObj->cls) {
-                        LOG_DEBUG("[RMS]   cls name=" + nameObj->cls->name + " fieldOffsets size=" + std::to_string(nameObj->cls->fieldOffsets.size()));
-                        auto valueIt = nameObj->cls->fieldOffsets.find("value");
-                        if (valueIt != nameObj->cls->fieldOffsets.end()) {
-                            LOG_DEBUG("[RMS]   Found 'value' field at offset " + std::to_string(valueIt->second));
-                            auto valueArray = static_cast<j2me::core::JavaObject*>((void*)nameObj->fields[valueIt->second]);
-                            LOG_DEBUG("[RMS]   valueArray=" + std::to_string(reinterpret_cast<uintptr_t>(valueArray)));
-                            if (valueArray) {
-                                auto offsetIt = nameObj->cls->fieldOffsets.find("offset");
-                                auto countIt = nameObj->cls->fieldOffsets.find("count");
-                                int offset = (offsetIt != nameObj->cls->fieldOffsets.end()) ? (int)nameObj->fields[offsetIt->second] : 0;
-                                int count = (countIt != nameObj->cls->fieldOffsets.end()) ? (int)nameObj->fields[countIt->second] : valueArray->fields.size();
-                                
-                                LOG_DEBUG("[RMS]   offset=" + std::to_string(offset) + " count=" + std::to_string(count) + " fields size=" + std::to_string(valueArray->fields.size()));
-                                
-                                for (int i = offset; i < offset + count && i < (int)valueArray->fields.size(); i++) {
-                                    name += (char)valueArray->fields[i];
-                                }
-                                LOG_DEBUG("[RMS]   Extracted name from String object: " + name);
-                            }
-                        } else {
-                            LOG_DEBUG("[RMS]   'value' field not found in String class");
-                        }
-                    }
-                }
+                auto nameObj = static_cast<j2me::core::JavaObject*>(nameVal.val.ref);
+                name = j2me::natives::getJavaString(nameObj);
+                LOG_DEBUG("[RMS]   Extracted name from String object: " + name);
             }
             
             if (!name.empty()) {
@@ -253,12 +235,12 @@ void registerRecordStoreNatives(j2me::core::NativeRegistry& registry) {
                 } else {
                     auto nameObj = static_cast<j2me::core::JavaObject*>(nameVal.val.ref);
                     if (nameObj && nameObj->cls) {
-                        auto valueIt = nameObj->cls->fieldOffsets.find("value");
+                        auto valueIt = nameObj->cls->fieldOffsets.find("value|[C");
                         if (valueIt != nameObj->cls->fieldOffsets.end()) {
                             auto valueArray = static_cast<j2me::core::JavaObject*>((void*)nameObj->fields[valueIt->second]);
                             if (valueArray) {
-                                auto offsetIt = nameObj->cls->fieldOffsets.find("offset");
-                                auto countIt = nameObj->cls->fieldOffsets.find("count");
+                                auto offsetIt = nameObj->cls->fieldOffsets.find("offset|I");
+                                auto countIt = nameObj->cls->fieldOffsets.find("count|I");
                                 int offset = (offsetIt != nameObj->cls->fieldOffsets.end()) ? (int)nameObj->fields[offsetIt->second] : 0;
                                 int count = (countIt != nameObj->cls->fieldOffsets.end()) ? (int)nameObj->fields[countIt->second] : valueArray->fields.size();
                                 
@@ -315,12 +297,12 @@ void registerRecordStoreNatives(j2me::core::NativeRegistry& registry) {
                 } else {
                     auto nameObj = static_cast<j2me::core::JavaObject*>(nameVal.val.ref);
                     if (nameObj && nameObj->cls) {
-                        auto valueIt = nameObj->cls->fieldOffsets.find("value");
+                        auto valueIt = nameObj->cls->fieldOffsets.find("value|[C");
                         if (valueIt != nameObj->cls->fieldOffsets.end()) {
                             auto valueArray = static_cast<j2me::core::JavaObject*>((void*)nameObj->fields[valueIt->second]);
                             if (valueArray) {
-                                auto offsetIt = nameObj->cls->fieldOffsets.find("offset");
-                                auto countIt = nameObj->cls->fieldOffsets.find("count");
+                                auto offsetIt = nameObj->cls->fieldOffsets.find("offset|I");
+                                auto countIt = nameObj->cls->fieldOffsets.find("count|I");
                                 int offset = (offsetIt != nameObj->cls->fieldOffsets.end()) ? (int)nameObj->fields[offsetIt->second] : 0;
                                 int count = (countIt != nameObj->cls->fieldOffsets.end()) ? (int)nameObj->fields[countIt->second] : valueArray->fields.size();
                                 
@@ -366,12 +348,12 @@ void registerRecordStoreNatives(j2me::core::NativeRegistry& registry) {
                 } else {
                     auto nameObj = static_cast<j2me::core::JavaObject*>(nameVal.val.ref);
                     if (nameObj && nameObj->cls) {
-                        auto valueIt = nameObj->cls->fieldOffsets.find("value");
+                        auto valueIt = nameObj->cls->fieldOffsets.find("value|[C");
                         if (valueIt != nameObj->cls->fieldOffsets.end()) {
                             auto valueArray = static_cast<j2me::core::JavaObject*>((void*)nameObj->fields[valueIt->second]);
                             if (valueArray) {
-                                auto offsetIt = nameObj->cls->fieldOffsets.find("offset");
-                                auto countIt = nameObj->cls->fieldOffsets.find("count");
+                                auto offsetIt = nameObj->cls->fieldOffsets.find("offset|I");
+                                auto countIt = nameObj->cls->fieldOffsets.find("count|I");
                                 int offset = (offsetIt != nameObj->cls->fieldOffsets.end()) ? (int)nameObj->fields[offsetIt->second] : 0;
                                 int count = (countIt != nameObj->cls->fieldOffsets.end()) ? (int)nameObj->fields[countIt->second] : valueArray->fields.size();
                                 
@@ -412,12 +394,12 @@ void registerRecordStoreNatives(j2me::core::NativeRegistry& registry) {
                 } else {
                     auto nameObj = static_cast<j2me::core::JavaObject*>(nameVal.val.ref);
                     if (nameObj && nameObj->cls) {
-                        auto valueIt = nameObj->cls->fieldOffsets.find("value");
+                        auto valueIt = nameObj->cls->fieldOffsets.find("value|[C");
                         if (valueIt != nameObj->cls->fieldOffsets.end()) {
                             auto valueArray = static_cast<j2me::core::JavaObject*>((void*)nameObj->fields[valueIt->second]);
                             if (valueArray) {
-                                auto offsetIt = nameObj->cls->fieldOffsets.find("offset");
-                                auto countIt = nameObj->cls->fieldOffsets.find("count");
+                                auto offsetIt = nameObj->cls->fieldOffsets.find("offset|I");
+                                auto countIt = nameObj->cls->fieldOffsets.find("count|I");
                                 int offset = (offsetIt != nameObj->cls->fieldOffsets.end()) ? (int)nameObj->fields[offsetIt->second] : 0;
                                 int count = (countIt != nameObj->cls->fieldOffsets.end()) ? (int)nameObj->fields[countIt->second] : valueArray->fields.size();
                                 
