@@ -44,6 +44,28 @@ private:
     j2me::loader::JarLoader& jarLoader; // Application loader / 应用加载器
     std::shared_ptr<j2me::loader::JarLoader> libraryLoader; // Library loader / 库加载器
     std::map<std::string, std::shared_ptr<JavaClass>> loadedClasses; // Loaded classes cache / 已加载类的缓存
+    
+    // Method cache for faster method resolution
+    // 方法缓存，用于加速方法解析
+    struct MethodKey {
+        std::string className;
+        std::string methodName;
+        std::string methodDescriptor;
+        
+        bool operator<(const MethodKey& other) const {
+            if (className != other.className) return className < other.className;
+            if (methodName != other.methodName) return methodName < other.methodName;
+            return methodDescriptor < other.methodDescriptor;
+        }
+    };
+    
+    struct MethodInfoCache {
+        std::shared_ptr<JavaClass> cls;
+        std::shared_ptr<MethodInfo> method;
+        bool isNative;
+    };
+    
+    std::map<MethodKey, MethodInfoCache> methodCache; // Method resolution cache / 方法解析缓存
 
     // Execute a single instruction
     // 执行单条指令

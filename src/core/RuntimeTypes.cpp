@@ -28,13 +28,13 @@ void JavaClass::link(std::shared_ptr<JavaClass> parent) {
         fieldOffsets = parent->fieldOffsets; 
     }
 
-    LOG_DEBUG("[JavaClass::link] Linking class: " + name + " with " + std::to_string(rawFile->fields.size()) + " fields");
+    std::cerr << "[JavaClass::link] Linking class: " << name << " with " << rawFile->fields.size() << " fields" << std::endl;
     
     for (const auto& field : rawFile->fields) {
         auto nameInfo = std::dynamic_pointer_cast<ConstantUtf8>(rawFile->constant_pool[field.name_index]);
         auto descInfo = std::dynamic_pointer_cast<ConstantUtf8>(rawFile->constant_pool[field.descriptor_index]);
         
-        LOG_DEBUG("[JavaClass::link]   Field: " + nameInfo->bytes + " desc=" + descInfo->bytes + " access_flags=" + std::to_string(field.access_flags));
+        std::cerr << "[JavaClass::link]   Field: " << nameInfo->bytes << " desc=" << descInfo->bytes << " access_flags=" << field.access_flags << std::endl;
         
         std::string key = nameInfo->bytes + "|" + descInfo->bytes;
         
@@ -45,7 +45,7 @@ void JavaClass::link(std::shared_ptr<JavaClass> parent) {
         }
     }
     instanceSize = offset;
-    LOG_DEBUG("[JavaClass::link]   instanceSize=" + std::to_string(instanceSize) + " fieldOffsets size=" + std::to_string(fieldOffsets.size()));
+    std::cerr << "[JavaClass::link]   instanceSize=" << instanceSize << " fieldOffsets size=" << fieldOffsets.size() << std::endl;
 }
 
 JavaObject::JavaObject(std::shared_ptr<JavaClass> cls) : cls(cls) {

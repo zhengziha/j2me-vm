@@ -3,10 +3,12 @@ package javax.microedition.rms;
 public class RecordStore {
     private String name;
     private int nativePtr;
+    private RecordListener[] listeners;
 
     private RecordStore(String name, int ptr) {
         this.name = name;
         this.nativePtr = ptr;
+        this.listeners = new RecordListener[0];
     }
 
     public static RecordStore openRecordStore(String recordStoreName, boolean createIfNecessary) throws RecordStoreException {
@@ -124,11 +126,27 @@ public class RecordStore {
     }
 
     public void addRecordListener(RecordListener listener) {
-        // TODO: Implement listener support
+        if (listener == null) return;
+        for (int i = 0; i < listeners.length; i++) {
+            if (listeners[i] == listener) return;
+        }
+        RecordListener[] newListeners = new RecordListener[listeners.length + 1];
+        System.arraycopy(listeners, 0, newListeners, 0, listeners.length);
+        newListeners[listeners.length] = listener;
+        listeners = newListeners;
     }
 
     public void removeRecordListener(RecordListener listener) {
-        // TODO: Implement listener support
+        if (listener == null) return;
+        for (int i = 0; i < listeners.length; i++) {
+            if (listeners[i] == listener) {
+                RecordListener[] newListeners = new RecordListener[listeners.length - 1];
+                System.arraycopy(listeners, 0, newListeners, 0, i);
+                System.arraycopy(listeners, i + 1, newListeners, i, listeners.length - i - 1);
+                listeners = newListeners;
+                return;
+            }
+        }
     }
 
     public RecordEnumeration enumerateRecords(RecordFilter filter, RecordComparator comparator, boolean keepUpdated) throws RecordStoreNotOpenException {

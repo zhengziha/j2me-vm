@@ -28,6 +28,18 @@ struct RecordStoreData {
 static std::map<std::string, RecordStoreData> g_recordStores;
 static std::string g_rmsDir = "rms_data";
 
+// Helper function to extract string from Java String object
+std::string getStringFromJavaObject(j2me::core::JavaValue& value) {
+    if (value.type == j2me::core::JavaValue::REFERENCE) {
+        if (!value.strVal.empty()) {
+            return value.strVal;
+        } else if (value.val.ref != nullptr) {
+            return j2me::natives::getJavaString(static_cast<j2me::core::JavaObject*>(value.val.ref));
+        }
+    }
+    return "";
+}
+
 std::string getRecordStorePath(const std::string& name) {
     return g_rmsDir + "/" + name + ".dat";
 }
@@ -119,15 +131,7 @@ void registerRecordStoreNatives(j2me::core::NativeRegistry& registry) {
             
             int result = 0;
             
-            std::string name;
-            if (nameVal.type == j2me::core::JavaValue::REFERENCE) {
-                if (!nameVal.strVal.empty()) {
-                    name = nameVal.strVal;
-                } else if (nameVal.val.ref != nullptr) {
-                    auto nameObj = static_cast<j2me::core::JavaObject*>(nameVal.val.ref);
-                    name = j2me::natives::getJavaString(nameObj);
-                }
-            }
+            std::string name = getStringFromJavaObject(nameVal);
 
             if (!name.empty()) {
                 bool createIfNecessary = (createVal.val.i != 0);
@@ -170,11 +174,9 @@ void registerRecordStoreNatives(j2me::core::NativeRegistry& registry) {
             
             int recordId = 0;
             
-            std::string name;
+            std::string name = getStringFromJavaObject(nameVal);
             
-            if (nameVal.type == j2me::core::JavaValue::REFERENCE && nameVal.val.ref != nullptr) {
-                auto nameObj = static_cast<j2me::core::JavaObject*>(nameVal.val.ref);
-                name = j2me::natives::getJavaString(nameObj);
+            if (!name.empty()) {
                 LOG_DEBUG("[RMS]   Extracted name from String object: " + name);
             }
             
@@ -224,11 +226,7 @@ void registerRecordStoreNatives(j2me::core::NativeRegistry& registry) {
             int recordId = frame->pop().val.i;
             j2me::core::JavaValue nameVal = frame->pop();
 
-            std::string name;
-            if (nameVal.type == j2me::core::JavaValue::REFERENCE && nameVal.val.ref != nullptr) {
-                if (!nameVal.strVal.empty()) name = nameVal.strVal;
-                else name = j2me::natives::getJavaString(static_cast<j2me::core::JavaObject*>(nameVal.val.ref));
-            }
+            std::string name = getStringFromJavaObject(nameVal);
             if (name.empty()) return;
 
             std::vector<uint8_t> data;
@@ -272,11 +270,7 @@ void registerRecordStoreNatives(j2me::core::NativeRegistry& registry) {
             j2me::core::JavaValue nameVal = frame->pop();
 
             int size = 0;
-            std::string name;
-            if (nameVal.type == j2me::core::JavaValue::REFERENCE && nameVal.val.ref != nullptr) {
-                if (!nameVal.strVal.empty()) name = nameVal.strVal;
-                else name = j2me::natives::getJavaString(static_cast<j2me::core::JavaObject*>(nameVal.val.ref));
-            }
+            std::string name = getStringFromJavaObject(nameVal);
 
             auto it = g_recordStores.find(name);
             if (it != g_recordStores.end()) {
@@ -300,11 +294,7 @@ void registerRecordStoreNatives(j2me::core::NativeRegistry& registry) {
             result.type = j2me::core::JavaValue::REFERENCE;
             result.val.ref = nullptr;
 
-            std::string name;
-            if (nameVal.type == j2me::core::JavaValue::REFERENCE && nameVal.val.ref != nullptr) {
-                if (!nameVal.strVal.empty()) name = nameVal.strVal;
-                else name = j2me::natives::getJavaString(static_cast<j2me::core::JavaObject*>(nameVal.val.ref));
-            }
+            std::string name = getStringFromJavaObject(nameVal);
 
             auto it = g_recordStores.find(name);
             if (it != g_recordStores.end()) {
@@ -329,11 +319,7 @@ void registerRecordStoreNatives(j2me::core::NativeRegistry& registry) {
         [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             j2me::core::JavaValue nameVal = frame->pop();
             int64_t v = 0;
-            std::string name;
-            if (nameVal.type == j2me::core::JavaValue::REFERENCE && nameVal.val.ref != nullptr) {
-                if (!nameVal.strVal.empty()) name = nameVal.strVal;
-                else name = j2me::natives::getJavaString(static_cast<j2me::core::JavaObject*>(nameVal.val.ref));
-            }
+            std::string name = getStringFromJavaObject(nameVal);
             auto it = g_recordStores.find(name);
             if (it != g_recordStores.end()) v = it->second.lastModifiedMs;
             j2me::core::JavaValue ret;
@@ -348,11 +334,7 @@ void registerRecordStoreNatives(j2me::core::NativeRegistry& registry) {
         [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             j2me::core::JavaValue nameVal = frame->pop();
             int v = 0;
-            std::string name;
-            if (nameVal.type == j2me::core::JavaValue::REFERENCE && nameVal.val.ref != nullptr) {
-                if (!nameVal.strVal.empty()) name = nameVal.strVal;
-                else name = j2me::natives::getJavaString(static_cast<j2me::core::JavaObject*>(nameVal.val.ref));
-            }
+            std::string name = getStringFromJavaObject(nameVal);
             auto it = g_recordStores.find(name);
             if (it != g_recordStores.end()) v = it->second.version;
             j2me::core::JavaValue ret;
@@ -372,31 +354,7 @@ void registerRecordStoreNatives(j2me::core::NativeRegistry& registry) {
             result.type = j2me::core::JavaValue::REFERENCE;
             result.val.ref = nullptr;
             
-            std::string name;
-            
-            if (nameVal.type == j2me::core::JavaValue::REFERENCE && nameVal.val.ref != nullptr) {
-                if (!nameVal.strVal.empty()) {
-                    name = nameVal.strVal;
-                } else {
-                    auto nameObj = static_cast<j2me::core::JavaObject*>(nameVal.val.ref);
-                    if (nameObj && nameObj->cls) {
-                        auto valueIt = nameObj->cls->fieldOffsets.find("value|[C");
-                        if (valueIt != nameObj->cls->fieldOffsets.end()) {
-                            auto valueArray = static_cast<j2me::core::JavaObject*>((void*)nameObj->fields[valueIt->second]);
-                            if (valueArray) {
-                                auto offsetIt = nameObj->cls->fieldOffsets.find("offset|I");
-                                auto countIt = nameObj->cls->fieldOffsets.find("count|I");
-                                int offset = (offsetIt != nameObj->cls->fieldOffsets.end()) ? (int)nameObj->fields[offsetIt->second] : 0;
-                                int count = (countIt != nameObj->cls->fieldOffsets.end()) ? (int)nameObj->fields[countIt->second] : valueArray->fields.size();
-                                
-                                for (int i = offset; i < offset + count && i < (int)valueArray->fields.size(); i++) {
-                                    name += (char)valueArray->fields[i];
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            std::string name = getStringFromJavaObject(nameVal);
             
             if (!name.empty()) {
                 int recordId = recordIdVal.val.i;
@@ -434,31 +392,7 @@ void registerRecordStoreNatives(j2me::core::NativeRegistry& registry) {
             j2me::core::JavaValue recordIdVal = frame->pop();
             j2me::core::JavaValue nameVal = frame->pop();
             
-            std::string name;
-            
-            if (nameVal.type == j2me::core::JavaValue::REFERENCE && nameVal.val.ref != nullptr) {
-                if (!nameVal.strVal.empty()) {
-                    name = nameVal.strVal;
-                } else {
-                    auto nameObj = static_cast<j2me::core::JavaObject*>(nameVal.val.ref);
-                    if (nameObj && nameObj->cls) {
-                        auto valueIt = nameObj->cls->fieldOffsets.find("value|[C");
-                        if (valueIt != nameObj->cls->fieldOffsets.end()) {
-                            auto valueArray = static_cast<j2me::core::JavaObject*>((void*)nameObj->fields[valueIt->second]);
-                            if (valueArray) {
-                                auto offsetIt = nameObj->cls->fieldOffsets.find("offset|I");
-                                auto countIt = nameObj->cls->fieldOffsets.find("count|I");
-                                int offset = (offsetIt != nameObj->cls->fieldOffsets.end()) ? (int)nameObj->fields[offsetIt->second] : 0;
-                                int count = (countIt != nameObj->cls->fieldOffsets.end()) ? (int)nameObj->fields[countIt->second] : valueArray->fields.size();
-                                
-                                for (int i = offset; i < offset + count && i < (int)valueArray->fields.size(); i++) {
-                                    name += (char)valueArray->fields[i];
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            std::string name = getStringFromJavaObject(nameVal);
             
             if (!name.empty()) {
                 int recordId = recordIdVal.val.i;
@@ -487,31 +421,7 @@ void registerRecordStoreNatives(j2me::core::NativeRegistry& registry) {
             j2me::core::JavaValue nameVal = frame->pop();
             
             int numRecords = 0;
-            std::string name;
-            
-            if (nameVal.type == j2me::core::JavaValue::REFERENCE && nameVal.val.ref != nullptr) {
-                if (!nameVal.strVal.empty()) {
-                    name = nameVal.strVal;
-                } else {
-                    auto nameObj = static_cast<j2me::core::JavaObject*>(nameVal.val.ref);
-                    if (nameObj && nameObj->cls) {
-                        auto valueIt = nameObj->cls->fieldOffsets.find("value|[C");
-                        if (valueIt != nameObj->cls->fieldOffsets.end()) {
-                            auto valueArray = static_cast<j2me::core::JavaObject*>((void*)nameObj->fields[valueIt->second]);
-                            if (valueArray) {
-                                auto offsetIt = nameObj->cls->fieldOffsets.find("offset|I");
-                                auto countIt = nameObj->cls->fieldOffsets.find("count|I");
-                                int offset = (offsetIt != nameObj->cls->fieldOffsets.end()) ? (int)nameObj->fields[offsetIt->second] : 0;
-                                int count = (countIt != nameObj->cls->fieldOffsets.end()) ? (int)nameObj->fields[countIt->second] : valueArray->fields.size();
-                                
-                                for (int i = offset; i < offset + count && i < (int)valueArray->fields.size(); i++) {
-                                    name += (char)valueArray->fields[i];
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            std::string name = getStringFromJavaObject(nameVal);
             
             if (!name.empty()) {
                 auto it = g_recordStores.find(name);
@@ -533,31 +443,7 @@ void registerRecordStoreNatives(j2me::core::NativeRegistry& registry) {
             j2me::core::JavaValue nameVal = frame->pop();
             
             int size = 0;
-            std::string name;
-            
-            if (nameVal.type == j2me::core::JavaValue::REFERENCE && nameVal.val.ref != nullptr) {
-                if (!nameVal.strVal.empty()) {
-                    name = nameVal.strVal;
-                } else {
-                    auto nameObj = static_cast<j2me::core::JavaObject*>(nameVal.val.ref);
-                    if (nameObj && nameObj->cls) {
-                        auto valueIt = nameObj->cls->fieldOffsets.find("value|[C");
-                        if (valueIt != nameObj->cls->fieldOffsets.end()) {
-                            auto valueArray = static_cast<j2me::core::JavaObject*>((void*)nameObj->fields[valueIt->second]);
-                            if (valueArray) {
-                                auto offsetIt = nameObj->cls->fieldOffsets.find("offset|I");
-                                auto countIt = nameObj->cls->fieldOffsets.find("count|I");
-                                int offset = (offsetIt != nameObj->cls->fieldOffsets.end()) ? (int)nameObj->fields[offsetIt->second] : 0;
-                                int count = (countIt != nameObj->cls->fieldOffsets.end()) ? (int)nameObj->fields[countIt->second] : valueArray->fields.size();
-                                
-                                for (int i = offset; i < offset + count && i < (int)valueArray->fields.size(); i++) {
-                                    name += (char)valueArray->fields[i];
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            std::string name = getStringFromJavaObject(nameVal);
             
             if (!name.empty()) {
                 auto it = g_recordStores.find(name);
@@ -579,31 +465,7 @@ void registerRecordStoreNatives(j2me::core::NativeRegistry& registry) {
             j2me::core::JavaValue nameVal = frame->pop();
             
             int available = 1024 * 1024;
-            std::string name;
-            
-            if (nameVal.type == j2me::core::JavaValue::REFERENCE && nameVal.val.ref != nullptr) {
-                if (!nameVal.strVal.empty()) {
-                    name = nameVal.strVal;
-                } else {
-                    auto nameObj = static_cast<j2me::core::JavaObject*>(nameVal.val.ref);
-                    if (nameObj && nameObj->cls) {
-                        auto valueIt = nameObj->cls->fieldOffsets.find("value");
-                        if (valueIt != nameObj->cls->fieldOffsets.end()) {
-                            auto valueArray = static_cast<j2me::core::JavaObject*>((void*)nameObj->fields[valueIt->second]);
-                            if (valueArray) {
-                                auto offsetIt = nameObj->cls->fieldOffsets.find("offset");
-                                auto countIt = nameObj->cls->fieldOffsets.find("count");
-                                int offset = (offsetIt != nameObj->cls->fieldOffsets.end()) ? (int)nameObj->fields[offsetIt->second] : 0;
-                                int count = (countIt != nameObj->cls->fieldOffsets.end()) ? (int)nameObj->fields[countIt->second] : valueArray->fields.size();
-                                
-                                for (int i = offset; i < offset + count && i < (int)valueArray->fields.size(); i++) {
-                                    name += (char)valueArray->fields[i];
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+            std::string name = getStringFromJavaObject(nameVal);
             
             if (!name.empty()) {
                 auto it = g_recordStores.find(name);
@@ -624,11 +486,7 @@ void registerRecordStoreNatives(j2me::core::NativeRegistry& registry) {
         [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             j2me::core::JavaValue nameVal = frame->pop();
 
-            std::string name;
-            if (nameVal.type == j2me::core::JavaValue::REFERENCE && nameVal.val.ref != nullptr) {
-                if (!nameVal.strVal.empty()) name = nameVal.strVal;
-                else name = j2me::natives::getJavaString(static_cast<j2me::core::JavaObject*>(nameVal.val.ref));
-            }
+            std::string name = getStringFromJavaObject(nameVal);
             if (!name.empty()) {
                 saveRecordStore(name);
                 LOG_DEBUG("[RMS] Closed record store: " + name);
@@ -641,9 +499,8 @@ void registerRecordStoreNatives(j2me::core::NativeRegistry& registry) {
         [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             j2me::core::JavaValue nameVal = frame->pop();
             
-            if (nameVal.type == j2me::core::JavaValue::REFERENCE && !nameVal.strVal.empty()) {
-                std::string name = nameVal.strVal;
-                
+            std::string name = getStringFromJavaObject(nameVal);
+            if (!name.empty()) {
                 auto it = g_recordStores.find(name);
                 if (it != g_recordStores.end()) {
                     g_recordStores.erase(it);

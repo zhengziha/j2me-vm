@@ -186,13 +186,35 @@ public class Sprite extends Layer {
     }
     
     public final boolean collidesWith(TiledLayer t, boolean pixelLevel) {
-        // Simplified AABB
-        return false; // TODO
+        // Simplified AABB collision
+        if (!this.isVisible() || !t.isVisible()) return false;
+        
+        int x1 = this.getX();
+        int y1 = this.getY();
+        int w1 = this.getWidth();
+        int h1 = this.getHeight();
+        
+        int x2 = t.getX();
+        int y2 = t.getY();
+        int w2 = t.getWidth();
+        int h2 = t.getHeight();
+        
+        return (x1 < x2 + w2) && (x1 + w1 > x2) && (y1 < y2 + h2) && (y1 + h1 > y2);
     }
     
     public final boolean collidesWith(Image image, int x, int y, boolean pixelLevel) {
-        // Simplified AABB
-         return false; // TODO
+        // Simplified AABB collision with image at position
+        if (!this.isVisible()) return false;
+        
+        int x1 = this.getX();
+        int y1 = this.getY();
+        int w1 = this.getWidth();
+        int h1 = this.getHeight();
+        
+        int imgW = image.getWidth();
+        int imgH = image.getHeight();
+        
+        return (x1 < x + imgW) && (x1 + w1 > x) && (y1 < y + imgH) && (y1 + h1 > y);
     }
 
     private native boolean collidesWithNative(Sprite s);

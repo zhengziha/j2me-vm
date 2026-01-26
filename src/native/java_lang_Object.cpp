@@ -44,7 +44,10 @@ void registerObjectNatives(j2me::core::NativeRegistry& registry) {
                         
                         auto stringObj = createJavaString(interpreter, className);
                         
-                        auto nameIt = classCls->fieldOffsets.find("name");
+                        auto nameIt = classCls->fieldOffsets.find("name|Ljava/lang/String;");
+                        if (nameIt == classCls->fieldOffsets.end()) {
+                            nameIt = classCls->fieldOffsets.find("name");
+                        }
                         if (nameIt != classCls->fieldOffsets.end()) {
                             classObj->fields[nameIt->second] = (int64_t)stringObj;
                         }
@@ -69,26 +72,6 @@ void registerObjectNatives(j2me::core::NativeRegistry& registry) {
             ret.type = j2me::core::JavaValue::INT;
             // Use pointer address as hash code
             ret.val.i = (int32_t)(intptr_t)objVal.val.ref;
-            frame->push(ret);
-        }
-    );
-
-    // java/lang/Object.toString()Ljava/lang/String;
-    registry.registerNative("java/lang/Object", "toString", "()Ljava/lang/String;", 
-        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
-            j2me::core::JavaValue objVal = frame->pop(); // this
-            
-            std::string str = "Object@" + std::to_string((intptr_t)objVal.val.ref);
-            if (objVal.val.ref) {
-                j2me::core::JavaObject* obj = static_cast<j2me::core::JavaObject*>(objVal.val.ref);
-                if (obj->cls) {
-                    str = obj->cls->name + "@" + std::to_string((intptr_t)objVal.val.ref);
-                }
-            }
-            
-            j2me::core::JavaValue ret;
-            ret.type = j2me::core::JavaValue::REFERENCE;
-            ret.strVal = str;
             frame->push(ret);
         }
     );

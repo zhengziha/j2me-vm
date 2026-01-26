@@ -737,65 +737,108 @@ void Interpreter::initReferences() {
                  auto cls = javaObj->cls;
                  
                  bool found = false;
-                 std::shared_ptr<JavaClass> currentClass = cls;
+                 
+                 // Try to use method cache
+                 // 尝试使用方法缓存
+                 MethodKey cacheKey{className->bytes, name->bytes, descriptor->bytes};
+                 auto cacheIt = methodCache.find(cacheKey);
+                 
+                 std::shared_ptr<JavaClass> methodClass;
+                 std::shared_ptr<MethodInfo> method;
+                 bool isNative = false;
+                 
+                 if (cacheIt != methodCache.end()) {
+                     methodClass = cacheIt->second.cls;
+                     method = cacheIt->second.method;
+                     isNative = cacheIt->second.isNative;
+                     
+                     // Verify the method exists in the class hierarchy
+                     // 验证方法在类层次结构中是否存在
+                     std::shared_ptr<JavaClass> currentClass = cls;
+                     while (currentClass != nullptr) {
+                         if (currentClass->name == methodClass->name) {
+                             found = true;
+                             break;
+                         }
+                         if (currentClass->rawFile->super_class == 0) {
+                             currentClass = nullptr;
+                         } else {
+                             auto superClassRef = std::dynamic_pointer_cast<ConstantClass>(currentClass->rawFile->constant_pool[currentClass->rawFile->super_class]);
+                             auto superClassName = std::dynamic_pointer_cast<ConstantUtf8>(currentClass->rawFile->constant_pool[superClassRef->name_index]);
+                             currentClass = resolveClass(superClassName->bytes);
+                         }
+                     }
+                 }
+                 
+                 if (!found) {
+                     std::shared_ptr<JavaClass> currentClass = cls;
 
-                 while (currentClass != nullptr) {
-                     for (const auto& m : currentClass->rawFile->methods) {
-                         auto mName = std::dynamic_pointer_cast<ConstantUtf8>(currentClass->rawFile->constant_pool[m.name_index]);
-                         auto mDesc = std::dynamic_pointer_cast<ConstantUtf8>(currentClass->rawFile->constant_pool[m.descriptor_index]);
+                     while (currentClass != nullptr) {
+                         for (const auto& m : currentClass->rawFile->methods) {
+                             auto mName = std::dynamic_pointer_cast<ConstantUtf8>(currentClass->rawFile->constant_pool[m.name_index]);
+                             auto mDesc = std::dynamic_pointer_cast<ConstantUtf8>(currentClass->rawFile->constant_pool[m.descriptor_index]);
+                             
+                             if (mName->bytes == name->bytes && mDesc->bytes == descriptor->bytes) {
+                                 methodClass = currentClass;
+                                 method = std::make_shared<MethodInfo>(m);
+                                 isNative = (m.access_flags & 0x0100) != 0;
+                                 if (NativeRegistry::getInstance().getNative(currentClass->name, name->bytes, descriptor->bytes)) isNative = true;
+                                 
+                                 // Cache the method for future calls
+                                 // 缓存方法以供将来调用
+                                 methodCache[cacheKey] = {methodClass, method, isNative};
+                                 
+                                 found = true;
+                                 break;
+                             }
+                         }
                          
-                         if (mName->bytes == name->bytes && mDesc->bytes == descriptor->bytes) {
-                             bool isNative = (m.access_flags & 0x0100) != 0;
-                             if (NativeRegistry::getInstance().getNative(currentClass->name, name->bytes, descriptor->bytes)) isNative = true;
-
-                             if (isNative) {
-                                 frame->push(obj);
-                                 for (int i = argCount - 1; i >= 0; i--) {
-                                     frame->push(args[i]);
-                                 }
-                                 
-                                 auto nativeFunc = NativeRegistry::getInstance().getNative(currentClass->name, name->bytes, descriptor->bytes);
-                                 if (nativeFunc) {
-                                    nativeFunc(thread, frame);
-                                 } else {
-                                     std::cerr << "UnsatisfiedLinkError (virtual): " << currentClass->name << "." << name->bytes << descriptor->bytes << std::endl;
-                                 }
-                             } else {
-                                 auto newFrame = std::make_shared<StackFrame>(m, currentClass->rawFile);
-                                 newFrame->setLocal(0, obj); // this
-                                 
-                                int localIndex = 1;
-                                for(int i=0; i<argCount; ++i) {
-                                    JavaValue& val = args[argCount - 1 - i];
-                                    newFrame->setLocal(localIndex, val);
-                                    localIndex++;
-                                    if (val.type == JavaValue::LONG || val.type == JavaValue::DOUBLE) {
-                                        localIndex++;
-                                    }
-                                }
-                                 
-                                 thread->pushFrame(newFrame);
-                            }
-                            
-                            found = true;
-                            break;
-                        }
-                    }
-                     
-                     if (found) break;
-                     
-                     if (currentClass->rawFile->super_class == 0) {
-                         currentClass = nullptr;
-                     } else {
-                         auto superClassRef = std::dynamic_pointer_cast<ConstantClass>(currentClass->rawFile->constant_pool[currentClass->rawFile->super_class]);
-                         auto superClassName = std::dynamic_pointer_cast<ConstantUtf8>(currentClass->rawFile->constant_pool[superClassRef->name_index]);
-                         currentClass = resolveClass(superClassName->bytes);
+                         if (found) break;
+                         
+                         if (currentClass->rawFile->super_class == 0) {
+                             currentClass = nullptr;
+                         } else {
+                             auto superClassRef = std::dynamic_pointer_cast<ConstantClass>(currentClass->rawFile->constant_pool[currentClass->rawFile->super_class]);
+                             auto superClassName = std::dynamic_pointer_cast<ConstantUtf8>(currentClass->rawFile->constant_pool[superClassRef->name_index]);
+                             currentClass = resolveClass(superClassName->bytes);
+                         }
                      }
                  }
                  
                  if (!found) {
                     std::string msg = "Method not found: " + cls->name + "." + name->bytes + descriptor->bytes;
                     throw std::runtime_error(msg);
+                }
+                
+                // Execute the method
+                // 执行方法
+                if (isNative) {
+                    frame->push(obj);
+                    for (int i = argCount - 1; i >= 0; i--) {
+                        frame->push(args[i]);
+                    }
+                    
+                    auto nativeFunc = NativeRegistry::getInstance().getNative(methodClass->name, name->bytes, descriptor->bytes);
+                    if (nativeFunc) {
+                       nativeFunc(thread, frame);
+                    } else {
+                        std::cerr << "UnsatisfiedLinkError (virtual): " << methodClass->name << "." << name->bytes << descriptor->bytes << std::endl;
+                    }
+                } else {
+                    auto newFrame = std::make_shared<StackFrame>(*method, methodClass->rawFile);
+                    newFrame->setLocal(0, obj); // this
+                    
+                    int localIndex = 1;
+                    for(int i=0; i<argCount; ++i) {
+                        JavaValue& val = args[argCount - 1 - i];
+                        newFrame->setLocal(localIndex, val);
+                        localIndex++;
+                        if (val.type == JavaValue::LONG || val.type == JavaValue::DOUBLE) {
+                            localIndex++;
+                        }
+                    }
+                    
+                    thread->pushFrame(newFrame);
                 }
             }
             break;

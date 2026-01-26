@@ -8,6 +8,9 @@
 #include "../native/java_lang_StringBuffer.hpp"
 #include "../native/java_lang_System.hpp"
 #include "../native/java_lang_Object.hpp"
+#include "../native/java_lang_Float.hpp"
+#include "../native/java_lang_Double.hpp"
+#include "../native/java_lang_Math.hpp"
 #include "../native/java_io_InputStream.hpp"
 #include "../native/java_io_PrintStream.hpp"
 #include "../native/javax_microedition_lcdui_Graphics.hpp"
@@ -15,6 +18,8 @@
 #include "../native/javax_microedition_lcdui_Image.hpp"
 #include "../native/javax_microedition_lcdui_Font.hpp"
 #include "../native/javax_microedition_lcdui_game_GameCanvas.hpp"
+#include "../native/javax_microedition_lcdui_game_Sprite.hpp"
+#include "../native/javax_microedition_lcdui_game_TiledLayer.hpp"
 #include "../native/javax_microedition_media_Manager.hpp"
 #include "../native/javax_microedition_rms_RecordStore.hpp"
 #include "../native/java_util_Timer.hpp"
@@ -38,6 +43,9 @@ NativeRegistry::NativeRegistry() {
     j2me::natives::registerStringBufferNatives(*this);
     j2me::natives::registerSystemNatives(*this);
     j2me::natives::registerObjectNatives(*this);
+    j2me::natives::registerFloatNatives(*this);
+    j2me::natives::registerDoubleNatives(*this);
+    j2me::natives::registerMathNatives(*this);
     j2me::natives::registerInputStreamNatives(*this);
     j2me::natives::registerPrintStreamNatives(*this);
     j2me::natives::registerDisplayNatives(*this);
@@ -45,6 +53,8 @@ NativeRegistry::NativeRegistry() {
     j2me::natives::registerImageNatives(*this);
     j2me::natives::registerFontNatives(*this);
     j2me::natives::registerGameCanvasNatives(*this);
+    j2me::natives::registerSpriteNatives(*this);
+    j2me::natives::registerTiledLayerNatives(*this);
     j2me::natives::registerMediaNatives(*this);
     j2me::natives::registerRecordStoreNatives(*this);
     j2me::natives::registerTimerNatives(*this);
@@ -100,7 +110,6 @@ NativeRegistry::NativeRegistry() {
 
     // java/lang/StringBuilder.append(J)Ljava/lang/StringBuilder;
     registerNative("java/lang/StringBuilder", "append", "(J)Ljava/lang/StringBuilder;", [](std::shared_ptr<JavaThread> thread, std::shared_ptr<StackFrame> frame) {
-        std::cerr << "Native StringBuilder.append(long)" << std::endl;
         JavaValue longVal = frame->pop();
         JavaValue thisVal = frame->pop();
         JavaObject* thisObj = (JavaObject*)thisVal.val.ref;
@@ -116,7 +125,6 @@ NativeRegistry::NativeRegistry() {
 
     // java/lang/StringBuilder.append(C)Ljava/lang/StringBuilder;
     registerNative("java/lang/StringBuilder", "append", "(C)Ljava/lang/StringBuilder;", [](std::shared_ptr<JavaThread> thread, std::shared_ptr<StackFrame> frame) {
-        std::cerr << "Native StringBuilder.append(char)" << std::endl;
         JavaValue charVal = frame->pop();
         JavaValue thisVal = frame->pop();
         JavaObject* thisObj = (JavaObject*)thisVal.val.ref;
@@ -132,7 +140,6 @@ NativeRegistry::NativeRegistry() {
 
     // java/lang/StringBuilder.append(Z)Ljava/lang/StringBuilder;
     registerNative("java/lang/StringBuilder", "append", "(Z)Ljava/lang/StringBuilder;", [](std::shared_ptr<JavaThread> thread, std::shared_ptr<StackFrame> frame) {
-        std::cerr << "Native StringBuilder.append(boolean)" << std::endl;
         JavaValue boolVal = frame->pop();
         JavaValue thisVal = frame->pop();
         JavaObject* thisObj = (JavaObject*)thisVal.val.ref;
@@ -148,7 +155,6 @@ NativeRegistry::NativeRegistry() {
 
     // java/lang/StringBuilder.append(F)Ljava/lang/StringBuilder;
     registerNative("java/lang/StringBuilder", "append", "(F)Ljava/lang/StringBuilder;", [](std::shared_ptr<JavaThread> thread, std::shared_ptr<StackFrame> frame) {
-        std::cerr << "Native StringBuilder.append(float)" << std::endl;
         JavaValue floatVal = frame->pop();
         JavaValue thisVal = frame->pop();
         JavaObject* thisObj = (JavaObject*)thisVal.val.ref;
@@ -164,7 +170,6 @@ NativeRegistry::NativeRegistry() {
 
     // java/lang/StringBuilder.append(D)Ljava/lang/StringBuilder;
     registerNative("java/lang/StringBuilder", "append", "(D)Ljava/lang/StringBuilder;", [](std::shared_ptr<JavaThread> thread, std::shared_ptr<StackFrame> frame) {
-        std::cerr << "Native StringBuilder.append(double)" << std::endl;
         JavaValue doubleVal = frame->pop();
         JavaValue thisVal = frame->pop();
         JavaObject* thisObj = (JavaObject*)thisVal.val.ref;
@@ -211,7 +216,6 @@ NativeRegistry::NativeRegistry() {
 
     // java/lang/StringBuilder.toString()Ljava/lang/String;
     registerNative("java/lang/StringBuilder", "toString", "()Ljava/lang/String;", [](std::shared_ptr<JavaThread> thread, std::shared_ptr<StackFrame> frame) {
-        std::cerr << "Native StringBuilder.toString" << std::endl;
         JavaValue thisVal = frame->pop();
         JavaObject* thisObj = (JavaObject*)thisVal.val.ref;
         
@@ -222,14 +226,12 @@ NativeRegistry::NativeRegistry() {
         if (thisObj && !thisObj->fields.empty()) {
             std::string* str = (std::string*)thisObj->fields[0];
             if (str) {
-                std::cerr << "StringBuilder result: " << *str << std::endl;
-                
                 auto interpreter = NativeRegistry::getInstance().getInterpreter();
                 auto stringCls = interpreter->resolveClass("java/lang/String");
                 if (stringCls) {
                     auto stringObj = HeapManager::getInstance().allocate(stringCls);
                     
-                    auto arrayCls = interpreter->resolveClass("[B");
+                    auto arrayCls = interpreter->resolveClass("[C");
                     if (arrayCls) {
                         auto arrayObj = HeapManager::getInstance().allocate(arrayCls);
                         arrayObj->fields.resize(str->length());
@@ -237,17 +239,26 @@ NativeRegistry::NativeRegistry() {
                             arrayObj->fields[i] = (*str)[i];
                         }
                         
-                        auto valueIt = stringCls->fieldOffsets.find("value");
+                        auto valueIt = stringCls->fieldOffsets.find("value|[C");
+                        if (valueIt == stringCls->fieldOffsets.end()) {
+                            valueIt = stringCls->fieldOffsets.find("value");
+                        }
                         if (valueIt != stringCls->fieldOffsets.end()) {
                             stringObj->fields[valueIt->second] = (int64_t)arrayObj;
                         }
                         
-                        auto offsetIt = stringCls->fieldOffsets.find("offset");
+                        auto offsetIt = stringCls->fieldOffsets.find("offset|I");
+                        if (offsetIt == stringCls->fieldOffsets.end()) {
+                            offsetIt = stringCls->fieldOffsets.find("offset");
+                        }
                         if (offsetIt != stringCls->fieldOffsets.end()) {
                             stringObj->fields[offsetIt->second] = 0;
                         }
                         
-                        auto countIt = stringCls->fieldOffsets.find("count");
+                        auto countIt = stringCls->fieldOffsets.find("count|I");
+                        if (countIt == stringCls->fieldOffsets.end()) {
+                            countIt = stringCls->fieldOffsets.find("count");
+                        }
                         if (countIt != stringCls->fieldOffsets.end()) {
                             stringObj->fields[countIt->second] = str->length();
                         }

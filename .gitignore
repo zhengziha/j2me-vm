@@ -1,63 +1,39 @@
-# Build outputs
-/build/
+# Build directories
 build/
-/out/
-/bin/
-/obj/
+stubs_build/
+tests/classes/
+
+# Compiled class files
+*.class
+
+# Object files
 *.o
 *.obj
-*.lo
-*.la
-*.a
-*.lib
-*.so
-*.dylib
-*.dll
-*.exe
-*.pdb
-*.ilk
-*.o.d
-# CMake files
-CMakeFiles/
-CMakeCache.txt
-cmake_install.cmake
-Makefile
-compile_commands.json
 
-# IDE / Editor
+# Executables
+j2me-vm
+*.exe
+
+# IDE files
 .vscode/
 .idea/
-*.iml
+*.swp
+*.swo
+*~
+
+# OS files
 .DS_Store
 Thumbs.db
 
-# Logs / temp
-*.log
+# RMS data directory
+rms_data/
+
+# Temporary files
 *.tmp
-*.swp
-*.swo
-output*.txt
-test_output.txt
-
-# Coverage / analysis
-lcov.info
-*.gcno
-*.gcda
-*.profraw
-*.profdata
-
-# Generated jars/stubs
-rt.jar
-/stubs/**/*.class
-/classes/
-
-# Local runtime artifacts
-*.pid
-*.lock
-lastframe_*.bmp
-/rms_data/
-*.bytecode
+*.log
+CMakeFiles/
 *.bin
-/j2me-vm
-
-build/CMakeFiles/j2me-vm.dir/link.txt
+*.bytecode
+output*.txt
+*.class
+*.jar

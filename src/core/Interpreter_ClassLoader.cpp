@@ -7,7 +7,6 @@ namespace j2me {
 namespace core {
 
 std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& className) {
-    // std::cerr << "Resolving class: " << className << std::endl;
     // Check if already loaded
     // 检查类是否已加载
     auto it = loadedClasses.find(className);
@@ -74,6 +73,7 @@ std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& classNam
                  }
              }
         }
+    }
 
         // Mock java/lang/Object if missing (it's the root of everything)
         // 如果缺少 java/lang/Object，则模拟它 (它是所有类的根)
@@ -313,61 +313,59 @@ std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& classNam
              return javaClass;
         }
         
-        LOG_ERROR("Class not found: " + className);
-        throw std::runtime_error("Class not found: " + className);
-    }
-
-    auto data = jarLoader.getFile(path);
-    if (!data) {
-        LOG_ERROR("Class not found: " + className);
-        throw std::runtime_error("Class not found: " + className);
-    }
-
-    try {
-        ClassParser parser;
-        auto rawFile = parser.parse(*data);
-        auto javaClass = std::make_shared<JavaClass>(rawFile);
-        
-        // Link with superclass (recursive load)
-        // 链接父类 (递归加载)
-        if (rawFile->super_class != 0) {
-            auto superInfo = std::dynamic_pointer_cast<ConstantClass>(rawFile->constant_pool[rawFile->super_class]);
-            auto superNameInfo = std::dynamic_pointer_cast<ConstantUtf8>(rawFile->constant_pool[superInfo->name_index]);
-            std::string superName = superNameInfo->bytes;
-
-            if (superName != "java/lang/Object") {
-                 auto superClass = resolveClass(superName);
-                 javaClass->link(superClass);
-            } else {
-                 javaClass->link(nullptr);
-            }
-        } else {
-            // This is java/lang/Object (or invalid)
-            javaClass->link(nullptr);
+        // Try to load from JAR
+        // 尝试从 JAR 加载
+        auto data = jarLoader.getFile(path);
+        if (!data) {
+            LOG_ERROR("Class not found: " + className);
+            throw std::runtime_error("Class not found: " + className);
         }
 
-        // Resolve interfaces
-        // 解析接口
-        for (uint16_t interfaceIndex : rawFile->interfaces) {
-            if (interfaceIndex > 0 && interfaceIndex < rawFile->constant_pool.size()) {
-                auto interfaceInfo = std::dynamic_pointer_cast<ConstantClass>(rawFile->constant_pool[interfaceIndex]);
-                if (interfaceInfo) {
-                    auto interfaceNameInfo = std::dynamic_pointer_cast<ConstantUtf8>(rawFile->constant_pool[interfaceInfo->name_index]);
-                    if (interfaceNameInfo) {
-                        auto interfaceClass = resolveClass(interfaceNameInfo->bytes);
-                        javaClass->interfaces.push_back(interfaceClass);
+        try {
+            ClassParser parser;
+            auto rawFile = parser.parse(*data);
+            auto javaClass = std::make_shared<JavaClass>(rawFile);
+            
+            // Link with superclass (recursive load)
+            // 链接父类 (递归加载)
+            if (rawFile->super_class != 0) {
+                auto superInfo = std::dynamic_pointer_cast<ConstantClass>(rawFile->constant_pool[rawFile->super_class]);
+                auto superNameInfo = std::dynamic_pointer_cast<ConstantUtf8>(rawFile->constant_pool[superInfo->name_index]);
+                std::string superName = superNameInfo->bytes;
+
+                if (superName != "java/lang/Object") {
+                     auto superClass = resolveClass(superName);
+                     javaClass->link(superClass);
+                } else {
+                     javaClass->link(nullptr);
+                }
+            } else {
+                // This is java/lang/Object (or invalid)
+                javaClass->link(nullptr);
+            }
+
+            // Resolve interfaces
+            // 解析接口
+            for (uint16_t interfaceIndex : rawFile->interfaces) {
+                if (interfaceIndex > 0 && interfaceIndex < rawFile->constant_pool.size()) {
+                    auto interfaceInfo = std::dynamic_pointer_cast<ConstantClass>(rawFile->constant_pool[interfaceIndex]);
+                    if (interfaceInfo) {
+                        auto interfaceNameInfo = std::dynamic_pointer_cast<ConstantUtf8>(rawFile->constant_pool[interfaceInfo->name_index]);
+                        if (interfaceNameInfo) {
+                            auto interfaceClass = resolveClass(interfaceNameInfo->bytes);
+                            javaClass->interfaces.push_back(interfaceClass);
+                        }
                     }
                 }
             }
-        }
 
-        loadedClasses[className] = javaClass;
-        return javaClass;
-    } catch (const std::exception& e) {
-        LOG_ERROR("Failed to parse class " + className + ": " + e.what());
-        throw;
+            loadedClasses[className] = javaClass;
+            return javaClass;
+        } catch (const std::exception& e) {
+            LOG_ERROR("Failed to parse class " + className + ": " + e.what());
+            throw;
+        }
     }
-}
 
 bool Interpreter::isValidClassName(const std::string& name) {
     // Empty string is invalid

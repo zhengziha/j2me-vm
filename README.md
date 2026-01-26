@@ -26,8 +26,15 @@ j2me-vm/
 │   ├── platform/           # 平台抽象层 (SDL2 封装)
 │   └── util/               # 工具类
 ├── stubs/                  # J2ME 标准库接口定义 (Java 源码)
-├── docs/                   # 开发文档 & 设计说明
+├── stubs_build/            # J2ME 标准库编译输出目录 (编译后的 .class 文件)
 ├── tests/                  # 测试用例
+│   ├── src/               # 测试源文件 (.java)
+│   ├── classes/           # 测试编译输出 (.class)
+│   ├── graphics/          # 图形测试资源
+│   ├── resources/         # 资源测试
+│   └── rms/              # RMS 测试
+├── docs/                   # 开发文档 & 设计说明
+├── build/                  # VM 编译输出目录
 └── CMakeLists.txt          # 构建配置
 ```
 
@@ -58,13 +65,24 @@ cd j2me-vm
 运行一个 JAR 文件：
 
 ```bash
-./build/j2me-vm -cp rt.jar <path_to_jar> <MainClass>
+./j2me-vm <path_to_jar>
 ```
 
 例如运行 `tests/pal.jar` (仙剑奇侠传):
 
 ```bash
-./build/j2me-vm -cp rt.jar:tests/pal.jar pal.GameMIDlet
+./j2me-vm tests/pal.jar
+```
+
+运行测试类：
+
+```bash
+# 编译测试
+./build_tests.sh
+
+# 运行测试
+./run_test.sh PrimitiveTypesTest
+./run_test.sh CollectionTest
 ```
 
 ## 📚 文档
