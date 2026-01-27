@@ -13,21 +13,8 @@ tests/classes/
 # Executables
 j2me-vm
 *.exe
-*.pdb
-*.ilk
-*.o.d
-# CMake files
-CMakeFiles/
-CMakeCache.txt
-cmake_install.cmake
-Makefile
-compile_commands.json
-cmake-build-debug/
-*.elf
-*.nro
-*.nacp
-*.jar
-# IDE / Editor
+
+# IDE files
 .vscode/
 .idea/
 *.swp
@@ -50,3 +37,8 @@ CMakeFiles/
 output*.txt
 *.class
 *.jar
+cmake-build-debug
+*.dll
+*.elf
+*.nacp
+*.nro
