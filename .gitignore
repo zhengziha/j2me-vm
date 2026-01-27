@@ -42,3 +42,6 @@ cmake-build-debug
 *.elf
 *.nacp
 *.nro
+*.img
+*.bin
+*.bmp

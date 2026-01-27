@@ -38,6 +38,9 @@ SOURCES = \
     src/native/java_lang_Class.cpp \
     src/native/java_lang_StringBuffer.cpp \
     src/native/java_lang_Object.cpp \
+    src/native/java_lang_Float.cpp \
+    src/native/java_lang_Double.cpp \
+    src/native/java_lang_Math.cpp \
     src/native/java_io_PrintStream.cpp \
     src/native/java_io_InputStream.cpp \
     src/native/java_util_Timer.cpp \
@@ -48,6 +51,8 @@ SOURCES = \
     src/native/javax_microedition_lcdui_Image.cpp \
     src/native/javax_microedition_lcdui_Font.cpp \
     src/native/javax_microedition_lcdui_game_GameCanvas.cpp \
+    src/native/javax_microedition_lcdui_game_Sprite.cpp \
+    src/native/javax_microedition_lcdui_game_TiledLayer.cpp \
     src/native/javax_microedition_media_Manager.cpp \
     src/native/javax_microedition_rms_RecordStore.cpp \
     src/native/javax_microedition_io_Connector.cpp \
@@ -57,7 +62,7 @@ SOURCES = \
 OBJECTS = $(SOURCES:.cpp=.o)
 
 # Executable name
-TARGET = j2me-vm.exe
+TARGET = win\j2me-vm.exe
 
 # Build rules
 all: $(TARGET)
