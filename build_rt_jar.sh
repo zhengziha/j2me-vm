@@ -15,12 +15,13 @@ find stubs -name "*.java" > build/sources.txt
 javac -source 1.8 -target 1.8 -d stubs_build @build/sources.txt
 
 if [ $? -eq 0 ]; then
+    # remove old rt.jar
+    rm -rf stubs/rt.jar
     # Create JAR file from compiled classes
     jar cf stubs/rt.jar -C stubs_build .
     
     # Clean up
     rm -f build/sources.txt
-    rm -rf stubs/rt.jar
     
     echo "stubs/rt.jar created successfully"
     echo "Source files: stubs/"
