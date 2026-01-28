@@ -633,10 +633,8 @@ void Interpreter::initReferences() {
                              throw std::runtime_error("UnsatisfiedLinkError: " + className->bytes + "." + name->bytes + descriptor->bytes);
                          }
                      } else {
-                         if (cls->name == "java/lang/Object" && name->bytes == "<init>") {
-                             found = true;
-                             break;
-                         }
+                         // Object的构造方法只是简单返回，不需要特殊处理
+                         // 让正常的构造方法处理逻辑执行
                          
                          auto newFrame = std::make_shared<StackFrame>(m, cls->rawFile);
                          

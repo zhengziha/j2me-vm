@@ -15,15 +15,15 @@ void registerMediaNatives(j2me::core::NativeRegistry& registry) {
             frame->pop(); // type
             frame->pop(); // stream
             
-            // Create DummyPlayer
+            // Create AudioPlayer
             auto interpreter = registry.getInterpreter();
             if (interpreter) {
-                auto playerCls = interpreter->resolveClass("j2me/media/DummyPlayer");
+                auto playerCls = interpreter->resolveClass("j2me/media/AudioPlayer");
                 if (playerCls) {
                     if (interpreter->initializeClass(thread, playerCls)) {
                         // Initialization pushed, we need to retry this native instruction later... 
                         // But native calls are immediate. 
-                        // Ideally we should have initialized DummyPlayer at startup or lazily properly.
+                        // Ideally we should have initialized AudioPlayer at startup or lazily properly.
                         // For now, assume it's simple enough not to need complex <clinit>.
                         // Or we force it.
                     }
@@ -37,7 +37,7 @@ void registerMediaNatives(j2me::core::NativeRegistry& registry) {
                 }
             }
             
-            std::cerr << "Failed to create DummyPlayer (Stream)" << std::endl;
+            std::cerr << "Failed to create AudioPlayer (Stream)" << std::endl;
             j2me::core::JavaValue result;
             result.type = j2me::core::JavaValue::REFERENCE;
             result.val.ref = nullptr;
@@ -52,14 +52,14 @@ void registerMediaNatives(j2me::core::NativeRegistry& registry) {
             
             auto interpreter = registry.getInterpreter();
             if (interpreter) {
-                auto playerCls = interpreter->resolveClass("j2me/media/DummyPlayer");
+                auto playerCls = interpreter->resolveClass("j2me/media/AudioPlayer");
                 if (playerCls) {
                     if (interpreter->initializeClass(thread, playerCls)) {
                          // See above note
                     }
 
                     auto playerObj = j2me::core::HeapManager::getInstance().allocate(playerCls);
-                    std::cout << "[Media] Created DummyPlayer instance: " << playerObj << std::endl;
+                    std::cout << "[Media] Created AudioPlayer instance: " << playerObj << std::endl;
                     j2me::core::JavaValue result;
                     result.type = j2me::core::JavaValue::REFERENCE;
                     result.val.ref = playerObj;
@@ -68,7 +68,7 @@ void registerMediaNatives(j2me::core::NativeRegistry& registry) {
                 }
             }
             
-            std::cerr << "Failed to create DummyPlayer (Locator)" << std::endl;
+            std::cerr << "Failed to create AudioPlayer (Locator)" << std::endl;
             j2me::core::JavaValue result;
             result.type = j2me::core::JavaValue::REFERENCE;
             result.val.ref = nullptr;

@@ -25,63 +25,93 @@ std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& classNam
     if (!jarLoader.hasFile(path)) {
         // Check library loader if available
         // 如果系统库加载器可用，则尝试从中加载
-        if (libraryLoader && libraryLoader->hasFile(path)) {
-             LOG_DEBUG("[Interpreter] Loading " + className + " from library loader");
-             auto data = libraryLoader->getFile(path);
-             if (data) {
-                 try {
-                     ClassParser parser;
-                     auto rawFile = parser.parse(*data);
-                     auto javaClass = std::make_shared<JavaClass>(rawFile);
-                     
-                     LOG_DEBUG("[Interpreter] Parsed " + className + " from library, fields=" + std::to_string(rawFile->fields.size()));
-                     
-                     if (rawFile->super_class != 0) {
-                         auto superInfo = std::dynamic_pointer_cast<ConstantClass>(rawFile->constant_pool[rawFile->super_class]);
-                         auto superNameInfo = std::dynamic_pointer_cast<ConstantUtf8>(rawFile->constant_pool[superInfo->name_index]);
-                         std::string superName = superNameInfo->bytes;
-             
-                         if (superName != "java/lang/Object") {
-                              auto superClass = resolveClass(superName);
-                              javaClass->link(superClass);
-                         } else {
-                              javaClass->link(nullptr);
-                         }
-                     } else {
-                         javaClass->link(nullptr);
-                     }
+        if (libraryLoader) {
+            if (libraryLoader->hasFile(path)) {
+                LOG_DEBUG("[Interpreter] Loading " + className + " from library loader");
+                auto data = libraryLoader->getFile(path);
+                if (data) {
+                    try {
+                        ClassParser parser;
+                        auto rawFile = parser.parse(*data);
+                        auto javaClass = std::make_shared<JavaClass>(rawFile);
+                        
+                        LOG_DEBUG("[Interpreter] Parsed " + className + " from library, fields=" + std::to_string(rawFile->fields.size()));
+                        
+                        if (rawFile->super_class != 0) {
+                            auto superInfo = std::dynamic_pointer_cast<ConstantClass>(rawFile->constant_pool[rawFile->super_class]);
+                            auto superNameInfo = std::dynamic_pointer_cast<ConstantUtf8>(rawFile->constant_pool[superInfo->name_index]);
+                            std::string superName = superNameInfo->bytes;
+                
+                            if (superName != "java/lang/Object") {
+                                auto superClass = resolveClass(superName);
+                                javaClass->link(superClass);
+                            } else {
+                                javaClass->link(nullptr);
+                            }
+                        } else {
+                            javaClass->link(nullptr);
+                        }
 
-                     // Resolve interfaces
-                     // 解析接口
-                     for (uint16_t interfaceIndex : rawFile->interfaces) {
-                         if (interfaceIndex > 0 && interfaceIndex < rawFile->constant_pool.size()) {
-                             auto interfaceInfo = std::dynamic_pointer_cast<ConstantClass>(rawFile->constant_pool[interfaceIndex]);
-                             if (interfaceInfo) {
-                                 auto interfaceNameInfo = std::dynamic_pointer_cast<ConstantUtf8>(rawFile->constant_pool[interfaceInfo->name_index]);
-                                 if (interfaceNameInfo) {
-                                     auto interfaceClass = resolveClass(interfaceNameInfo->bytes);
-                                     javaClass->interfaces.push_back(interfaceClass);
-                                 }
-                             }
-                         }
-                     }
-             
-                     loadedClasses[className] = javaClass;
-                     return javaClass;
-                 } catch (const std::exception& e) {
-                     LOG_ERROR("Failed to parse library class " + className + ": " + e.what());
-                 }
-             }
+                        // Resolve interfaces
+                        // 解析接口
+                        for (uint16_t interfaceIndex : rawFile->interfaces) {
+                            if (interfaceIndex > 0 && interfaceIndex < rawFile->constant_pool.size()) {
+                                auto interfaceInfo = std::dynamic_pointer_cast<ConstantClass>(rawFile->constant_pool[interfaceIndex]);
+                                if (interfaceInfo) {
+                                    auto interfaceNameInfo = std::dynamic_pointer_cast<ConstantUtf8>(rawFile->constant_pool[interfaceInfo->name_index]);
+                                    if (interfaceNameInfo) {
+                                        auto interfaceClass = resolveClass(interfaceNameInfo->bytes);
+                                        javaClass->interfaces.push_back(interfaceClass);
+                                    }
+                                }
+                            }
+                        }
+                
+                        loadedClasses[className] = javaClass;
+                        return javaClass;
+                    } catch (const std::exception& e) {
+                        LOG_ERROR("Failed to parse library class " + className + ": " + e.what());
+                    }
+                }
+            } else {
+                LOG_DEBUG("[Interpreter] Class " + className + " not found in library loader");
+            }
+        } else {
+            LOG_DEBUG("[Interpreter] Library loader not available for " + className);
         }
     }
 
         // Mock java/lang/Object if missing (it's the root of everything)
         // 如果缺少 java/lang/Object，则模拟它 (它是所有类的根)
         if (className == "java/lang/Object") {
+             LOG_ERROR("[Interpreter] Creating mock Object class - this should not happen!");
              // Return a dummy ClassFile for Object so we stop recursion
              // 返回一个虚拟的 Object ClassFile 以停止递归
              auto dummy = std::make_shared<ClassFile>();
              dummy->this_class = 0; // Invalid, but we won't read it
+             
+             // Add a dummy constructor method
+             // 添加一个虚拟的构造方法
+             MethodInfo constructor;
+             constructor.access_flags = 0x0001; // ACC_PUBLIC
+             constructor.name_index = 1; // Will be set later
+             constructor.descriptor_index = 2; // Will be set later
+             dummy->methods.push_back(constructor);
+             
+             // Add constant pool entries for constructor name and descriptor
+             // 为构造方法名称和描述符添加常量池条目
+             auto initName = std::make_shared<ConstantUtf8>();
+             initName->bytes = "<init>";
+             dummy->constant_pool.push_back(initName);
+             
+             auto voidDesc = std::make_shared<ConstantUtf8>();
+             voidDesc->bytes = "()V";
+             dummy->constant_pool.push_back(voidDesc);
+             
+             // Update constructor indices
+             // 更新构造方法索引
+             dummy->methods[0].name_index = dummy->constant_pool.size() - 2;
+             dummy->methods[0].descriptor_index = dummy->constant_pool.size() - 1;
              
              // We need to construct a minimal valid JavaClass
              // 我们需要构造一个最小有效的 JavaClass

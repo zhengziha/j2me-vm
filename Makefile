@@ -130,6 +130,30 @@ j2me-vm/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/j2me-vm.dir/build.make CMakeFiles/j2me-vm.dir/build
 .PHONY : j2me-vm/fast
 
+src/core/AudioManager.o: src/core/AudioManager.cpp.o
+.PHONY : src/core/AudioManager.o
+
+# target to build an object file
+src/core/AudioManager.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/j2me-vm.dir/build.make CMakeFiles/j2me-vm.dir/src/core/AudioManager.cpp.o
+.PHONY : src/core/AudioManager.cpp.o
+
+src/core/AudioManager.i: src/core/AudioManager.cpp.i
+.PHONY : src/core/AudioManager.i
+
+# target to preprocess a source file
+src/core/AudioManager.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/j2me-vm.dir/build.make CMakeFiles/j2me-vm.dir/src/core/AudioManager.cpp.i
+.PHONY : src/core/AudioManager.cpp.i
+
+src/core/AudioManager.s: src/core/AudioManager.cpp.s
+.PHONY : src/core/AudioManager.s
+
+# target to generate assembly for a file
+src/core/AudioManager.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/j2me-vm.dir/build.make CMakeFiles/j2me-vm.dir/src/core/AudioManager.cpp.s
+.PHONY : src/core/AudioManager.cpp.s
+
 src/core/ClassParser.o: src/core/ClassParser.cpp.o
 .PHONY : src/core/ClassParser.o
 
@@ -730,6 +754,30 @@ src/native/NativeInputStream.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/j2me-vm.dir/build.make CMakeFiles/j2me-vm.dir/src/native/NativeInputStream.cpp.s
 .PHONY : src/native/NativeInputStream.cpp.s
 
+src/native/j2me_media_AudioPlayer.o: src/native/j2me_media_AudioPlayer.cpp.o
+.PHONY : src/native/j2me_media_AudioPlayer.o
+
+# target to build an object file
+src/native/j2me_media_AudioPlayer.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/j2me-vm.dir/build.make CMakeFiles/j2me-vm.dir/src/native/j2me_media_AudioPlayer.cpp.o
+.PHONY : src/native/j2me_media_AudioPlayer.cpp.o
+
+src/native/j2me_media_AudioPlayer.i: src/native/j2me_media_AudioPlayer.cpp.i
+.PHONY : src/native/j2me_media_AudioPlayer.i
+
+# target to preprocess a source file
+src/native/j2me_media_AudioPlayer.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/j2me-vm.dir/build.make CMakeFiles/j2me-vm.dir/src/native/j2me_media_AudioPlayer.cpp.i
+.PHONY : src/native/j2me_media_AudioPlayer.cpp.i
+
+src/native/j2me_media_AudioPlayer.s: src/native/j2me_media_AudioPlayer.cpp.s
+.PHONY : src/native/j2me_media_AudioPlayer.s
+
+# target to generate assembly for a file
+src/native/j2me_media_AudioPlayer.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/j2me-vm.dir/build.make CMakeFiles/j2me-vm.dir/src/native/j2me_media_AudioPlayer.cpp.s
+.PHONY : src/native/j2me_media_AudioPlayer.cpp.s
+
 src/native/java_io_InputStream.o: src/native/java_io_InputStream.cpp.o
 .PHONY : src/native/java_io_InputStream.o
 
@@ -1315,6 +1363,9 @@ help:
 	@echo "... edit_cache"
 	@echo "... rebuild_cache"
 	@echo "... j2me-vm"
+	@echo "... src/core/AudioManager.o"
+	@echo "... src/core/AudioManager.i"
+	@echo "... src/core/AudioManager.s"
 	@echo "... src/core/ClassParser.o"
 	@echo "... src/core/ClassParser.i"
 	@echo "... src/core/ClassParser.s"
@@ -1390,6 +1441,9 @@ help:
 	@echo "... src/native/NativeInputStream.o"
 	@echo "... src/native/NativeInputStream.i"
 	@echo "... src/native/NativeInputStream.s"
+	@echo "... src/native/j2me_media_AudioPlayer.o"
+	@echo "... src/native/j2me_media_AudioPlayer.i"
+	@echo "... src/native/j2me_media_AudioPlayer.s"
 	@echo "... src/native/java_io_InputStream.o"
 	@echo "... src/native/java_io_InputStream.i"
 	@echo "... src/native/java_io_InputStream.s"

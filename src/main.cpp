@@ -2,6 +2,7 @@
 #include <thread>
 #include <chrono>
 #include <cstdlib>
+#include <SDL2/SDL.h>
 #include <algorithm>
 #include <string>
 #include <vector>
@@ -105,26 +106,28 @@ static int parseAutoKeyToken(const std::string& t) {
 }
 
 int main(int argc, char* argv[]) {
+    if (argc < 2) {
+        std::cout << "Usage: j2me-vm [--debug] [--log-level LEVEL] [--timeout-ms MS] [--auto-key [SEQ]] [--no-auto-key] [--auto-key-delay-ms MS] <path_to_jar_or_class>" << std::endl;
+        std::cout << "  --debug: Enable debug mode (equivalent to --log-level debug)" << std::endl;
+        std::cout << "  LEVEL: debug, info, error, none (default: info)" << std::endl;
+        std::cout << "  MS: auto exit after MS milliseconds (0 disables, minimum: 15000)" << std::endl;
+        std::cout << "  SEQ: comma-separated keys, e.g. soft1,fire or fire (default: soft1,fire when enabled)" << std::endl;
+        return 1;
+    }
+    // 解析命令行参数
+    // Parse command line arguments
+    j2me::core::VMConfig config;
+    config.logLevel = j2me::core::LogLevel::INFO;
 
-    // if (argc < 2) {
-    //     std::cout << "Usage: j2me-vm [--log-level LEVEL] [--timeout-ms MS] [--auto-key [SEQ]] [--no-auto-key] [--auto-key-delay-ms MS] <path_to_jar_or_class>" << std::endl;
-    //     std::cout << "  LEVEL: debug, info, error, none (default: info)" << std::endl;
-    //     std::cout << "  MS: auto exit after MS milliseconds (0 disables, minimum: 15000)" << std::endl;
-    //     std::cout << "  SEQ: comma-separated keys, e.g. soft1,fire or fire (default: soft1,fire when enabled)" << std::endl;
-    //     return 1;
-    // }
-    #ifdef __SWITCH__
+#ifdef __SWITCH__
     LOG_INFO("Initializing romfs");
     romfsInit();
     LOG_INFO("Changing directory to romfs:/");
     chdir("romfs:/");
     LOG_INFO("romfs initialized successfully");
-#endif
-    // 解析命令行参数
-    // Parse command line arguments
-    j2me::core::VMConfig config;
-    config.logLevel = j2me::core::LogLevel::INFO;
     config.filePath = "fr.jar";
+#endif
+
     int64_t timeoutMs = 0;
     constexpr int64_t MIN_TIMEOUT_MS = 15000;
     bool autoKeyForcedOn = false;
@@ -133,7 +136,9 @@ int main(int argc, char* argv[]) {
 
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
-        if (arg == "--log-level" && i + 1 < argc) {
+        if (arg == "--debug") {
+            config.logLevel = j2me::core::LogLevel::DEBUG;
+        } else if (arg == "--log-level" && i + 1 < argc) {
             std::string levelStr = argv[++i];
             if (levelStr == "debug") {
                 config.logLevel = j2me::core::LogLevel::DEBUG;
@@ -346,7 +351,7 @@ int main(int argc, char* argv[]) {
     // Run VM
     LOG_INFO("Starting VM with config: filePath='" + config.filePath + "', mainClassName='" + config.mainClassName + "'");
     int result = 1;
-    
+
     try {
         j2me::core::J2MEVM vm;
         LOG_INFO("Calling vm.run()");
@@ -382,7 +387,7 @@ int main(int argc, char* argv[]) {
     romfsExit();
     LOG_INFO("Exited romfs");
     #endif
-    
+
     LOG_INFO("Shutdown complete. Exiting with code: " + std::to_string(result));
     return result;
 }

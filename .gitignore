@@ -37,6 +37,9 @@ CMakeFiles/
 output*.txt
 *.class
 *.jar
+*.bmp
+/j2me-vm.iml
+/tests/tests.iml
 cmake-build-debug
 *.dll
 *.elf
