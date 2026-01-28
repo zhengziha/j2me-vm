@@ -1,40 +1,90 @@
 public class MainTest {
+    private static int totalPassed = 0;
+    private static int totalFailed = 0;
+    private static int totalTestCount = 0;
+
+    public static void runTest(String testName, TestRunner runner) {
+        System.out.println("\n========================================");
+        System.out.println("Running: " + testName);
+        System.out.println("========================================");
+        
+        int beforePassed = totalPassed;
+        int beforeFailed = totalFailed;
+        
+        runner.run();
+        
+        int afterPassed = totalPassed;
+        int afterFailed = totalFailed;
+        
+        System.out.println("\n" + testName + " completed: " + (afterPassed - beforePassed) + " passed, " + (afterFailed - beforeFailed) + " failed");
+    }
+
+    interface TestRunner {
+        void run();
+    }
+
     public static void main(String[] args) {
-        System.out.println("Hello from main method!");
-        System.out.println("Testing primitive types:");
-        
-        byte b = 127;
-        short s = 32767;
-        int i = 2147483647;
-        long l = 9223372036854775807L;
-        float f = 3.14159f;
-        double d = 2.71828;
-        char c = 'A';
-        boolean bool = true;
-        
-        System.out.println("byte: " + b);
-        System.out.println("short: " + s);
-        System.out.println("int: " + i);
-        System.out.println("long: " + l);
-        System.out.println("float: " + f);
-        System.out.println("double: " + d);
-        System.out.println("char: " + c);
-        System.out.println("boolean: " + bool);
+        System.out.println("========================================");
+        System.out.println("J2ME VM Comprehensive Test Suite");
+        System.out.println("========================================");
 
-        if (b == 127) System.out.println("byte test passed");
-        if (s == 32767) System.out.println("short test passed");
-        if (i == 2147483647) System.out.println("int test passed");
-        if (l == 9223372036854775807L) System.out.println("long test passed");
-        if (f == 3.14159f) System.out.println("float test passed");
-        if (d == 2.71828) System.out.println("double test passed");
-        if (c == 'A') System.out.println("char test passed");
-        if (bool == true) System.out.println("boolean test passed");
+        runTest("I/O Streams Test", new TestRunner() {
+            public void run() {
+                ComprehensiveIOTest.main(new String[]{});
+                totalPassed += ComprehensiveIOTest.getPassed();
+                totalFailed += ComprehensiveIOTest.getFailed();
+            }
+        });
 
-        if (1+1==2){
-            System.out.println("1+1=2 test passed");
+        runTest("Wrapper Classes Test", new TestRunner() {
+            public void run() {
+                WrapperClassesTest.main(new String[]{});
+                totalPassed += WrapperClassesTest.getPassed();
+                totalFailed += WrapperClassesTest.getFailed();
+            }
+        });
+
+        runTest("String Comprehensive Test", new TestRunner() {
+            public void run() {
+                StringComprehensiveTest.main(new String[]{});
+                totalPassed += StringComprehensiveTest.getPassed();
+                totalFailed += StringComprehensiveTest.getFailed();
+            }
+        });
+
+        runTest("Math Comprehensive Test", new TestRunner() {
+            public void run() {
+                MathComprehensiveTest.main(new String[]{});
+                totalPassed += MathComprehensiveTest.getPassed();
+                totalFailed += MathComprehensiveTest.getFailed();
+            }
+        });
+
+        runTest("Collection Comprehensive Test", new TestRunner() {
+            public void run() {
+                CollectionComprehensiveTest.main(new String[]{});
+                totalPassed += CollectionComprehensiveTest.getPassed();
+                totalFailed += CollectionComprehensiveTest.getFailed();
+            }
+        });
+
+        totalTestCount = totalPassed + totalFailed;
+
+        System.out.println("\n========================================");
+        System.out.println("FINAL TEST SUMMARY");
+        System.out.println("========================================");
+        System.out.println("Total Passed: " + totalPassed);
+        System.out.println("Total Failed: " + totalFailed);
+        System.out.println("Total Tests: " + totalTestCount);
+        System.out.println("Success Rate: " + (totalTestCount > 0 ? (totalPassed * 100 / totalTestCount) : 0) + "%");
+        System.out.println("========================================");
+
+        if (totalFailed == 0) {
+            System.out.println("ALL TESTS PASSED!");
+            System.out.println("========================================");
+        } else {
+            System.out.println("SOME TESTS FAILED!");
+            System.out.println("========================================");
         }
-        
-        System.out.println("\n\n=== Running Comprehensive I/O Test ===");
-        ComprehensiveIOTest.main(new String[]{});
     }
 }

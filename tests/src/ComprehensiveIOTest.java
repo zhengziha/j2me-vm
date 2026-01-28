@@ -3,6 +3,14 @@ import java.io.*;
 public class ComprehensiveIOTest {
     private static int passed = 0;
     private static int failed = 0;
+
+    public static int getPassed() {
+        return passed;
+    }
+
+    public static int getFailed() {
+        return failed;
+    }
     
     public static void main(String[] args) {
         System.out.println("=== Comprehensive I/O Stream Test ===");
