@@ -20,8 +20,8 @@
 #include "../native/javax_microedition_lcdui_game_GameCanvas.hpp"
 #include "../native/javax_microedition_lcdui_game_Sprite.hpp"
 #include "../native/javax_microedition_lcdui_game_TiledLayer.hpp"
-#include "../native/javax_microedition_media_Manager.hpp"
-#include "../native/j2me_media_AudioPlayer.hpp"
+// #include "../native/javax_microedition_media_Manager.hpp"
+// #include "../native/j2me_media_AudioPlayer.hpp"
 #include "../native/javax_microedition_rms_RecordStore.hpp"
 #include "../native/java_util_Timer.hpp"
 #include "../native/javax_microedition_io_Connector.hpp"
@@ -57,9 +57,9 @@ NativeRegistry::NativeRegistry() {
     j2me::natives::registerGameCanvasNatives(*this);
     j2me::natives::registerSpriteNatives(*this);
     j2me::natives::registerTiledLayerNatives(*this);
-    j2me::natives::registerMediaNatives(*this);
-    j2me::natives::registerAudioPlayerNatives(*this);
-    j2me::natives::registerAudioVolumeControlNatives(*this);
+    // j2me::natives::registerMediaNatives(*this);
+    // j2me::natives::registerAudioPlayerNatives(*this);
+    // j2me::natives::registerAudioVolumeControlNatives(*this);
     j2me::natives::registerRecordStoreNatives(*this);
     j2me::natives::registerTimerNatives(*this);
     j2me::natives::registerConnectorNatives(*this);
