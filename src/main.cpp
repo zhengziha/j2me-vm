@@ -51,8 +51,8 @@ bool needsGUI(j2me::loader::JarLoader* loader, const std::string& className) {
         if (clsName.size() >= 6 && clsName.substr(clsName.size()-6) == ".class") 
             clsName = clsName.substr(0, clsName.size()-6);
         
+        std::replace(clsName.begin(), clsName.end(), '.', '/');
         std::string classPath = clsName + ".class";
-        std::replace(classPath.begin(), classPath.end(), '.', '/');
         
         auto classData = loader->getFile(classPath);
         if (!classData) return false;
@@ -88,7 +88,11 @@ bool needsGUI(j2me::loader::JarLoader* loader, const std::string& className) {
             
             std::string superName = superNameInfo->bytes;
             if (superName == "java/lang/Object") break;
-            
+
+            if (superName == "javax/microedition/midlet/MIDlet" || 
+                superName == "javax/microedition/lcdui/Displayable") {
+                return true;
+            }
             std::string superClassPath = superName + ".class";
             auto superClassData = loader->getFile(superClassPath);
             if (!superClassData) break;
