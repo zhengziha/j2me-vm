@@ -52,6 +52,16 @@ long NativeInputStream::skip(long n) {
     return (long)toSkip;
 }
 
+void NativeInputStream::seek(long pos) {
+    if (pos < 0) {
+        position = 0;
+    } else if (pos >= (long)data.size()) {
+        position = data.size();
+    } else {
+        position = (size_t)pos;
+    }
+}
+
 int NativeInputStream::available() {
     if (position >= data.size()) return 0;
     return (int)(data.size() - position);

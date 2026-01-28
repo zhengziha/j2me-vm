@@ -20,6 +20,7 @@ if [ $? -eq 0 ]; then
     
     # Clean up
     rm -f build/sources.txt
+    rm -rf stubs/rt.jar
     
     echo "stubs/rt.jar created successfully"
     echo "Source files: stubs/"

@@ -34,7 +34,7 @@ void JavaClass::link(std::shared_ptr<JavaClass> parent) {
         auto nameInfo = std::dynamic_pointer_cast<ConstantUtf8>(rawFile->constant_pool[field.name_index]);
         auto descInfo = std::dynamic_pointer_cast<ConstantUtf8>(rawFile->constant_pool[field.descriptor_index]);
         
-        std::cerr << "[JavaClass::link]   Field: " << nameInfo->bytes << " desc=" << descInfo->bytes << " access_flags=" << field.access_flags << std::endl;
+        //std::cerr << "[JavaClass::link]   Field: " << nameInfo->bytes << " desc=" << descInfo->bytes << " access_flags=" << field.access_flags << std::endl;
         
         std::string key = nameInfo->bytes + "|" + descInfo->bytes;
         

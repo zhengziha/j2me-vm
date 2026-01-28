@@ -12,8 +12,8 @@ mkdir -p tests/classes
 javac -d tests/classes -cp stubs/rt.jar tests/src/*.java
 
 if [ $? -eq 0 ]; then
-    # Create JAR file from compiled classes
-    jar cfm tests.jar tests/META-INF/MANIFEST.MF -C tests/classes .
+    # Create JAR file from compiled classes and resource files
+    jar cfm tests.jar tests/META-INF/MANIFEST.MF -C tests/classes . tests/test_res.bin
     
     echo "tests.jar created successfully"
     echo "Source files: tests/src/"

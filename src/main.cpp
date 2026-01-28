@@ -40,8 +40,66 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 #include "core/J2MEVM.hpp"
 #include "core/Logger.hpp"
 #include "core/EventLoop.hpp"
+#include "core/ClassParser.hpp"
 #include "platform/GraphicsContext.hpp"
 #include "util/FileUtils.hpp"
+
+// 辅助函数：检测类是否需要GUI（继承MIDlet或Displayable）
+bool needsGUI(j2me::loader::JarLoader* loader, const std::string& className) {
+    try {
+        std::string clsName = className;
+        if (clsName.size() >= 6 && clsName.substr(clsName.size()-6) == ".class") 
+            clsName = clsName.substr(0, clsName.size()-6);
+        
+        std::string classPath = clsName + ".class";
+        std::replace(classPath.begin(), classPath.end(), '.', '/');
+        
+        auto classData = loader->getFile(classPath);
+        if (!classData) return false;
+        
+        j2me::core::ClassParser parser;
+        auto classFile = parser.parse(*classData);
+        
+        auto currentClass = classFile;
+        while (true) {
+            if (currentClass->this_class == 0) break;
+            auto thisClass = std::dynamic_pointer_cast<j2me::core::ConstantClass>(
+                currentClass->constant_pool[currentClass->this_class]);
+            if (!thisClass) break;
+            
+            auto nameInfo = std::dynamic_pointer_cast<j2me::core::ConstantUtf8>(
+                currentClass->constant_pool[thisClass->name_index]);
+            if (!nameInfo) break;
+            
+            std::string name = nameInfo->bytes;
+            if (name == "javax/microedition/midlet/MIDlet" || 
+                name == "javax/microedition/lcdui/Displayable") {
+                return true;
+            }
+            
+            if (currentClass->super_class == 0) break;
+            auto superClass = std::dynamic_pointer_cast<j2me::core::ConstantClass>(
+                currentClass->constant_pool[currentClass->super_class]);
+            if (!superClass) break;
+            
+            auto superNameInfo = std::dynamic_pointer_cast<j2me::core::ConstantUtf8>(
+                currentClass->constant_pool[superClass->name_index]);
+            if (!superNameInfo) break;
+            
+            std::string superName = superNameInfo->bytes;
+            if (superName == "java/lang/Object") break;
+            
+            std::string superClassPath = superName + ".class";
+            auto superClassData = loader->getFile(superClassPath);
+            if (!superClassData) break;
+            
+            currentClass = parser.parse(*superClassData);
+        }
+    } catch (...) {
+        return false;
+    }
+    return false;
+}
 
 // 辅助函数：解析 Manifest 文件以获取 MIDlet-1 类名
 // Helper to parse Manifest for MIDlet-1
@@ -159,6 +217,8 @@ int main(int argc, char* argv[]) {
 
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
+        std::cerr << "DEBUG: Processing arg[" << i << "] = '" << arg << "', starts with '-': " << (arg[0] == '-' ? "true" : "false") << std::endl;
+        std::cerr << "DEBUG: config.filePath = '" << config.filePath << "', config.mainMethodArgs.size() = " << config.mainMethodArgs.size() << std::endl;
         if (arg == "--debug") {
             config.logLevel = j2me::core::LogLevel::DEBUG;
         } else if (arg == "--log-level" && i + 1 < argc) {
@@ -194,7 +254,11 @@ int main(int argc, char* argv[]) {
             config.autoKeyDelayMs = std::stoll(argv[++i]);
             if (config.autoKeyDelayMs < 0) config.autoKeyDelayMs = 0;
         } else if (arg[0] != '-') {
-            config.filePath = arg;
+            if (config.filePath.empty()) {
+                config.filePath = arg;
+            } else {
+                config.mainMethodArgs.push_back(arg);
+            }
         }
     }
 
@@ -219,51 +283,18 @@ int main(int argc, char* argv[]) {
     // Set log level global
     j2me::core::Logger::getInstance().setLevel(config.logLevel);
 
-    // 初始化 SDL (必须在主线程中进行)
-    // Initialize SDL (MUST BE ON MAIN THREAD)
-    // SDL_INIT_VIDEO: 初始化视频子系统
-    // SDL_INIT_AUDIO: 初始化音频子系统
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
-        LOG_ERROR("SDL could not initialize! SDL_Error: " + std::string(SDL_GetError()));
-    } else {
-        LOG_INFO("SDL Initialized.");
-    }
-
     std::signal(SIGINT, [](int) {
         j2me::core::EventLoop::getInstance().requestExit("manual: SIGINT");
     });
     std::signal(SIGTERM, [](int) {
         j2me::core::EventLoop::getInstance().requestExit("manual: SIGTERM");
     });
-
-    // 创建窗口
-    // Create window
-    // 初始大小设置为 3 倍缩放 (240x320) 以适应现代屏幕
-    // Initial size set to 3x scale (240x320) for better visibility on modern screens   
-    // SDL_WINDOW_ALLOW_HIGHDPI: 支持高 DPI 显示器 (如 Retina 屏幕)
-    SDL_Window* window = SDL_CreateWindow("J2ME Emulator",
-                                          SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-                                          240, 320, 
-                                          SDL_WINDOW_SHOWN | SDL_WINDOW_ALLOW_HIGHDPI);
-    if (window == nullptr) {
-        LOG_ERROR("Window could not be created! SDL_Error: " + std::string(SDL_GetError()));
-        return 1;
-    }
-    LOG_INFO("Window Created.");
-
-    SDL_SetWindowResizable(window, SDL_FALSE);
-    SDL_SetWindowMinimumSize(window, 240, 320);
-    SDL_SetWindowMaximumSize(window, 240, 320);
-    
-    // 初始化图形上下文，设置逻辑分辨率 (240x320)
-    // Init Graphics Context with Logical Resolution (240x320)
-    // 所有的绘图操作都基于这个逻辑分辨率，最后会缩放到实际窗口大小
-    // All drawing operations are based on this logical resolution, and scaled to window size at the end
-    j2me::platform::GraphicsContext::getInstance().init(window, 240, 320);
     
     // 检查是否为 .class 文件
     // Check if it's a .class file
+    std::cerr << "DEBUG: Checking if '" << config.filePath << "' is a .class file" << std::endl;
     config.isClass = j2me::util::FileUtils::isClassFile(config.filePath);
+    std::cerr << "DEBUG: isClassFile result: " << (config.isClass ? "true" : "false") << std::endl;
     
     // 加载 Loader
     // Load Loaders
@@ -367,6 +398,47 @@ int main(int argc, char* argv[]) {
         LOG_INFO("[Exit] Auto-timeout enabled: " + std::to_string(timeoutMs) + "ms");
     }
 
+    // 检查是否需要GUI
+    bool needsWindow = false;
+    if (!config.mainClassName.empty()) {
+        needsWindow = needsGUI(config.appLoader.get(), config.mainClassName);
+        LOG_INFO("GUI required: " + std::string(needsWindow ? "true" : "false"));
+    }
+
+    // 初始化SDL和窗口（仅当需要时）
+    SDL_Window* window = nullptr;
+    SDL_Surface* screenSurface = nullptr;
+    if (needsWindow) {
+        if (SDL_Init(SDL_INIT_VIDEO) < 0) {
+            LOG_ERROR("SDL initialization failed: " + std::string(SDL_GetError()));
+            return 1;
+        }
+        
+        #ifdef __SWITCH__
+        romfsInit();
+        LOG_INFO("Initialized romfs");
+        #endif
+
+        window = SDL_CreateWindow("J2ME VM", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 240, 320, SDL_WINDOW_SHOWN);
+        if (!window) {
+            LOG_ERROR("Window creation failed: " + std::string(SDL_GetError()));
+            SDL_Quit();
+            return 1;
+        }
+
+        screenSurface = SDL_GetWindowSurface(window);
+        if (!screenSurface) {
+            LOG_ERROR("Failed to get window surface: " + std::string(SDL_GetError()));
+            SDL_DestroyWindow(window);
+            SDL_Quit();
+            return 1;
+        }
+
+        j2me::platform::GraphicsContext::getInstance().init(window, 240, 320);
+        
+        LOG_INFO("SDL and window initialized successfully");
+    }
+
     // 运行虚拟机
     // Run VM
     LOG_INFO("Starting VM with config: filePath='" + config.filePath + "', mainClassName='" + config.mainClassName + "'");
@@ -398,10 +470,20 @@ int main(int argc, char* argv[]) {
         }
     }
     
-    LOG_INFO("VM Stopped. Cleaning up SDL.");
-
-    SDL_DestroyWindow(window);
-    SDL_Quit();
+    // 清理SDL（仅当初始化过时）
+    if (needsWindow) {
+        LOG_INFO("VM Stopped. Cleaning up SDL.");
+        if (window) {
+            SDL_DestroyWindow(window);
+        }
+        SDL_Quit();
+        #ifdef __SWITCH__
+        romfsExit();
+        LOG_INFO("Exited romfs");
+        #endif
+    } else {
+        LOG_INFO("VM Stopped (headless mode, no SDL cleanup needed).");
+    }
     
     #ifdef __SWITCH__
     romfsExit();

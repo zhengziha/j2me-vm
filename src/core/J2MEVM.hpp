@@ -35,13 +35,19 @@ private:
     // 以无头模式运行 (标准的 public static void main)
     void runHeadless();
 
-    // Run as a MIDlet (J2ME lifecycle: init, startApp, etc.)
+    // 运行作为 MIDlet 运行 (J2ME 生命周期: init, startApp 等)
     // 作为 MIDlet 运行 (J2ME 生命周期: init, startApp 等)
     void runMIDlet();
+    
+    // 判断是否需要图形界面 (MIDlet 或 Displayable)
+    // 判断是否需要图形界面 (MIDlet 或 Displayable)
+    bool needsGUI();
     
     // Helpers
     // 辅助函数: 判断是否为 MIDlet 类
     bool isMIDletClass(std::shared_ptr<JavaClass> cls);
+    // 辅助函数: 判断是否为 Displayable 类
+    bool isDisplayableClass(std::shared_ptr<JavaClass> cls);
     // 辅助函数: 判断是否有 main 方法
     bool hasMainMethod(std::shared_ptr<JavaClass> cls);
     // 查找并运行构造函数 <init>

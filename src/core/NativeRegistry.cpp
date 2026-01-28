@@ -25,6 +25,7 @@
 #include "../native/javax_microedition_rms_RecordStore.hpp"
 #include "../native/java_util_Timer.hpp"
 #include "../native/javax_microedition_io_Connector.hpp"
+#include "../native/java_io_RandomAccessFile.hpp"
 #include "../native/java_lang_Class.hpp"
 #include <iostream>
 
@@ -62,16 +63,187 @@ NativeRegistry::NativeRegistry() {
     j2me::natives::registerRecordStoreNatives(*this);
     j2me::natives::registerTimerNatives(*this);
     j2me::natives::registerConnectorNatives(*this);
+    j2me::natives::registerRandomAccessFileNatives(*this);
+
+    // java/lang/AbstractStringBuilder.<init>(I)V
+    registerNative("java/lang/AbstractStringBuilder", "<init>", "(I)V", [](std::shared_ptr<JavaThread> thread, std::shared_ptr<StackFrame> frame) {
+        JavaValue capacityVal = frame->pop();
+        JavaValue thisVal = frame->pop();
+        JavaObject* thisObj = (JavaObject*)thisVal.val.ref;
+        if (thisObj) {
+            std::string* str = new std::string();
+            if (thisObj->fields.size() < 1) thisObj->fields.resize(1);
+            thisObj->fields[0] = (int64_t)str;
+        }
+    });
+
+    // java/lang/AbstractStringBuilder.append(Ljava/lang/String;)Ljava/lang/AbstractStringBuilder;
+    registerNative("java/lang/AbstractStringBuilder", "append", "(Ljava/lang/String;)Ljava/lang/AbstractStringBuilder;", [](std::shared_ptr<JavaThread> thread, std::shared_ptr<StackFrame> frame) {
+        JavaValue strVal = frame->pop();
+        JavaValue thisVal = frame->pop();
+        JavaObject* thisObj = (JavaObject*)thisVal.val.ref;
+        
+        if (thisObj && !thisObj->fields.empty()) {
+            std::string* str = (std::string*)thisObj->fields[0];
+            if (str) {
+                if (strVal.type == JavaValue::REFERENCE && strVal.val.ref != nullptr) {
+                     JavaObject* sObj = (JavaObject*)strVal.val.ref;
+                     std::string s = j2me::natives::getJavaString(sObj);
+                     str->append(s);
+                } else if (strVal.type == JavaValue::REFERENCE && strVal.val.ref == nullptr) {
+                     str->append("null");
+                }
+            }
+        }
+        frame->push(thisVal);
+    });
+
+    // java/lang/AbstractStringBuilder.append(I)Ljava/lang/AbstractStringBuilder;
+    registerNative("java/lang/AbstractStringBuilder", "append", "(I)Ljava/lang/AbstractStringBuilder;", [](std::shared_ptr<JavaThread> thread, std::shared_ptr<StackFrame> frame) {
+        JavaValue intVal = frame->pop();
+        JavaValue thisVal = frame->pop();
+        JavaObject* thisObj = (JavaObject*)thisVal.val.ref;
+        
+        if (thisObj && !thisObj->fields.empty()) {
+            std::string* str = (std::string*)thisObj->fields[0];
+            if (str) {
+                str->append(std::to_string(intVal.val.i));
+            }
+        }
+        frame->push(thisVal);
+    });
+
+    // java/lang/AbstractStringBuilder.append(Ljava/lang/Object;)Ljava/lang/AbstractStringBuilder;
+    registerNative("java/lang/AbstractStringBuilder", "append", "(Ljava/lang/Object;)Ljava/lang/AbstractStringBuilder;", [](std::shared_ptr<JavaThread> thread, std::shared_ptr<StackFrame> frame) {
+        JavaValue objVal = frame->pop();
+        JavaValue thisVal = frame->pop();
+        JavaObject* thisObj = (JavaObject*)thisVal.val.ref;
+        
+        if (thisObj && !thisObj->fields.empty()) {
+            std::string* str = (std::string*)thisObj->fields[0];
+            if (str) {
+                std::string objStr = "null";
+                if (objVal.type == JavaValue::REFERENCE && objVal.val.ref != nullptr) {
+                    JavaObject* obj = (JavaObject*)objVal.val.ref;
+                    if (obj && obj->cls && obj->cls->name == "java/lang/String") {
+                        objStr = j2me::natives::getJavaString(obj);
+                    } else {
+                        objStr = "Object";
+                    }
+                }
+                str->append(objStr);
+            }
+        }
+        frame->push(thisVal);
+    });
+
+    // java/lang/AbstractStringBuilder.append(Ljava/lang/CharSequence;)Ljava/lang/AbstractStringBuilder;
+    registerNative("java/lang/AbstractStringBuilder", "append", "(Ljava/lang/CharSequence;)Ljava/lang/AbstractStringBuilder;", [](std::shared_ptr<JavaThread> thread, std::shared_ptr<StackFrame> frame) {
+        JavaValue csVal = frame->pop();
+        JavaValue thisVal = frame->pop();
+        JavaObject* thisObj = (JavaObject*)thisVal.val.ref;
+        
+        if (thisObj && !thisObj->fields.empty()) {
+            std::string* str = (std::string*)thisObj->fields[0];
+            if (str && csVal.type == JavaValue::REFERENCE && csVal.val.ref != nullptr) {
+                JavaObject* cs = (JavaObject*)csVal.val.ref;
+                if (cs && cs->cls && cs->cls->name == "java/lang/String") {
+                    str->append(j2me::natives::getJavaString(cs));
+                }
+            }
+        }
+        frame->push(thisVal);
+    });
+
+    // java/lang/AbstractStringBuilder.append([C)Ljava/lang/AbstractStringBuilder;
+    registerNative("java/lang/AbstractStringBuilder", "append", "([C)Ljava/lang/AbstractStringBuilder;", [](std::shared_ptr<JavaThread> thread, std::shared_ptr<StackFrame> frame) {
+        JavaValue arrVal = frame->pop();
+        JavaValue thisVal = frame->pop();
+        JavaObject* thisObj = (JavaObject*)thisVal.val.ref;
+        
+        if (thisObj && !thisObj->fields.empty()) {
+            std::string* str = (std::string*)thisObj->fields[0];
+            if (str && arrVal.type == JavaValue::REFERENCE && arrVal.val.ref != nullptr) {
+                JavaObject* arr = (JavaObject*)arrVal.val.ref;
+                if (arr && !arr->fields.empty()) {
+                    size_t len = arr->fields.size();
+                    for (size_t i = 0; i < len; i++) {
+                        char c = (char)(arr->fields[i] & 0xFF);
+                        str->append(1, c);
+                    }
+                }
+            }
+        }
+        frame->push(thisVal);
+    });
+
+    // java/lang/AbstractStringBuilder.length()I
+    registerNative("java/lang/AbstractStringBuilder", "length", "()I", [](std::shared_ptr<JavaThread> thread, std::shared_ptr<StackFrame> frame) {
+        JavaValue thisVal = frame->pop();
+        JavaValue result;
+        result.type = JavaValue::INT;
+        result.val.i = 0;
+
+        JavaObject* thisObj = (JavaObject*)thisVal.val.ref;
+        if (thisObj && !thisObj->fields.empty()) {
+            std::string* str = (std::string*)thisObj->fields[0];
+            if (str) {
+                result.val.i = (int32_t)str->length();
+            }
+        }
+        frame->push(result);
+    });
+
+    // java/lang/AbstractStringBuilder.capacity()I
+    registerNative("java/lang/AbstractStringBuilder", "capacity", "()I", [](std::shared_ptr<JavaThread> thread, std::shared_ptr<StackFrame> frame) {
+        JavaValue thisVal = frame->pop();
+        JavaValue result;
+        result.type = JavaValue::INT;
+        result.val.i = 2147483647; // Return max int for simplicity
+        
+        JavaObject* thisObj = (JavaObject*)thisVal.val.ref;
+        if (thisObj && !thisObj->fields.empty()) {
+            std::string* str = (std::string*)thisObj->fields[0];
+            if (str) {
+                result.val.i = (int32_t)str->capacity();
+            }
+        }
+        frame->push(result);
+    });
+
+    // java/lang/AbstractStringBuilder.toString()Ljava/lang/String;
+    registerNative("java/lang/AbstractStringBuilder", "toString", "()Ljava/lang/String;", [](std::shared_ptr<JavaThread> thread, std::shared_ptr<StackFrame> frame) {
+        JavaValue thisVal = frame->pop();
+        JavaValue result;
+        result.type = JavaValue::REFERENCE;
+        result.val.ref = nullptr;
+        
+        JavaObject* thisObj = (JavaObject*)thisVal.val.ref;
+        if (thisObj && !thisObj->fields.empty()) {
+            std::string* str = (std::string*)thisObj->fields[0];
+            if (str) {
+                auto interpreter = NativeRegistry::getInstance().getInterpreter();
+                if (interpreter) {
+                    result.val.ref = j2me::natives::createJavaString(interpreter, *str);
+                }
+            }
+        }
+        frame->push(result);
+    });
 
     // java/lang/StringBuilder.initNative()V
     registerNative("java/lang/StringBuilder", "initNative", "()V", [](std::shared_ptr<JavaThread> thread, std::shared_ptr<StackFrame> frame) {
         JavaValue thisVal = frame->pop();
         JavaObject* thisObj = (JavaObject*)thisVal.val.ref;
         if (thisObj) {
+            std::cerr << "DEBUG: StringBuilder.initNative() called, fields.size() = " << thisObj->fields.size() << std::endl;
             std::string* str = new std::string();
             // Store pointer in first field (ensure size)
             if (thisObj->fields.size() < 1) thisObj->fields.resize(1);
             thisObj->fields[0] = (int64_t)str;
+            std::cerr << "DEBUG: StringBuilder.initNative() completed, fields.size() = " << thisObj->fields.size() << std::endl;
+        } else {
+            std::cerr << "DEBUG: StringBuilder.initNative() called with null thisObj!" << std::endl;
         }
     });
 

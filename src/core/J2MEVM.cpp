@@ -8,6 +8,7 @@
 #include "TimerManager.hpp"
 #include "Diagnostics.hpp"
 #include "../native/javax_microedition_lcdui_Display.hpp"
+#include "../native/java_lang_String.hpp"
 #include "../platform/GraphicsContext.hpp"
 #include "../util/FileUtils.hpp"
 #include <iostream>
@@ -53,18 +54,32 @@ int J2MEVM::run(const VMConfig& config) {
     try {
         bool isMIDlet = isMIDletClass(mainClass);
         bool hasMain = hasMainMethod(mainClass);
+        bool isJAR = !config.isClass;
 
-        if (hasMain && !isMIDlet) {
-            // 如果有 main 方法且不是 MIDlet，则以标准 Java 程序模式运行
-            // If it has a main method and is not a MIDlet, run as a standard Java program
-            runHeadless();
-        } else if (isMIDlet) {
-            // 否则作为 MIDlet (J2ME 应用) 运行
-            // Otherwise run as a MIDlet (J2ME application)
-            runMIDlet();
+        if (isJAR) {
+            // JAR包执行优先级：Main-Class.main > MIDlet-1
+            if (hasMain) {
+                LOG_INFO("JAR mode: Running Main-Class.main method");
+                runHeadless();
+            } else if (isMIDlet) {
+                LOG_INFO("JAR mode: Running as MIDlet");
+                runMIDlet();
+            } else {
+                LOG_ERROR("JAR has no Main-Class.main and is not a MIDlet. Cannot run.");
+                return 1;
+            }
         } else {
-            LOG_ERROR("Class is not a MIDlet and has no main method. Cannot run.");
-            return 1;
+            // 单个class文件执行
+            if (hasMain) {
+                LOG_INFO("Class mode: Running main method (headless)");
+                runHeadless();
+            } else if (isMIDlet || isDisplayableClass(mainClass)) {
+                LOG_INFO("Class mode: Running as J2ME application");
+                runMIDlet();
+            } else {
+                LOG_ERROR("Class is not a MIDlet/Displayable and has no main method. Cannot run.");
+                return 1;
+            }
         }
     } catch (const std::exception& e) {
         abortOnUnhandledException("J2MEVM::run", e.what());
@@ -157,12 +172,21 @@ void J2MEVM::runHeadless() {
         if (name && desc && name->bytes == "main" && desc->bytes == "([Ljava/lang/String;)V") {
             auto frame = std::make_shared<StackFrame>(method, mainClass->rawFile);
             
-            // 创建 args 数组 (目前为空)
-            // Create args array (currently empty)
+            // 创建 args 数组并填充参数
+            // Create args array and populate with arguments
             auto arrayCls = interpreter->resolveClass("[Ljava/lang/String;");
             if (arrayCls) {
                 auto arrayObj = HeapManager::getInstance().allocate(arrayCls);
-                arrayObj->fields.resize(0);
+                size_t argCount = currentConfig.mainMethodArgs.size();
+                arrayObj->fields.resize(argCount);
+                
+                // 将每个参数转换为 Java String 对象
+                // Convert each argument to Java String object
+                auto stringCls = interpreter->resolveClass("java/lang/String");
+                for (size_t i = 0; i < argCount && stringCls; i++) {
+                    auto stringObj = j2me::natives::createJavaString(interpreter.get(), currentConfig.mainMethodArgs[i]);
+                    arrayObj->fields[i] = reinterpret_cast<int64_t>(stringObj);
+                }
                 
                 JavaValue vArgs;
                 vArgs.type = JavaValue::REFERENCE;
@@ -534,6 +558,23 @@ bool J2MEVM::isMIDletClass(std::shared_ptr<JavaClass> cls) {
         current = current->superClass;
     }
     return false;
+}
+
+bool J2MEVM::isDisplayableClass(std::shared_ptr<JavaClass> cls) {
+    if (!cls) return false;
+    auto current = cls;
+    while (current) {
+        if (current->name == "javax/microedition/lcdui/Displayable") {
+            return true;
+        }
+        current = current->superClass;
+    }
+    return false;
+}
+
+bool J2MEVM::needsGUI() {
+    if (!mainClass) return false;
+    return isMIDletClass(mainClass) || isDisplayableClass(mainClass);
 }
 
 bool J2MEVM::hasMainMethod(std::shared_ptr<JavaClass> cls) {

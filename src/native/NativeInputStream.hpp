@@ -13,6 +13,7 @@ public:
     int read();
     int read(uint8_t* buffer, int len);
     long skip(long n);
+    void seek(long pos);
     int available();
     void close();
     

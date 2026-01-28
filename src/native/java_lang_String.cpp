@@ -578,7 +578,7 @@ void registerStringNatives(j2me::core::NativeRegistry& registry) {
                                 if (offsetIt != thisObj->cls->fieldOffsets.end()) thisObj->fields[offsetIt->second] = 0;
                                 
                                 converted = true;
-                                std::cout << "[String.<init>([CII)] Using original Latin1 chars" << std::endl;
+                                //std::cout << "[String.<init>([CII)] Using original Latin1 chars" << std::endl;
                             }
                         }
                         

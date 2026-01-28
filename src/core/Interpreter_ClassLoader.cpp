@@ -12,6 +12,9 @@ std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& classNam
     auto it = loadedClasses.find(className);
     if (it != loadedClasses.end()) {
         // std::cerr << "Already loaded: " << className << std::endl;
+        if (className == "java/lang/StringBuilder") {
+            std::cerr << "DEBUG: StringBuilder already loaded from cache" << std::endl;
+        }
         return it->second;
     }
 
@@ -19,6 +22,10 @@ std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& classNam
     // Class name in JAR usually ends with .class, but internal name doesn't
     // 尝试从 JAR 加载。JAR 中的文件名通常以 .class 结尾，但内部类名不带后缀
     std::string path = className + ".class";
+    
+    if (className == "java/lang/StringBuilder") {
+        std::cerr << "DEBUG: Checking for StringBuilder.class, jarLoader.hasFile=" << jarLoader.hasFile(path) << std::endl;
+    }
     
     // Check if file exists
     // 检查文件是否存在
@@ -36,6 +43,9 @@ std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& classNam
                         auto javaClass = std::make_shared<JavaClass>(rawFile);
                         
                         LOG_DEBUG("[Interpreter] Parsed " + className + " from library, fields=" + std::to_string(rawFile->fields.size()));
+                        if (className == "java/lang/StringBuilder") {
+                            LOG_DEBUG("[Interpreter] Loaded StringBuilder from rt.jar, methods=" + std::to_string(rawFile->methods.size()));
+                        }
                         
                         if (rawFile->super_class != 0) {
                             auto superInfo = std::dynamic_pointer_cast<ConstantClass>(rawFile->constant_pool[rawFile->super_class]);
@@ -81,9 +91,10 @@ std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& classNam
         }
     }
 
-        // Mock java/lang/Object if missing (it's the root of everything)
-        // 如果缺少 java/lang/Object，则模拟它 (它是所有类的根)
-        if (className == "java/lang/Object") {
+        // Mock java/lang/Object
+        if (className == "java/lang/Object"
+            && !jarLoader.hasFile("java/lang/Object.class")
+            && (!libraryLoader || !libraryLoader->hasFile("java/lang/Object.class"))) {
              LOG_ERROR("[Interpreter] Creating mock Object class - this should not happen!");
              // Return a dummy ClassFile for Object so we stop recursion
              // 返回一个虚拟的 Object ClassFile 以停止递归
@@ -122,9 +133,48 @@ std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& classNam
              return javaClass;
         }
 
-        // Mock java/lang/StringBuffer to ensure we use our Native implementation
-        // 模拟 java/lang/StringBuffer 以确保使用我们的本地实现
-        if (className == "java/lang/StringBuffer") {
+        // Mock java/lang/AbstractStringBuilder - parent class of StringBuilder and StringBuffer
+        if (className == "java/lang/AbstractStringBuilder"
+            && !jarLoader.hasFile("java/lang/AbstractStringBuilder.class")
+            && (!libraryLoader || !libraryLoader->hasFile("java/lang/AbstractStringBuilder.class"))) {
+             auto dummy = std::make_shared<ClassFile>();
+             auto javaClass = std::make_shared<JavaClass>(dummy);
+             javaClass->name = "java/lang/AbstractStringBuilder";
+             javaClass->instanceSize = 1; // ID for native map
+             
+             auto addMethod = [&](const std::string& name, const std::string& desc) {
+                 MethodInfo m;
+                 m.access_flags = 0x0101; // ACC_PUBLIC | ACC_NATIVE
+                 
+                 auto nameConst = std::make_shared<ConstantUtf8>(); nameConst->tag = CONSTANT_Utf8; nameConst->bytes = name;
+                 dummy->constant_pool.push_back(nameConst);
+                 m.name_index = dummy->constant_pool.size() - 1;
+                 
+                 auto descConst = std::make_shared<ConstantUtf8>(); descConst->tag = CONSTANT_Utf8; descConst->bytes = desc;
+                 dummy->constant_pool.push_back(descConst);
+                 m.descriptor_index = dummy->constant_pool.size() - 1;
+                 
+                 dummy->methods.push_back(m);
+             };
+
+             addMethod("<init>", "(I)V");
+             addMethod("append", "(Ljava/lang/String;)Ljava/lang/AbstractStringBuilder;");
+             addMethod("append", "(I)Ljava/lang/AbstractStringBuilder;");
+             addMethod("append", "(Ljava/lang/Object;)Ljava/lang/AbstractStringBuilder;");
+             addMethod("append", "(Ljava/lang/CharSequence;)Ljava/lang/AbstractStringBuilder;");
+             addMethod("append", "([C)Ljava/lang/AbstractStringBuilder;");
+             addMethod("length", "()I");
+             addMethod("capacity", "()I");
+             addMethod("toString", "()Ljava/lang/String;");
+
+             loadedClasses[className] = javaClass;
+             return javaClass;
+        }
+
+        // Mock java/lang/StringBuffer
+        if (className == "java/lang/StringBuffer"
+            && !jarLoader.hasFile("java/lang/StringBuffer.class")
+            && (!libraryLoader || !libraryLoader->hasFile("java/lang/StringBuffer.class"))) {
              auto dummy = std::make_shared<ClassFile>();
              auto javaClass = std::make_shared<JavaClass>(dummy);
              javaClass->name = "java/lang/StringBuffer";
@@ -156,9 +206,12 @@ std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& classNam
              return javaClass;
         }
 
-        // Mock java/lang/StringBuilder to ensure we use our Native implementation
-        // 模拟 java/lang/StringBuilder
-        if (className == "java/lang/StringBuilder") {
+        // Mock java/lang/StringBuilder
+        if (className == "java/lang/StringBuilder"
+            && !jarLoader.hasFile("java/lang/StringBuilder.class")
+            && (!libraryLoader || !libraryLoader->hasFile("java/lang/StringBuilder.class"))) {
+             std::cerr << "DEBUG: Creating mock StringBuilder class (both loaders missing)" << std::endl;
+             LOG_DEBUG("[Interpreter] Creating mock StringBuilder class");
              auto dummy = std::make_shared<ClassFile>();
              auto javaClass = std::make_shared<JavaClass>(dummy);
              javaClass->name = "java/lang/StringBuilder";

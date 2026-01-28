@@ -24,6 +24,8 @@ struct VMConfig {
     int64_t autoKeyDelayMs = 1200;
     int64_t autoKeyPressMs = 40;
     int64_t autoKeyBetweenKeysMs = 200;
+    bool guiInitialized = false; // GUI是否已初始化
+    std::vector<std::string> mainMethodArgs; // main方法参数
 };
 
 }
