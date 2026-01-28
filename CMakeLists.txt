@@ -16,12 +16,19 @@ endif()
 # Find libzip
 find_package(libzip REQUIRED)
 
+# Find minizip
+find_library(MINIZIP_LIB minizip)
+if(NOT MINIZIP_LIB)
+    message(FATAL_ERROR "minizip not found! Run: brew install minizip")
+endif()
+
 # Include directories
 include_directories(
     ${PROJECT_SOURCE_DIR}/src
     ${SDL2_INCLUDE_DIRS}
     /usr/local/include/SDL2
     /opt/homebrew/include/SDL2
+    /opt/homebrew/include
 )
 
 # Source files
@@ -31,4 +38,4 @@ file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS "src/*.cpp")
 add_executable(j2me-vm ${SOURCES})
 
 # Link libraries
-target_link_libraries(j2me-vm ${SDL2_LIBRARIES} ${SDL2_TTF_LIB} libzip::zip iconv)
+target_link_libraries(j2me-vm ${SDL2_LIBRARIES} ${SDL2_TTF_LIB} ${MINIZIP_LIB} libzip::zip iconv)
