@@ -411,7 +411,6 @@ int main(int argc, char* argv[]) {
 
     // 初始化SDL和窗口（仅当需要时）
     SDL_Window* window = nullptr;
-    SDL_Surface* screenSurface = nullptr;
     if (needsWindow) {
         if (SDL_Init(SDL_INIT_VIDEO) < 0) {
             LOG_ERROR("SDL initialization failed: " + std::string(SDL_GetError()));
@@ -426,14 +425,6 @@ int main(int argc, char* argv[]) {
         window = SDL_CreateWindow("J2ME VM", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 240, 320, SDL_WINDOW_SHOWN);
         if (!window) {
             LOG_ERROR("Window creation failed: " + std::string(SDL_GetError()));
-            SDL_Quit();
-            return 1;
-        }
-
-        screenSurface = SDL_GetWindowSurface(window);
-        if (!screenSurface) {
-            LOG_ERROR("Failed to get window surface: " + std::string(SDL_GetError()));
-            SDL_DestroyWindow(window);
             SDL_Quit();
             return 1;
         }
