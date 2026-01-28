@@ -33,5 +33,8 @@ public class MainTest {
         if (1+1==2){
             System.out.println("1+1=2 test passed");
         }
+        
+        System.out.println("\n\n=== Running Comprehensive I/O Test ===");
+        ComprehensiveIOTest.main(new String[]{});
     }
 }

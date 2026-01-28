@@ -780,7 +780,6 @@ void Interpreter::initReferences() {
                                  methodClass = currentClass;
                                  method = std::make_shared<MethodInfo>(m);
                                  isNative = (m.access_flags & 0x0100) != 0;
-                                 if (NativeRegistry::getInstance().getNative(currentClass->name, name->bytes, descriptor->bytes)) isNative = true;
                                  
                                  // Cache the method for future calls
                                  // 缓存方法以供将来调用

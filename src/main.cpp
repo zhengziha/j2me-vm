@@ -46,6 +46,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 // 辅助函数：解析 Manifest 文件以获取 MIDlet-1 类名
 // Helper to parse Manifest for MIDlet-1
 std::string parseMidletClassName(const std::string& manifestContent) {
+    std::string mainClassLine;
     std::string midlet1Line;
     size_t pos = 0;
     while (pos < manifestContent.length()) {
@@ -53,11 +54,32 @@ std::string parseMidletClassName(const std::string& manifestContent) {
         if (end == std::string::npos) end = manifestContent.length();
         std::string line = manifestContent.substr(pos, end - pos);
         if (!line.empty() && line.back() == '\r') line.pop_back();
+        if (line.rfind("Main-Class:", 0) == 0) {
+            size_t colonPos = line.find(':');
+            if (colonPos != std::string::npos) {
+                mainClassLine = line.substr(colonPos + 1);
+                std::cerr << "DEBUG: Found Main-Class line, value: '" << mainClassLine << "'" << std::endl;
+                break;
+            }
+        }
         if (line.rfind("MIDlet-1:", 0) == 0) {
-            midlet1Line = line.substr(9);
-            break;
+            size_t colonPos = line.find(':');
+            if (colonPos != std::string::npos) {
+                midlet1Line = line.substr(colonPos + 1);
+            }
         }
         pos = end + 1;
+    }
+    
+    if (!mainClassLine.empty()) {
+        std::string className = mainClassLine;
+        size_t start = className.find_first_not_of(" \t");
+        if (start != std::string::npos) className = className.substr(start);
+        size_t end = className.find_last_not_of(" \t\r\n");
+        if (end != std::string::npos) className = className.substr(0, end + 1);
+        std::replace(className.begin(), className.end(), '.', '/');
+        std::cerr << "DEBUG: Returning main class: '" << className << ".class'" << std::endl;
+        return className + ".class";
     }
     
     if (!midlet1Line.empty()) {
@@ -75,6 +97,7 @@ std::string parseMidletClassName(const std::string& manifestContent) {
             }
         }
     }
+    std::cerr << "DEBUG: No main class found, returning empty string" << std::endl;
     return "";
 }
 
@@ -285,7 +308,10 @@ int main(int argc, char* argv[]) {
         LOG_ERROR("Warning: rt.jar not found. Library classes might be missing.");
     }
     
+    std::cerr << "DEBUG: isClass = " << (config.isClass ? "true" : "false") << std::endl;
+    
     if (config.isClass) {
+        std::cerr << "DEBUG: Entering .class mode" << std::endl;
         config.classData = j2me::util::FileUtils::readFile(config.filePath);
         if (!config.classData) {
             LOG_ERROR("Failed to read .class file: " + config.filePath);
@@ -304,8 +330,10 @@ int main(int argc, char* argv[]) {
         }
         std::replace(className.begin(), className.end(), '.', '/');
         config.mainClassName = className;
+        std::cerr << "DEBUG: Set mainClassName to: " << config.mainClassName << std::endl;
         
     } else {
+        std::cerr << "DEBUG: Entering JAR mode" << std::endl;
         // JAR 模式
         // JAR Mode
         LOG_INFO("Loading JAR: " + config.filePath);
@@ -317,25 +345,17 @@ int main(int argc, char* argv[]) {
         auto manifest = config.appLoader->getManifest();
         if (manifest) {
             LOG_INFO("Manifest found:\n" + *manifest);
+            std::cerr << "DEBUG: About to call parseMidletClassName" << std::endl;
             std::string midletClass = parseMidletClassName(*manifest);
+            std::cerr << "DEBUG: parseMidletClassName returned: '" << midletClass << "'" << std::endl;
             if (!midletClass.empty()) {
                 config.mainClassName = midletClass;
-                LOG_INFO("Found MIDlet-1 class: " + config.mainClassName);
+                LOG_INFO("Found main class from manifest: " + config.mainClassName);
+            } else {
+                LOG_INFO("No Main-Class or MIDlet-1 found in manifest");
             }
         } else {
              LOG_INFO("No Manifest found.");
-        }
-        
-        if (config.mainClassName.empty()) {
-            // 启发式回退策略
-            // Heuristic fallbacks
-            config.mainClassName = "HelloWorld.class";
-            if (!config.appLoader->hasFile(config.mainClassName)) config.mainClassName = "Point.class";
-            if (!config.appLoader->hasFile(config.mainClassName)) config.mainClassName = "GraphicsTest.class";
-            if (!config.appLoader->hasFile(config.mainClassName)) config.mainClassName = "InputTest.class";
-            if (!config.appLoader->hasFile(config.mainClassName)) config.mainClassName = "ResourceTest.class";
-            if (!config.appLoader->hasFile(config.mainClassName)) config.mainClassName = "RMSTest.class";
-            if (!config.appLoader->hasFile(config.mainClassName)) config.mainClassName = "ImageTest.class";
         }
     }
 
