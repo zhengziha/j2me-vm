@@ -738,7 +738,8 @@ void Interpreter::initReferences() {
                  
                  // Try to use method cache
                  // 尝试使用方法缓存
-                 MethodKey cacheKey{className->bytes, name->bytes, descriptor->bytes};
+                 // Use runtime class name for cache key to support polymorphism
+                 MethodKey cacheKey{cls->name, name->bytes, descriptor->bytes};
                  auto cacheIt = methodCache.find(cacheKey);
                  
                  std::shared_ptr<JavaClass> methodClass;

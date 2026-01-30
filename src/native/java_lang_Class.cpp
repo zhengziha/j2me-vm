@@ -49,6 +49,9 @@ void registerClassNatives(j2me::core::NativeRegistry& registry) {
                         auto streamObj = j2me::core::HeapManager::getInstance().allocate(inputStreamCls);
                         if (streamObj->fields.size() > 0) {
                             streamObj->fields[0] = streamId;
+                            std::cout << "[Class] Assigned streamId " << streamId << " to InputStream object " << streamObj << " at fields[0]" << std::endl;
+                        } else {
+                            std::cout << "[Class] WARNING: InputStream object " << streamObj << " has 0 fields! Cannot store streamId." << std::endl;
                         }
                         
                         result.val.ref = streamObj;

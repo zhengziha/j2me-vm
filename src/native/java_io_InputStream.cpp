@@ -29,12 +29,25 @@ void registerInputStreamNatives(j2me::core::NativeRegistry& registry) {
                     j2me::core::JavaObject* inputStreamObj = (j2me::core::JavaObject*)thisVal.val.ref;
                     if (inputStreamObj->fields.size() > 0) {
                         int streamId = (int)inputStreamObj->fields[0];
-                        auto stream = j2me::core::HeapManager::getInstance().getStream(streamId);
                         
-                        if (stream) {
-                            result.val.i = stream->read();
+                        std::string clsName = "null";
+                        if (inputStreamObj->cls) {
+                            clsName = inputStreamObj->cls->name;
+                        }
+                        std::cout << "[InputStream.read()I] DEBUG - this=" << inputStreamObj 
+                                  << " class=" << clsName 
+                                  << " fields[0]=" << streamId << std::endl;
+
+                        if (streamId == 0) {
+                            std::cout << "[InputStream.read()I] ERROR - stream not found for id: 0" << std::endl;
                         } else {
-                            std::cout << "[InputStream.read()I] ERROR - stream not found for id: " << streamId << std::endl;
+                            auto stream = j2me::core::HeapManager::getInstance().getStream(streamId);
+                            
+                            if (stream) {
+                                result.val.i = stream->read();
+                            } else {
+                                std::cout << "[InputStream.read()I] ERROR - stream not found for id: " << streamId << std::endl;
+                            }
                         }
                     } else {
                         std::cout << "[InputStream.read()I] ERROR - inputStreamObj has no fields" << std::endl;
