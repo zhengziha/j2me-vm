@@ -19,30 +19,32 @@ void registerInputStreamNatives(j2me::core::NativeRegistry& registry) {
     registry.registerNative("java/io/InputStream", "read", "()I", 
         [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             try {
-                    // std::cerr << "[Native] InputStream.read()I entered. Stack size: " << frame->size() << std::endl;
-                    j2me::core::JavaValue thisVal = frame->pop();
-                    
-                    j2me::core::JavaValue result;
-                    result.type = j2me::core::JavaValue::INT;
-                    result.val.i = -1;
-                    
-                    if (thisVal.type == j2me::core::JavaValue::REFERENCE && thisVal.val.ref != nullptr) {
-                        j2me::core::JavaObject* inputStreamObj = (j2me::core::JavaObject*)thisVal.val.ref;
-                        if (inputStreamObj->fields.size() > 0) {
-                            int streamId = (int)inputStreamObj->fields[0];
-                            // std::cout << "[Native] InputStream.read()I streamId: " << streamId << std::endl;
-                            auto stream = j2me::core::HeapManager::getInstance().getStream(streamId);
-                            if (stream) {
-                                result.val.i = stream->read();
-                                // std::cout << "[Native] InputStream.read()I result: " << result.val.i << std::endl;
-                            } else {
-                                std::cout << "[Native] InputStream.read()I stream not found for id: " << streamId << std::endl;
-                            }
+                j2me::core::JavaValue thisVal = frame->pop();
+                
+                j2me::core::JavaValue result;
+                result.type = j2me::core::JavaValue::INT;
+                result.val.i = -1;
+                
+                if (thisVal.type == j2me::core::JavaValue::REFERENCE && thisVal.val.ref != nullptr) {
+                    j2me::core::JavaObject* inputStreamObj = (j2me::core::JavaObject*)thisVal.val.ref;
+                    if (inputStreamObj->fields.size() > 0) {
+                        int streamId = (int)inputStreamObj->fields[0];
+                        auto stream = j2me::core::HeapManager::getInstance().getStream(streamId);
+                        
+                        if (stream) {
+                            result.val.i = stream->read();
+                        } else {
+                            std::cout << "[InputStream.read()I] ERROR - stream not found for id: " << streamId << std::endl;
                         }
+                    } else {
+                        std::cout << "[InputStream.read()I] ERROR - inputStreamObj has no fields" << std::endl;
                     }
-                    
-                    frame->push(result);
-                } catch (const std::exception& e) {
+                } else {
+                    std::cout << "[InputStream.read()I] ERROR - Invalid this object" << std::endl;
+                }
+                
+                frame->push(result);
+            } catch (const std::exception& e) {
                 std::cerr << "[Native] InputStream.read()I Exception: " << e.what() << std::endl;
                 throw;
             }
@@ -65,13 +67,19 @@ void registerInputStreamNatives(j2me::core::NativeRegistry& registry) {
                     int streamId = (int)inputStreamObj->fields[0];
                     auto stream = j2me::core::HeapManager::getInstance().getStream(streamId);
                     
-                    if (stream && arrayVal.type == j2me::core::JavaValue::REFERENCE && arrayVal.val.ref != nullptr) {
-                        j2me::core::JavaObject* arrayObj = (j2me::core::JavaObject*)arrayVal.val.ref;
-                        size_t length = arrayObj->fields.size();
+                    j2me::core::JavaObject* arrayObj = nullptr;
+                    size_t arrayLength = 0;
+                    
+                    if (arrayVal.type == j2me::core::JavaValue::REFERENCE && arrayVal.val.ref != nullptr) {
+                        arrayObj = (j2me::core::JavaObject*)arrayVal.val.ref;
+                        arrayLength = arrayObj->fields.size();
+                    }
+                    
+                    if (stream && arrayObj != nullptr) {
                         
-                        if (length > 0) {
-                            std::vector<uint8_t> buffer(length);
-                            int bytesRead = stream->read(buffer.data(), (int)length);
+                        if (arrayLength > 0) {
+                            std::vector<uint8_t> buffer(arrayLength);
+                            int bytesRead = stream->read(buffer.data(), (int)arrayLength);
                             
                             if (bytesRead > 0) {
                                 for (size_t i = 0; i < (size_t)bytesRead; i++) {
@@ -79,11 +87,20 @@ void registerInputStreamNatives(j2me::core::NativeRegistry& registry) {
                                 }
                                 result.val.i = bytesRead;
                             }
+                            
+
                         } else {
                             result.val.i = 0;
+                            std::cout << "[InputStream.read([B)I] AFTER - streamId: " << streamId << " arrayLength: 0, returning 0" << std::endl;
                         }
+                    } else {
+                        std::cout << "[InputStream.read([B)I] ERROR - stream or array object not found - stream: " << (stream ? "valid" : "null") << " arrayObj: " << (arrayObj ? "valid" : "null") << std::endl;
                     }
+                } else {
+                    std::cout << "[InputStream.read([B)I] ERROR - inputStreamObj has no fields" << std::endl;
                 }
+            } else {
+                std::cout << "[InputStream.read([B)I] ERROR - Invalid this or array object" << std::endl;
             }
             
             frame->push(result);
@@ -108,16 +125,25 @@ void registerInputStreamNatives(j2me::core::NativeRegistry& registry) {
                     int streamId = (int)inputStreamObj->fields[0];
                     auto stream = j2me::core::HeapManager::getInstance().getStream(streamId);
                     
-                    if (stream && arrayVal.type == j2me::core::JavaValue::REFERENCE && arrayVal.val.ref != nullptr) {
-                        j2me::core::JavaObject* arrayObj = (j2me::core::JavaObject*)arrayVal.val.ref;
-                        size_t arrayLen = arrayObj->fields.size();
-                        
+                    j2me::core::JavaObject* arrayObj = nullptr;
+                    size_t arrayLen = 0;
+                    
+                    if (arrayVal.type == j2me::core::JavaValue::REFERENCE && arrayVal.val.ref != nullptr) {
+                        arrayObj = (j2me::core::JavaObject*)arrayVal.val.ref;
+                        arrayLen = arrayObj->fields.size();
+                    }
+
+                    std::cout << "[InputStream.read([BII)I] BEFORE - streamId: " << streamId << " path: " << stream->getFilePath() << " method: read([BII)I" << " offset: " << off << " len: " << len << " arrayLen: " << arrayLen << std::endl;
+                    
+                    if (stream && arrayObj != nullptr) {
                         if (off < 0 || len < 0 || off + len > (int)arrayLen) {
+                            std::cout << "[InputStream.read([BII)I] ERROR - Invalid parameters: off: " << off << " len: " << len << " arrayLen: " << arrayLen << std::endl;
                              // IndexOutOfBoundsException - effectively return -1 for now
-                             // std::cerr << "IndexOutOfBoundsException in read([BII)I" << std::endl;
                         } else if (len == 0) {
                             result.val.i = 0;
+                            std::cout << "[InputStream.read([BII)I] AFTER - streamId: " << streamId << " path: " << stream->getFilePath() << " len==0, returning 0" << std::endl;
                         } else {
+                            std::cout << "[InputStream.read([BII)I] Calling stream->read(buffer, " << len << ") with stream object: " << stream << " path: " << stream->getFilePath() << std::endl;
                             std::vector<uint8_t> buffer(len);
                             int bytesRead = stream->read(buffer.data(), len);
                             
@@ -127,9 +153,17 @@ void registerInputStreamNatives(j2me::core::NativeRegistry& registry) {
                                 }
                                 result.val.i = bytesRead;
                             }
+                            
+
                         }
+                    } else {
+                        std::cout << "[InputStream.read([BII)I] ERROR - stream or array object not found - stream: " << (stream ? "valid" : "null") << " arrayObj: " << (arrayObj ? "valid" : "null") << std::endl;
                     }
+                } else {
+                    std::cout << "[InputStream.read([BII)I] ERROR - inputStreamObj has no fields" << std::endl;
                 }
+            } else {
+                std::cout << "[InputStream.read([BII)I] ERROR - Invalid this or array object" << std::endl;
             }
             frame->push(result);
         }
@@ -144,8 +178,14 @@ void registerInputStreamNatives(j2me::core::NativeRegistry& registry) {
                 j2me::core::JavaObject* inputStreamObj = (j2me::core::JavaObject*)thisVal.val.ref;
                 if (inputStreamObj->fields.size() > 0) {
                     int streamId = (int)inputStreamObj->fields[0];
+                    std::cout << "[InputStream.close()V] BEFORE - streamId: " << streamId << " method: close()V" << std::endl;
                     j2me::core::HeapManager::getInstance().removeStream(streamId);
+                    std::cout << "[InputStream.close()V] AFTER - streamId: " << streamId << " stream removed" << std::endl;
+                } else {
+                    std::cout << "[InputStream.close()V] ERROR - inputStreamObj has no fields" << std::endl;
                 }
+            } else {
+                std::cout << "[InputStream.close()V] ERROR - Invalid this object" << std::endl;
             }
         }
     );
@@ -163,10 +203,17 @@ void registerInputStreamNatives(j2me::core::NativeRegistry& registry) {
                 if (inputStreamObj->fields.size() > 0) {
                     int streamId = (int)inputStreamObj->fields[0];
                     auto stream = j2me::core::HeapManager::getInstance().getStream(streamId);
+                    
                     if (stream) {
                         result.val.i = stream->available();
+                    } else {
+                        std::cout << "[InputStream.available()I] ERROR - stream not found for id: " << streamId << std::endl;
                     }
+                } else {
+                    std::cout << "[InputStream.available()I] ERROR - inputStreamObj has no fields" << std::endl;
                 }
+            } else {
+                std::cout << "[InputStream.available()I] ERROR - Invalid this object" << std::endl;
             }
             frame->push(result);
         }
@@ -186,10 +233,17 @@ void registerInputStreamNatives(j2me::core::NativeRegistry& registry) {
                 if (inputStreamObj->fields.size() > 0) {
                     int streamId = (int)inputStreamObj->fields[0];
                     auto stream = j2me::core::HeapManager::getInstance().getStream(streamId);
+                    
                     if (stream) {
                         result.val.l = stream->skip(n);
+                    } else {
+                        std::cout << "[InputStream.skip(J)J] ERROR - stream not found for id: " << streamId << std::endl;
                     }
+                } else {
+                    std::cout << "[InputStream.skip(J)J] ERROR - inputStreamObj has no fields" << std::endl;
                 }
+            } else {
+                std::cout << "[InputStream.skip(J)J] ERROR - Invalid this object" << std::endl;
             }
             frame->push(result);
         }
@@ -208,10 +262,17 @@ void registerInputStreamNatives(j2me::core::NativeRegistry& registry) {
                      // Ideally we should check class type, but for now we assume if it has handle it is ours.
                      int streamId = (int)inputStreamObj->fields[0];
                      auto stream = j2me::core::HeapManager::getInstance().getStream(streamId);
+                     
                      if (stream) {
                          supported = stream->markSupported();
+                     } else {
+                         std::cout << "[InputStream.markSupported()Z] ERROR - stream not found for id: " << streamId << std::endl;
                      }
+                } else {
+                    std::cout << "[InputStream.markSupported()Z] ERROR - inputStreamObj has no fields" << std::endl;
                 }
+            } else {
+                std::cout << "[InputStream.markSupported()Z] ERROR - Invalid this object" << std::endl;
             }
 
             j2me::core::JavaValue result;
@@ -232,10 +293,17 @@ void registerInputStreamNatives(j2me::core::NativeRegistry& registry) {
                 if (inputStreamObj->fields.size() > 0) {
                     int streamId = (int)inputStreamObj->fields[0];
                     auto stream = j2me::core::HeapManager::getInstance().getStream(streamId);
+                    
                     if (stream) {
                         stream->mark(readlimit);
+                    } else {
+                        std::cout << "[InputStream.mark(I)V] ERROR - stream not found for id: " << streamId << std::endl;
                     }
+                } else {
+                    std::cout << "[InputStream.mark(I)V] ERROR - inputStreamObj has no fields" << std::endl;
                 }
+            } else {
+                std::cout << "[InputStream.mark(I)V] ERROR - Invalid this object" << std::endl;
             }
         }
     );
@@ -250,10 +318,17 @@ void registerInputStreamNatives(j2me::core::NativeRegistry& registry) {
                 if (inputStreamObj->fields.size() > 0) {
                     int streamId = (int)inputStreamObj->fields[0];
                     auto stream = j2me::core::HeapManager::getInstance().getStream(streamId);
+                    
                     if (stream) {
                         stream->reset();
+                    } else {
+                        std::cout << "[InputStream.reset()V] ERROR - stream not found for id: " << streamId << std::endl;
                     }
+                } else {
+                    std::cout << "[InputStream.reset()V] ERROR - inputStreamObj has no fields" << std::endl;
                 }
+            } else {
+                std::cout << "[InputStream.reset()V] ERROR - Invalid this object" << std::endl;
             }
         }
     );

@@ -6,6 +6,7 @@
 #include "../core/Diagnostics.hpp"
 #include "../loader/JarLoader.hpp"
 #include "java_lang_String.hpp"
+#include "NativeInputStream.hpp"
 #include <iostream>
 #include <string>
 
@@ -32,7 +33,7 @@ void registerRandomAccessFileNatives(j2me::core::NativeRegistry& registry) {
                 if (loader && loader->hasFile(name)) {
                     auto data = loader->getFile(name);
                     if (data) {
-                        int streamId = j2me::core::HeapManager::getInstance().allocateStream(data->data(), data->size());
+                        int streamId = j2me::core::HeapManager::getInstance().allocateStreamWithPath(data->data(), data->size(), name);
                         
                         if (thisVal.type == j2me::core::JavaValue::REFERENCE && thisVal.val.ref != nullptr) {
                             auto thisObj = (j2me::core::JavaObject*)thisVal.val.ref;

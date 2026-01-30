@@ -10,4 +10,5 @@ public class StringBuffer {
     public native StringBuffer insert(int offset, String str);
     public native StringBuffer delete(int start, int end);
     public native String toString();
+    public native int length();
 }

@@ -3,6 +3,8 @@ package java.io;
 public class InputStream {
     private int nativeHandle;
 
+    public InputStream() {}
+
     public native int read() throws IOException;
 
     public int read(byte b[]) throws IOException {

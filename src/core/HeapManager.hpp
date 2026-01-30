@@ -25,6 +25,7 @@ public:
     
     // Stream management for NativeInputStream
     int allocateStream(const uint8_t* data, size_t size);
+    int allocateStreamWithPath(const uint8_t* data, size_t size, const std::string& path);
     natives::NativeInputStream* getStream(int id);
     void removeStream(int id);
 

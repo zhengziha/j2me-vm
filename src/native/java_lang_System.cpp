@@ -109,6 +109,11 @@ void registerSystemNatives(j2me::core::NativeRegistry& registry) {
             // Since fields are vector<int64_t>, we can just copy
             // BUT must handle overlapping buffers (memmove semantics)
             
+            // Debugging for ByteArrayInputStream crash
+            std::cout << "[System] arraycopy: src=" << srcObj << " dst=" << dstObj << " srcPos=" << srcPos << " dstPos=" << dstPos << " len=" << length << std::endl;
+            if (srcObj) std::cout << "  src.fields.size=" << srcObj->fields.size() << std::endl;
+            if (dstObj) std::cout << "  dst.fields.size=" << dstObj->fields.size() << std::endl;
+
             if (srcObj == dstObj && dstPos > srcPos) {
                 // Copy backwards
                 for (int i = length - 1; i >= 0; i--) {

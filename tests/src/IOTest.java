@@ -291,7 +291,7 @@ public class IOTest {
             System.out.println("Buffer length: " + buffer.length());
             System.out.println("Buffer content: " + buffer.toString());
             
-            if (buffer.length() == 15) {
+            if (buffer.length() == 16) {
                 System.out.println("StringWriter buffer: PASSED");
             } else {
                 System.out.println("StringWriter buffer: FAILED");

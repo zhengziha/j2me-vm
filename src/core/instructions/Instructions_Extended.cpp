@@ -1,9 +1,11 @@
 #include "../Interpreter.hpp"
 #include "../Opcodes.hpp"
 #include "../HeapManager.hpp"
+#include "../Logger.hpp"
 #include <iostream>
 #include <functional>
 #include <algorithm>
+#include <thread>
 
 namespace j2me {
 namespace core {
@@ -75,7 +77,80 @@ void Interpreter::initExtended() {
         } while(0);
         return true;
     };
+
+    instructionTable[OP_MONITORENTER] = [this](std::shared_ptr<JavaThread> thread, std::shared_ptr<StackFrame> frame, util::DataReader& codeReader, uint8_t opcode) -> bool {
+        do {
+            // Pop object reference from operand stack
+            JavaValue objVal = frame->pop();
+            JavaObject* obj = reinterpret_cast<JavaObject*>(objVal.val.ref);
+            
+            if (obj == nullptr) {
+                throw std::runtime_error("NullPointerException");
+            }
+            
+            // Get or create mutex for this object
+            auto it = objectMonitors.find(obj);
+            if (it == objectMonitors.end()) {
+                objectMonitors[obj] = std::make_unique<std::recursive_mutex>();
+                monitorCounts[obj] = 0;
+                monitorOwners[obj] = nullptr;
+            }
+            
+            // Check if this thread already owns the monitor
+            if (monitorOwners[obj] != thread) {
+                // Different thread, need to acquire the lock
+                objectMonitors[obj]->lock();
+                monitorOwners[obj] = thread;  // Record the owner
+            }
+            
+            // Increment monitor count (for reentrant locking)
+            monitorCounts[obj]++;
+            
+            LOG_DEBUG("[MONITORENTER] Acquired monitor for object: " + std::to_string((long long)obj) + " count: " + std::to_string(monitorCounts[obj]));
+            
+            break;
+        } while(0);
+        return true;
+    };
+
+    instructionTable[OP_MONITOREXIT] = [this](std::shared_ptr<JavaThread> thread, std::shared_ptr<StackFrame> frame, util::DataReader& codeReader, uint8_t opcode) -> bool {
+        do {
+            // Pop object reference from operand stack
+            JavaValue objVal = frame->pop();
+            JavaObject* obj = reinterpret_cast<JavaObject*>(objVal.val.ref);
+            
+            if (obj == nullptr) {
+                throw std::runtime_error("NullPointerException");
+            }
+            
+            // Check if monitor is owned by this thread
+            if (monitorOwners.find(obj) == monitorOwners.end() || monitorOwners[obj] != thread) {
+                // Monitor not held by this thread
+                throw std::runtime_error("IllegalMonitorStateException");
+            }
+            
+            // Decrement monitor count
+            if (monitorCounts.find(obj) != monitorCounts.end() && monitorCounts[obj] > 0) {
+                monitorCounts[obj]--;
+                
+                // If count reaches 0, release the lock completely
+                if (monitorCounts[obj] == 0) {
+                    monitorOwners[obj] = nullptr;  // Clear the owner
+                    objectMonitors[obj]->unlock();
+                    LOG_DEBUG("[MONITOREXIT] Released monitor for object: " + std::to_string((long long)obj));
+                } else {
+                    LOG_DEBUG("[MONITOREXIT] Monitor count decremented for object: " + std::to_string((long long)obj) + " count: " + std::to_string(monitorCounts[obj]));
+                }
+            } else {
+                // Monitor not held by this thread
+                throw std::runtime_error("IllegalMonitorStateException");
+            }
+            
+            break;
+        } while(0);
+        return true;
+    };
 }
 
-}
-}
+} // namespace core
+} // namespace j2me

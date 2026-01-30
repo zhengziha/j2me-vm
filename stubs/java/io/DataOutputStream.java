@@ -22,6 +22,10 @@ public class DataOutputStream extends OutputStream implements DataOutput {
         out.flush();
     }
 
+    public final int size() {
+        return written;
+    }
+
     public final void writeBoolean(boolean v) throws IOException {
         out.write(v ? 1 : 0);
         written++;

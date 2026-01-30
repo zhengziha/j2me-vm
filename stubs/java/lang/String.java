@@ -47,6 +47,19 @@ public class String {
         return value[offset + index];
     }
 
+    public void getChars(int srcBegin, int srcEnd, char dst[], int dstBegin) {
+        if (srcBegin < 0) {
+            throw new StringIndexOutOfBoundsException(srcBegin);
+        }
+        if (srcEnd > count) {
+            throw new StringIndexOutOfBoundsException(srcEnd);
+        }
+        if (srcBegin > srcEnd) {
+            throw new StringIndexOutOfBoundsException(srcEnd - srcBegin);
+        }
+        System.arraycopy(value, offset + srcBegin, dst, dstBegin, srcEnd - srcBegin);
+    }
+
     public String substring(int beginIndex) {
         return substring(beginIndex, count);
     }

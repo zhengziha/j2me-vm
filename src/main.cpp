@@ -118,15 +118,14 @@ std::string parseMidletClassName(const std::string& manifestContent) {
         if (!line.empty() && line.back() == '\r') line.pop_back();
         if (line.rfind("Main-Class:", 0) == 0) {
             size_t colonPos = line.find(':');
-            if (colonPos != std::string::npos) {
+            if (colonPos != std::string::npos && colonPos + 1 < line.length()) {
                 mainClassLine = line.substr(colonPos + 1);
-                std::cerr << "DEBUG: Found Main-Class line, value: '" << mainClassLine << "'" << std::endl;
                 break;
             }
         }
         if (line.rfind("MIDlet-1:", 0) == 0) {
             size_t colonPos = line.find(':');
-            if (colonPos != std::string::npos) {
+            if (colonPos != std::string::npos && colonPos + 1 < line.length()) {
                 midlet1Line = line.substr(colonPos + 1);
             }
         }
@@ -215,10 +214,11 @@ int main(int argc, char* argv[]) {
 
     int64_t timeoutMs = 0;
     constexpr int64_t MIN_TIMEOUT_MS = 15000;
-    bool autoKeyForcedOn = false;
+    bool autoKeyForcedOn = true;
     bool autoKeyForcedOff = false;
     std::string autoKeySeq;
-
+    config.autoKeyDelayMs = 5000;
+    
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
         std::cerr << "DEBUG: Processing arg[" << i << "] = '" << arg << "', starts with '-': " << (arg[0] == '-' ? "true" : "false") << std::endl;

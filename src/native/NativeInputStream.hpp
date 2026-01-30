@@ -2,6 +2,7 @@
 
 #include <vector>
 #include <cstdint>
+#include <string>
 
 namespace j2me {
 namespace natives {
@@ -26,10 +27,15 @@ public:
     size_t getSize() const { return data.size(); }
     size_t getPosition() const { return position; }
     
+    // Path management
+    void setFilePath(const std::string& path) { filePath = path; }
+    const std::string& getFilePath() const { return filePath; }
+    
 private:
     std::vector<uint8_t> data;
     size_t position;
     size_t markPosition = 0;
+    std::string filePath;
 };
 
 } // namespace natives

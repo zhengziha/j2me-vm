@@ -245,7 +245,9 @@ std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& classNam
 
         // Mock java/io/InputStream for resource loading
         // 模拟 java/io/InputStream 用于资源加载
-        if (className == "java/io/InputStream") {
+        if (className == "java/io/InputStream"
+            && !jarLoader.hasFile("java/io/InputStream.class")
+            && (!libraryLoader || !libraryLoader->hasFile("java/io/InputStream.class"))) {
              auto dummy = std::make_shared<ClassFile>();
              auto javaClass = std::make_shared<JavaClass>(dummy);
              javaClass->name = "java/io/InputStream";

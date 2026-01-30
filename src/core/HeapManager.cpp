@@ -25,6 +25,16 @@ int HeapManager::allocateStream(const uint8_t* data, size_t size) {
     return id;
 }
 
+int HeapManager::allocateStreamWithPath(const uint8_t* data, size_t size, const std::string& path) {
+    // 分配带路径信息的原生输入流
+    // Allocate native input stream with path information
+    auto stream = std::make_unique<natives::NativeInputStream>(data, size);
+    stream->setFilePath(path);
+    int id = nextStreamId++;
+    streams.push_back(std::move(stream));
+    return id;
+}
+
 natives::NativeInputStream* HeapManager::getStream(int id) {
     if (id < 1 || id > (int)streams.size()) {
         return nullptr;

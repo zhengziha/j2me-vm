@@ -53,7 +53,7 @@ void registerObjectNatives(j2me::core::NativeRegistry& registry) {
                         }
                         
                         ret.val.ref = classObj;
-                        std::cout << "[Object] getClass returning Class object for " << className << std::endl;
+                        // std::cout << "[Object] getClass returning Class object for " << className << std::endl;
                     } else {
                         std::cerr << "[Object] Failed to resolve java/lang/Class" << std::endl;
                     }

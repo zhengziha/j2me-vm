@@ -38,6 +38,7 @@ public class ByteArrayInputStream extends InputStream {
         if (len <= 0) {
             return 0;
         }
+        // System.out.println("ByteArrayInputStream.read: buf.len=" + buf.length + " pos=" + pos + " b.len=" + b.length + " off=" + off + " len=" + len);
         System.arraycopy(buf, pos, b, off, len);
         pos += len;
         return len;

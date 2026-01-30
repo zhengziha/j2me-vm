@@ -139,6 +139,27 @@ void registerStringBufferNatives(j2me::core::NativeRegistry& registry) {
             frame->push(result);
         }
     );
+
+    // java/lang/StringBuffer.length()I
+    registry.registerNative("java/lang/StringBuffer", "length", "()I", 
+        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
+            j2me::core::JavaValue thisVal = frame->pop();
+            
+            j2me::core::JavaValue result;
+            result.type = j2me::core::JavaValue::INT;
+            result.val.i = 0;
+            
+            if (thisVal.type == j2me::core::JavaValue::REFERENCE && thisVal.val.ref != nullptr) {
+                j2me::core::JavaObject* thisObj = (j2me::core::JavaObject*)thisVal.val.ref;
+                if (thisObj->fields.size() > 0) {
+                    int32_t id = (int32_t)thisObj->fields[0];
+                    std::string str = stringBufferMap[id];
+                    result.val.i = (int32_t)str.length();
+                }
+            }
+            frame->push(result);
+        }
+    );
     // java/lang/StringBuffer.init()V (without brackets, for obfuscated code?)
     registry.registerNative("java/lang/StringBuffer", "init", "()V", 
         [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {

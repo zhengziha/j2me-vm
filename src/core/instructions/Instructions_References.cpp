@@ -665,9 +665,9 @@ void Interpreter::initReferences() {
                 if (nativeFunc) {
                      nativeFunc(thread, frame);
                 } else {
-                     std::cerr << "Method not found: " << className->bytes << "." << name->bytes << std::endl;
-                      throw std::runtime_error("Method not found: " + className->bytes + "." + name->bytes);
-                 }
+                    std::cerr << "Method not found: " << className->bytes << "." << name->bytes << std::endl;
+                     throw std::runtime_error("Method not found: " + className->bytes + "." + name->bytes);
+                }
              }
 
              break;

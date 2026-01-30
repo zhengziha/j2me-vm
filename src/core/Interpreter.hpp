@@ -44,6 +44,9 @@ private:
     j2me::loader::JarLoader& jarLoader; // Application loader / 应用加载器
     std::shared_ptr<j2me::loader::JarLoader> libraryLoader; // Library loader / 库加载器
     std::map<std::string, std::shared_ptr<JavaClass>> loadedClasses; // Loaded classes cache / 已加载类的缓存
+    std::map<JavaObject*, std::unique_ptr<std::recursive_mutex>> objectMonitors; // Object monitors for synchronized blocks / 对象监视器，用于同步块
+    std::map<JavaObject*, int> monitorCounts; // Count of how many times an object's monitor is held by the same thread / 记录同一线程持有对象监视器的次数
+    std::map<JavaObject*, std::shared_ptr<JavaThread>> monitorOwners; // Track which thread owns each monitor / 跟踪哪个线程拥有每个监视器
     
     // Method cache for faster method resolution
     // 方法缓存，用于加速方法解析
