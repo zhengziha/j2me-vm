@@ -13,7 +13,7 @@ std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& classNam
     if (it != loadedClasses.end()) {
         // std::cerr << "Already loaded: " << className << std::endl;
         if (className == "java/lang/StringBuilder") {
-            std::cerr << "DEBUG: StringBuilder already loaded from cache" << std::endl;
+            //std::cerr << "DEBUG: StringBuilder already loaded from cache" << std::endl;
         }
         return it->second;
     }

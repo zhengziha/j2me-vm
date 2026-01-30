@@ -214,7 +214,7 @@ int main(int argc, char* argv[]) {
 
     int64_t timeoutMs = 0;
     constexpr int64_t MIN_TIMEOUT_MS = 15000;
-    bool autoKeyForcedOn = true;
+    bool autoKeyForcedOn = false;
     bool autoKeyForcedOff = false;
     std::string autoKeySeq;
     config.autoKeyDelayMs = 5000;
@@ -412,7 +412,8 @@ int main(int argc, char* argv[]) {
     // 初始化SDL和窗口（仅当需要时）
     SDL_Window* window = nullptr;
     if (needsWindow) {
-        if (SDL_Init(SDL_INIT_VIDEO) < 0) {
+        // 同时初始化视频和音频子系统
+        if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
             LOG_ERROR("SDL initialization failed: " + std::string(SDL_GetError()));
             return 1;
         }

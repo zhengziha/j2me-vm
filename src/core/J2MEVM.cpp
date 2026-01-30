@@ -281,6 +281,8 @@ void J2MEVM::findAndRunInit() {
                      EventLoop::getInstance().dispatchEvents(interpreter.get());
                      TimerManager::getInstance().tick(interpreter.get());
                      EventLoop::getInstance().render(interpreter.get());
+                     EventLoop::getInstance().checkPaintFinished();
+                     EventLoop::getInstance().updateDisplay();
 
                      auto t = ThreadManager::getInstance().nextThread();
                      if (t) interpreter->execute(t, 10000);
@@ -322,7 +324,7 @@ void J2MEVM::findAndRunStartApp() {
                     // Run startApp to completion (or until it yields/returns)
                     // 注意：在真实的 J2ME 中，startApp 可能很快返回，也可能阻塞。
                     // 这里我们运行直到它结束，同时处理事件。
-                    // Note: In real J2ME, startApp might return quickly, or block. 
+                    // Note: In real J2ME, startApp might return quickly, or block.
                     // Here we run it until finished, pumping events.
                     try {
                         while (!startThread->isFinished()) {
@@ -331,6 +333,8 @@ void J2MEVM::findAndRunStartApp() {
                             EventLoop::getInstance().dispatchEvents(interpreter.get());
                             TimerManager::getInstance().tick(interpreter.get());
                             EventLoop::getInstance().render(interpreter.get());
+                            EventLoop::getInstance().checkPaintFinished();
+                            EventLoop::getInstance().updateDisplay();
                             auto t = ThreadManager::getInstance().nextThread();
                             if (t) interpreter->execute(t, 10000);
                             ThreadManager::getInstance().removeFinishedThreads();
@@ -396,6 +400,9 @@ void J2MEVM::vmLoop() {
             }
 
             eventLoop.checkPaintFinished();
+            // 在 commit() 后立即更新显示，确保新内容尽快显示
+            // Update display immediately after commit() to show new content ASAP
+            eventLoop.updateDisplay();
             TimerManager::getInstance().tick(interpreter.get());
 
             if (j2me::core::Logger::getInstance().getLevel() == j2me::core::LogLevel::DEBUG) {

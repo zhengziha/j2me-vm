@@ -238,12 +238,12 @@ NativeRegistry::NativeRegistry() {
         JavaValue thisVal = frame->pop();
         JavaObject* thisObj = (JavaObject*)thisVal.val.ref;
         if (thisObj) {
-            std::cerr << "DEBUG: StringBuilder.initNative() called, fields.size() = " << thisObj->fields.size() << std::endl;
+            // std::cerr << "DEBUG: StringBuilder.initNative() called, fields.size() = " << thisObj->fields.size() << std::endl;
             std::string* str = new std::string();
             // Store pointer in first field (ensure size)
             if (thisObj->fields.size() < 1) thisObj->fields.resize(1);
             thisObj->fields[0] = (int64_t)str;
-            std::cerr << "DEBUG: StringBuilder.initNative() completed, fields.size() = " << thisObj->fields.size() << std::endl;
+            // std::cerr << "DEBUG: StringBuilder.initNative() completed, fields.size() = " << thisObj->fields.size() << std::endl;
         } else {
             std::cerr << "DEBUG: StringBuilder.initNative() called with null thisObj!" << std::endl;
         }

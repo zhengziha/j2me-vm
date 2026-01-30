@@ -70,7 +70,7 @@ void EventLoop::pollSDL() {
             if (keyCode != 0) {
                 std::lock_guard<std::mutex> lock(queueMutex);
                 eventQueue.push({KeyEvent::PRESSED, keyCode});
-                
+
                 // 更新按键状态位 (用于 GameCanvas)
                 // Update keyStates (GameCanvas)
                 int idx = keyStateIndexForKeyCode(keyCode);
@@ -111,12 +111,9 @@ void EventLoop::pollSDL() {
             autoKeyEvents.erase(autoKeyEvents.begin());
         }
     }
-    
-    // 刷新屏幕 (主线程)
-    // Refresh screen (Main Thread)
-    // 确保窗口表面更新发生在主线程
-    // This ensures window surface update happens on the main thread
-    j2me::platform::GraphicsContext::getInstance().update();
+
+    // update() 移除 - 现在在 checkPaintFinished() 和 vmLoop() 中单独调用
+    // update() removed - now called separately in checkPaintFinished() and vmLoop()
 }
 
 void EventLoop::scheduleAutoKeys(const std::vector<int>& keyCodes, int64_t startDelayMs, int64_t keyPressMs, int64_t betweenKeysMs) {
@@ -288,7 +285,9 @@ void EventLoop::render(Interpreter* interpreter) {
                         }
 
                         // 启动绘制线程
-                        j2me::platform::GraphicsContext::getInstance().beginFrame();
+                        // 注意：不清空后缓冲，让 paint() 自己负责清空
+                        // Do not clear back buffer here, let paint() handle clearing
+                        // j2me::platform::GraphicsContext::getInstance().beginFrame();
                         lastPaintCommittedDrawCount = j2me::platform::GraphicsContext::getInstance().getDrawCount();
                         lastPaintPartialCommitMs = 0;
                         auto thread = std::make_shared<JavaThread>(frame);
@@ -314,6 +313,8 @@ void EventLoop::checkPaintFinished() {
             // 线程已销毁，意味着绘制完成
             // Thread destroyed, meaning paint finished
             gc.commit();
+            // update() 现在由 vmLoop 在 checkPaintFinished() 之后调用
+            // update() is now called by vmLoop after checkPaintFinished()
             j2me::core::Diagnostics::getInstance().onPaintCommit();
             isPainting = false;
         } else {
@@ -322,6 +323,8 @@ void EventLoop::checkPaintFinished() {
                 // 线程存在但已完成
                 // Thread exists but finished
                 gc.commit();
+                // update() 现在由 vmLoop 在 checkPaintFinished() 之后调用
+                // update() is now called by vmLoop after checkPaintFinished()
                 j2me::core::Diagnostics::getInstance().onPaintCommit();
                 isPainting = false;
             } else if (ptr && !ptr->isFinished()) {
@@ -331,6 +334,8 @@ void EventLoop::checkPaintFinished() {
                 int64_t lastDrawMs = gc.getLastDrawMs();
                 if (drawCount > lastPaintCommittedDrawCount && ((nowMs - lastDrawMs) >= 12 || (nowMs - lastPaintPartialCommitMs) >= 200)) {
                     gc.commit();
+                    // update() 现在由 vmLoop 在 checkPaintFinished() 之后调用
+                    // update() is now called by vmLoop after checkPaintFinished()
                     j2me::core::Diagnostics::getInstance().onPaintCommit();
                     lastPaintCommittedDrawCount = drawCount;
                     lastPaintPartialCommitMs = nowMs;
@@ -338,6 +343,10 @@ void EventLoop::checkPaintFinished() {
             }
         }
     }
+}
+
+void EventLoop::updateDisplay() {
+    j2me::platform::GraphicsContext::getInstance().update();
 }
 
 } // namespace core

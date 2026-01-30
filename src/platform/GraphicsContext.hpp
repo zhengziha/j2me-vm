@@ -90,7 +90,9 @@ public:
         // 初始显示
         // Initial Present
         printf("Performing initial update\n");
+        displayDirty = true;  // Mark as dirty for initial display
         updateNoLock();
+        displayDirty = false;  // Clear after initial update
         printf("Initial update completed\n");
 
         // 初始化 TTF 字体引擎
@@ -703,6 +705,7 @@ private:
         if (surface && displaySurface) {
             // 将后台缓冲区复制到前台缓冲区
             SDL_BlitSurface(surface, nullptr, displaySurface, nullptr);
+            displayDirty = true;  // Mark display as needing update
             commitCount++;
             lastCommitMs = nowMsNoLock();
             lastBackHash = sampleHashNoLock(surface);
@@ -722,9 +725,13 @@ private:
     
     void update() { // Called by Main Loop (present)
         std::lock_guard<std::mutex> lock(surfaceMutex);
-        updateNoLock();
-        updateCount++;
-        lastUpdateMs = nowMsNoLock();
+        // Only update if there's new content to display
+        if (displayDirty) {
+            updateNoLock();
+            displayDirty = false;
+            updateCount++;
+            lastUpdateMs = nowMsNoLock();
+        }
     }
 
     uint64_t getDrawCount() {
@@ -1313,6 +1320,7 @@ private:
     std::array<int, 4> lastBackClipRect{0, 0, 0, 0};
     std::array<int, 4> lastFrameBounds{0, 0, -1, -1};
     bool frameHasDraw = false;
+    bool displayDirty = false;  // Flag to indicate screen needs update
     int frameMinX = 0;
     int frameMinY = 0;
     int frameMaxX = -1;

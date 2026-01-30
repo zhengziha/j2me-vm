@@ -43,7 +43,10 @@ public:
     
     // 检查绘制线程是否完成，并提交帧缓冲区
     void checkPaintFinished();
-    
+
+    // 更新显示（将前缓冲区内容显示到屏幕）
+    void updateDisplay();
+
     void requestExit(const std::string& reason);
     std::string getExitReason() const;
 

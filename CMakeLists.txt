@@ -38,4 +38,4 @@ file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS "src/*.cpp")
 add_executable(j2me-vm ${SOURCES})
 
 # Link libraries
-target_link_libraries(j2me-vm ${SDL2_LIBRARIES} ${SDL2_TTF_LIB} ${MINIZIP_LIB} libzip::zip iconv)
+target_link_libraries(j2me-vm ${SDL2_LIBRARIES} ${SDL2_TTF_LIB} ${SDL2_MIXER_LIB} ${MINIZIP_LIB} libzip::zip iconv)

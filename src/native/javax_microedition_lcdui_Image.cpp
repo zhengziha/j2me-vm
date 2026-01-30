@@ -35,12 +35,12 @@ void registerImageNatives(j2me::core::NativeRegistry& registry) {
                 if (loader && loader->hasFile(resName)) {
                     auto data = loader->getFile(resName);
                     if (data) {
-                        std::cout << "[Image] File found. Size: " << data->size() << " bytes." << std::endl;
+                        std::cout << "[Image] File ["<< resName << "] found. Size: " << data->size() << " bytes." << std::endl;
                         SDL_Surface* surface = j2me::platform::GraphicsContext::getInstance().createImage(data->data(), data->size());
                         if (surface) {
                             imgId = nextImageId++;
                             imageMap[imgId] = surface;
-                            std::cout << "[Image] Loaded successfully, ID: " << imgId << " Size: " << surface->w << "x" << surface->h << std::endl;
+                            std::cout << "[Image] Loaded ["<< resName << "] successfully, ID: " << imgId << " Size: " << surface->w << "x" << surface->h << std::endl;
                         } else {
                             std::cerr << "[Image] Failed to decode image: " << resName << std::endl;
                             // Print first few bytes for debugging
