@@ -1,0 +1,5 @@
+Manifest-Version: 1.0
+MIDlet-Name: Resource Test
+MIDlet-Version: 1.0
+MIDlet-Vendor: Test Vendor
+MIDlet-1: Resource Test,,ResourceTestMIDlet

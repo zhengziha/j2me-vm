@@ -14,6 +14,8 @@
 #include "../native/java_lang_Math.hpp"
 #include "../native/java_io_InputStream.hpp"
 #include "../native/java_io_PrintStream.hpp"
+#include "../native/java_io_ByteArrayInputStream.hpp"
+#include "../native/java_io_ResourceInputStream.hpp"
 #include "../native/javax_microedition_lcdui_Graphics.hpp"
 #include "../native/javax_microedition_lcdui_Display.hpp"
 #include "../native/javax_microedition_lcdui_Image.hpp"
@@ -66,6 +68,8 @@ NativeRegistry::NativeRegistry() {
     j2me::natives::registerConnectorNatives(*this);
     j2me::natives::registerRandomAccessFileNatives(*this);
     j2me::natives::registerDataOutputStreamNatives(*this);
+    j2me::natives::registerByteArrayInputStreamNatives(*this);
+    j2me::natives::registerResourceInputStreamNatives(*this);
 
     // java/lang/AbstractStringBuilder.<init>(I)V
     registerNative("java/lang/AbstractStringBuilder", "<init>", "(I)V", [](std::shared_ptr<JavaThread> thread, std::shared_ptr<StackFrame> frame) {

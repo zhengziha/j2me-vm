@@ -20,6 +20,10 @@ public class ByteArrayInputStream extends InputStream {
     }
 
     public synchronized int read() {
+        if (buf == null) {
+            // Use native stream implementation
+            return nativeRead();
+        }
         return (pos < count) ? (buf[pos++] & 0xff) : -1;
     }
 
@@ -38,13 +42,20 @@ public class ByteArrayInputStream extends InputStream {
         if (len <= 0) {
             return 0;
         }
-        // System.out.println("ByteArrayInputStream.read: buf.len=" + buf.length + " pos=" + pos + " b.len=" + b.length + " off=" + off + " len=" + len);
+        if (buf == null) {
+            // Use native stream implementation
+            return nativeRead(b, off, len);
+        }
         System.arraycopy(buf, pos, b, off, len);
         pos += len;
         return len;
     }
 
     public synchronized long skip(long n) {
+        if (buf == null) {
+            // Use native stream implementation
+            return nativeSkip(n);
+        }
         if (pos + n > count) {
             n = count - pos;
         }
@@ -56,6 +67,10 @@ public class ByteArrayInputStream extends InputStream {
     }
 
     public synchronized int available() {
+        if (buf == null) {
+            // Use native stream implementation
+            return nativeAvailable();
+        }
         return count - pos;
     }
 
@@ -63,14 +78,35 @@ public class ByteArrayInputStream extends InputStream {
         return true;
     }
 
-    public void mark(int readAheadLimit) {
+    public void mark(int readlimit) {
         mark = pos;
+        if (buf == null) {
+            // Use native stream implementation
+            nativeMark(readlimit);
+        }
     }
 
     public synchronized void reset() {
         pos = mark;
+        if (buf == null) {
+            // Use native stream implementation
+            nativeReset();
+        }
     }
 
     public void close() throws IOException {
+        if (buf == null) {
+            // Use native stream implementation
+            nativeClose();
+        }
     }
+
+    // Native methods for using NativeInputStream
+    private native int nativeRead();
+    private native int nativeRead(byte b[], int off, int len);
+    private native long nativeSkip(long n);
+    private native int nativeAvailable();
+    private native void nativeMark(int readlimit);
+    private native void nativeReset();
+    private native void nativeClose();
 }

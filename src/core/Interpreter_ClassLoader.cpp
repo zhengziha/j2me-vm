@@ -282,6 +282,51 @@ std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& classNam
              loadedClasses[className] = javaClass;
              return javaClass;
         }
+        
+        // Mock java/io/ResourceInputStream for resource loading
+        // 模拟 java/io/ResourceInputStream 用于资源加载
+        if (className == "java/io/ResourceInputStream"
+            && !jarLoader.hasFile("java/io/ResourceInputStream.class")
+            && (!libraryLoader || !libraryLoader->hasFile("java/io/ResourceInputStream.class"))) {
+             auto dummy = std::make_shared<ClassFile>();
+             auto javaClass = std::make_shared<JavaClass>(dummy);
+             javaClass->name = "java/io/ResourceInputStream";
+             javaClass->instanceSize = 5; // Five fields: nativeHandle (from InputStream), streamId, pos, mark, count
+             
+             // Helper to add method
+             auto addMethod = [&](const std::string& name, const std::string& desc) {
+                 MethodInfo m;
+                 m.access_flags = 0x0101; // ACC_PUBLIC | ACC_NATIVE
+                 
+                 auto nameConst = std::make_shared<ConstantUtf8>(); nameConst->tag = CONSTANT_Utf8; nameConst->bytes = name;
+                 dummy->constant_pool.push_back(nameConst);
+                 m.name_index = dummy->constant_pool.size() - 1;
+                 
+                 auto descConst = std::make_shared<ConstantUtf8>(); descConst->tag = CONSTANT_Utf8; descConst->bytes = desc;
+                 dummy->constant_pool.push_back(descConst);
+                 m.descriptor_index = dummy->constant_pool.size() - 1;
+                 
+                 dummy->methods.push_back(m);
+             };
+
+             addMethod("read", "()I");
+             addMethod("read", "([BII)I");
+             addMethod("nativeRead", "()I");
+             addMethod("nativeRead", "([BII)I");
+             addMethod("nativeSkip", "(J)J");
+             addMethod("nativeMark", "(I)V");
+             addMethod("nativeReset", "()V");
+             addMethod("nativeClose", "()V");
+             addMethod("available", "()I");
+             addMethod("skip", "(J)J");
+             addMethod("close", "()V");
+             addMethod("mark", "(I)V");
+             addMethod("reset", "()V");
+             addMethod("markSupported", "()Z");
+
+             loadedClasses[className] = javaClass;
+             return javaClass;
+        }
 
         // Mock java/lang/String for string operations
         // 模拟 java/lang/String

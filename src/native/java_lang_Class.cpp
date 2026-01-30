@@ -45,16 +45,23 @@ void registerClassNatives(j2me::core::NativeRegistry& registry) {
                         // Create NativeInputStream via HeapManager
                         int streamId = j2me::core::HeapManager::getInstance().allocateStream(data->data(), data->size());
                         
-                        auto inputStreamCls = registry.getInterpreter()->resolveClass("java/io/InputStream");
-                        auto streamObj = j2me::core::HeapManager::getInstance().allocate(inputStreamCls);
-                        if (streamObj->fields.size() > 0) {
-                            streamObj->fields[0] = streamId;
+                        // Create ResourceInputStream instance
+                        auto resourceInputStreamCls = registry.getInterpreter()->resolveClass("java/io/ResourceInputStream");
+                        auto streamObj = j2me::core::HeapManager::getInstance().allocate(resourceInputStreamCls);
+                        
+                        // Set fields for ResourceInputStream
+                        if (streamObj->fields.size() >= 5) {
+                            streamObj->fields[0] = 0; // nativeHandle (from InputStream)
+                            streamObj->fields[1] = streamId; // streamId
+                            streamObj->fields[2] = 0; // pos
+                            streamObj->fields[3] = 0; // mark
+                            streamObj->fields[4] = data->size(); // count
                         } else {
-                            std::cout << "[Class] WARNING: InputStream object " << streamObj << " has 0 fields! Cannot store streamId." << std::endl;
+                            std::cout << "[Class] WARNING: ResourceInputStream object " << streamObj << " has insufficient fields!" << std::endl;
                         }
                         
                         result.val.ref = streamObj;
-                        std::cout << "[Class] Resource loaded successfully, stream ID: " << streamId << " Size: " << data->size() << std::endl;
+                        std::cout << "[Class] Resource loaded successfully as ResourceInputStream, Size: " << data->size() << std::endl;
                         
                         // Debug: Print first 16 bytes
                         // std::cout << "DEBUG_HEADER_PRINT: ";

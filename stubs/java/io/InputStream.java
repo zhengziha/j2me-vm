@@ -1,11 +1,11 @@
 package java.io;
 
-public class InputStream {
-    private int nativeHandle;
+public abstract class InputStream {
+    protected int nativeHandle;
 
     public InputStream() {}
 
-    public native int read() throws IOException;
+    public abstract int read() throws IOException;
 
     public int read(byte b[]) throws IOException {
         return read(b, 0, b.length);
@@ -61,13 +61,19 @@ public class InputStream {
         return n - remaining;
     }
 
-    public native int available() throws IOException;
+    public int available() throws IOException {
+        return 0;
+    }
 
     public void close() throws IOException {}
 
-    public native void mark(int readlimit);
+    public void mark(int readlimit) {}
 
-    public native void reset() throws IOException;
+    public void reset() throws IOException {
+        throw new IOException("mark/reset not supported");
+    }
 
-    public native boolean markSupported();
+    public boolean markSupported() {
+        return false;
+    }
 }
