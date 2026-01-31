@@ -48,3 +48,5 @@ cmake-build-debug
 *.img
 *.bin
 *.bmp
+temp_pal/
+temp_manifest/
