@@ -222,7 +222,7 @@ int main(int argc, char* argv[]) {
     // 解析命令行参数
     // Parse command line arguments
     j2me::core::VMConfig config;
-    config.logLevel = j2me::core::LogLevel::DEBUG;
+    config.logLevel = j2me::core::LogLevel::INFO;
 
 #ifdef __SWITCH__
     LOG_INFO("Initializing romfs");
