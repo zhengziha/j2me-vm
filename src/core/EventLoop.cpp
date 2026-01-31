@@ -42,14 +42,14 @@ static int mapKey(SDL_Keycode key) {
         case JOY_Y: return -7;
 
         case JOY_UP:return -1;
-        case JOY_LEFT: return -2;
-        case JOY_RIGHT: return -3;
-        case JOY_DOWN: return -4;
+        case JOY_LEFT: return -3;
+        case JOY_RIGHT: return -4;
+        case JOY_DOWN: return -2;
 
-        case JOY_PAD_LEFT: return 50;
-        case JOY_PAD_UP: return 52;
-        case JOY_PAD_RIGHT: return 54;
-        case JOY_PAD_DOWN: return 56;
+        case JOY_PAD_LEFT: return 52;
+        case JOY_PAD_UP: return 50;
+        case JOY_PAD_RIGHT: return 56;
+        case JOY_PAD_DOWN: return 54;
 
         case JOY_MINUS: return -6; // Soft 1 (Left Soft)
         case JOY_PLUS: return -7; // Soft 2 (Right Soft)
