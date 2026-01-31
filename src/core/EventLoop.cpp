@@ -84,7 +84,7 @@ static int mapKey(SDL_Keycode key) {
         case SDLK_F1: return -6;// Soft 1 (Left Soft)
         case SDLK_F2: return -7;// Soft 2 (Right Soft)
 #endif
-        case SDLK_8: return 42; // STAR
+        //case SDLK_8: return 42; // STAR
         default: return 0;
     }
 }
@@ -113,7 +113,6 @@ void EventLoop::pollSDL() {
         } else if (e.type == SDL_KEYDOWN) {
                 keyCode = mapKey(e.key.keysym.sym);
 #endif
-            LOG_INFO("keyCode: " + std::to_string(keyCode));
             if (keyCode != 0) {
                 std::lock_guard<std::mutex> lock(queueMutex);
                 eventQueue.push({KeyEvent::PRESSED, keyCode});
@@ -132,7 +131,6 @@ void EventLoop::pollSDL() {
         } else if (e.type == SDL_KEYUP) {
                 keyCode = mapKey(e.key.keysym.sym);
 #endif
-            LOG_INFO("keyCode: " + std::to_string(keyCode));
             if (keyCode != 0) {
                 std::lock_guard<std::mutex> lock(queueMutex);
                 eventQueue.push({KeyEvent::RELEASED, keyCode});
