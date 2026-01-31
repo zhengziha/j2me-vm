@@ -1,7 +1,6 @@
 #include "Interpreter.hpp"
 #include "ClassParser.hpp"
 #include "Logger.hpp"
-#include <iostream>
 
 namespace j2me {
 namespace core {
@@ -11,9 +10,8 @@ std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& classNam
     // 检查类是否已加载
     auto it = loadedClasses.find(className);
     if (it != loadedClasses.end()) {
-        // std::cerr << "Already loaded: " << className << std::endl;
         if (className == "java/lang/StringBuilder") {
-            //std::cerr << "DEBUG: StringBuilder already loaded from cache" << std::endl;
+            // LOG_DEBUG("DEBUG: StringBuilder already loaded from cache");
         }
         return it->second;
     }
@@ -24,7 +22,7 @@ std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& classNam
     std::string path = className + ".class";
     
     if (className == "java/lang/StringBuilder") {
-        std::cerr << "DEBUG: Checking for StringBuilder.class, jarLoader.hasFile=" << jarLoader.hasFile(path) << std::endl;
+        LOG_DEBUG("DEBUG: Checking for StringBuilder.class, jarLoader.hasFile=" + std::string(jarLoader.hasFile(path) ? "true" : "false"));
     }
     
     // Check if file exists
@@ -210,7 +208,7 @@ std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& classNam
         if (className == "java/lang/StringBuilder"
             && !jarLoader.hasFile("java/lang/StringBuilder.class")
             && (!libraryLoader || !libraryLoader->hasFile("java/lang/StringBuilder.class"))) {
-             std::cerr << "DEBUG: Creating mock StringBuilder class (both loaders missing)" << std::endl;
+             LOG_DEBUG("DEBUG: Creating mock StringBuilder class (both loaders missing)");
              LOG_DEBUG("[Interpreter] Creating mock StringBuilder class");
              auto dummy = std::make_shared<ClassFile>();
              auto javaClass = std::make_shared<JavaClass>(dummy);
@@ -282,7 +280,7 @@ std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& classNam
              loadedClasses[className] = javaClass;
              return javaClass;
         }
-        
+
         // Mock java/io/ResourceInputStream for resource loading
         // 模拟 java/io/ResourceInputStream 用于资源加载
         if (className == "java/io/ResourceInputStream"
@@ -292,20 +290,20 @@ std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& classNam
              auto javaClass = std::make_shared<JavaClass>(dummy);
              javaClass->name = "java/io/ResourceInputStream";
              javaClass->instanceSize = 5; // Five fields: nativeHandle (from InputStream), streamId, pos, mark, count
-             
+
              // Helper to add method
              auto addMethod = [&](const std::string& name, const std::string& desc) {
                  MethodInfo m;
                  m.access_flags = 0x0101; // ACC_PUBLIC | ACC_NATIVE
-                 
+
                  auto nameConst = std::make_shared<ConstantUtf8>(); nameConst->tag = CONSTANT_Utf8; nameConst->bytes = name;
                  dummy->constant_pool.push_back(nameConst);
                  m.name_index = dummy->constant_pool.size() - 1;
-                 
+
                  auto descConst = std::make_shared<ConstantUtf8>(); descConst->tag = CONSTANT_Utf8; descConst->bytes = desc;
                  dummy->constant_pool.push_back(descConst);
                  m.descriptor_index = dummy->constant_pool.size() - 1;
-                 
+
                  dummy->methods.push_back(m);
              };
 

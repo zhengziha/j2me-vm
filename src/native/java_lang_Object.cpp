@@ -5,8 +5,8 @@
 #include "../core/Interpreter.hpp"
 #include "../core/ThreadManager.hpp"
 #include "../core/Diagnostics.hpp"
+#include "../core/Logger.hpp"
 #include "java_lang_String.hpp"
-#include <iostream>
 #include <chrono>
 
 namespace j2me {
@@ -25,7 +25,7 @@ void registerObjectNatives(j2me::core::NativeRegistry& registry) {
             ret.val.ref = nullptr;
             
             if (objVal.val.ref == nullptr) {
-                std::cerr << "NullPointerException in Object.getClass()" << std::endl;
+                LOG_ERROR("NullPointerException in Object.getClass()");
             } else {
                 j2me::core::JavaObject* obj = static_cast<j2me::core::JavaObject*>(objVal.val.ref);
                 
@@ -53,9 +53,9 @@ void registerObjectNatives(j2me::core::NativeRegistry& registry) {
                         }
                         
                         ret.val.ref = classObj;
-                        // std::cout << "[Object] getClass returning Class object for " << className << std::endl;
+                        // LOG_DEBUG("[Object] getClass returning Class object for " + className);
                     } else {
-                        std::cerr << "[Object] Failed to resolve java/lang/Class" << std::endl;
+                        LOG_ERROR("[Object] Failed to resolve java/lang/Class");
                     }
                 }
             }
@@ -84,12 +84,12 @@ void registerObjectNatives(j2me::core::NativeRegistry& registry) {
              
              if (thisObj.val.ref == nullptr) {
                  // Throw NPE - for now just return
-                 std::cerr << "NullPointerException in Object.wait" << std::endl;
+                 LOG_ERROR("NullPointerException in Object.wait");
                  return;
              }
              
              if (timeout < 0) {
-                 std::cerr << "IllegalArgumentException in Object.wait: timeout < 0" << std::endl;
+                 LOG_ERROR("IllegalArgumentException in Object.wait: timeout < 0");
                  return;
              }
              

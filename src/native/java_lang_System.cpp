@@ -2,8 +2,8 @@
 #include "../core/NativeRegistry.hpp"
 #include "../core/StackFrame.hpp"
 #include "../core/HeapManager.hpp"
+#include "../core/Logger.hpp"
 #include "java_lang_String.hpp"
-#include <iostream>
 #include <chrono>
 #include <cstring>
 
@@ -28,7 +28,7 @@ void registerSystemNatives(j2me::core::NativeRegistry& registry) {
     // java/lang/System.gc()V
     registry.registerNative("java/lang/System", "gc", "()V",
         [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
-            std::cout << "[System] gc() called - triggering garbage collection" << std::endl;
+            LOG_DEBUG("[System] gc() called - triggering garbage collection");
             // j2me::core::HeapManager::getInstance().collect(); // If implemented
         }
     );
@@ -58,12 +58,12 @@ void registerSystemNatives(j2me::core::NativeRegistry& registry) {
             j2me::core::JavaValue srcVal = frame->pop();
             
             if (srcVal.type != j2me::core::JavaValue::REFERENCE || dstVal.type != j2me::core::JavaValue::REFERENCE) {
-                std::cerr << "ArrayStoreException: src or dst not a reference" << std::endl;
+                LOG_ERROR("ArrayStoreException: src or dst not a reference");
                 return; // Should throw exception
             }
             
             if (srcVal.val.ref == nullptr || dstVal.val.ref == nullptr) {
-                std::cerr << "NullPointerException: src or dst is null" << std::endl;
+                LOG_ERROR("NullPointerException: src or dst is null");
                 return; // Should throw exception
             }
             
@@ -76,7 +76,7 @@ void registerSystemNatives(j2me::core::NativeRegistry& registry) {
             int originalLength = length;
             
             if (srcPos < 0 || dstPos < 0 || length < 0) {
-                 std::cerr << "ArrayStoreException: negative args" << std::endl;
+                 LOG_ERROR("ArrayStoreException: negative args");
                  return;
             }
             
@@ -91,16 +91,14 @@ void registerSystemNatives(j2me::core::NativeRegistry& registry) {
             }
             
             if (clipped) {
-                std::cout << "[System] arraycopy clipped length from " << originalLength << " to " << length 
-                          << " srcLen=" << srcObj->fields.size() << " dstLen=" << dstObj->fields.size() << std::endl;
+                LOG_DEBUG("[System] arraycopy clipped length from " + std::to_string(originalLength) + " to " + std::to_string(length) + " srcLen=" + std::to_string(srcObj->fields.size()) + " dstLen=" + std::to_string(dstObj->fields.size()));
             }
             
             /*
             if (srcPos < 0 || dstPos < 0 || length < 0 || 
                 srcPos + length > (int)srcObj->fields.size() || 
                 dstPos + length > (int)dstObj->fields.size()) {
-                std::cerr << "IndexOutOfBoundsException: srcPos=" << srcPos << " dstPos=" << dstPos << " length=" << length 
-                          << " srcLen=" << srcObj->fields.size() << " dstLen=" << dstObj->fields.size() << std::endl;
+                LOG_ERROR("IndexOutOfBoundsException: srcPos=" + std::to_string(srcPos) + " dstPos=" + std::to_string(dstPos) + " length=" + std::to_string(length) + " srcLen=" + std::to_string(srcObj->fields.size()) + " dstLen=" + std::to_string(dstObj->fields.size()));
                 return; // Should throw exception
             }
             */
@@ -110,9 +108,9 @@ void registerSystemNatives(j2me::core::NativeRegistry& registry) {
             // BUT must handle overlapping buffers (memmove semantics)
             
             // Debugging for ByteArrayInputStream crash
-            std::cout << "[System] arraycopy: src=" << srcObj << " dst=" << dstObj << " srcPos=" << srcPos << " dstPos=" << dstPos << " len=" << length << std::endl;
-            if (srcObj) std::cout << "  src.fields.size=" << srcObj->fields.size() << std::endl;
-            if (dstObj) std::cout << "  dst.fields.size=" << dstObj->fields.size() << std::endl;
+            LOG_DEBUG("[System] arraycopy: src=" + std::to_string((uintptr_t)srcObj) + " dst=" + std::to_string((uintptr_t)dstObj) + " srcPos=" + std::to_string(srcPos) + " dstPos=" + std::to_string(dstPos) + " len=" + std::to_string(length));
+            if (srcObj) LOG_DEBUG("  src.fields.size=" + std::to_string(srcObj->fields.size()));
+            if (dstObj) LOG_DEBUG("  dst.fields.size=" + std::to_string(dstObj->fields.size()));
 
             if (srcObj == dstObj && dstPos > srcPos) {
                 // Copy backwards
@@ -132,7 +130,7 @@ void registerSystemNatives(j2me::core::NativeRegistry& registry) {
     registry.registerNative("java/lang/System", "exitNative", "(I)V",
         [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             int status = frame->pop().val.i;
-            std::cout << "System.exit(" << status << ") called." << std::endl;
+            LOG_INFO("System.exit(" + std::to_string(status) + ") called.");
             exit(status);
         }
     );
@@ -159,7 +157,7 @@ void registerSystemNatives(j2me::core::NativeRegistry& registry) {
              if (strVal.type == j2me::core::JavaValue::REFERENCE && strVal.val.ref != nullptr) {
                  auto strObj = static_cast<j2me::core::JavaObject*>(strVal.val.ref);
                  std::string s = getJavaString(strObj);
-                 std::cout << s; 
+                 LOG_INFO(s);
              }
         }
     );
@@ -172,7 +170,7 @@ void registerSystemNatives(j2me::core::NativeRegistry& registry) {
              if (strVal.type == j2me::core::JavaValue::REFERENCE && strVal.val.ref != nullptr) {
                  auto strObj = static_cast<j2me::core::JavaObject*>(strVal.val.ref);
                  std::string s = getJavaString(strObj);
-                 std::cout << s; 
+                 LOG_INFO(s); 
              }
         }
     );

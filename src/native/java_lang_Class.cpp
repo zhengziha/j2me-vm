@@ -4,9 +4,9 @@
 #include "../core/HeapManager.hpp"
 #include "../core/Interpreter.hpp"
 #include "../core/Diagnostics.hpp"
+#include "../core/Logger.hpp"
 #include "../loader/JarLoader.hpp"
 #include "java_lang_String.hpp"
-#include <iostream>
 #include <string>
 
 namespace j2me {
@@ -18,10 +18,10 @@ void registerClassNatives(j2me::core::NativeRegistry& registry) {
     // java/lang/Class.getResourceAsStream(Ljava/lang/String;)Ljava/io/InputStream;
     registry.registerNative("java/lang/Class", "getResourceAsStream", "(Ljava/lang/String;)Ljava/io/InputStream;", 
         [&registry](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
-            std::cout << "[Class] getResourceAsStream called" << std::endl;
+            LOG_DEBUG("[Class] getResourceAsStream called");
             j2me::core::JavaValue nameVal = frame->pop();
             frame->pop(); // this (Class object)
-            std::cout << "[Class] Args popped. Name type: " << nameVal.type << std::endl;
+            LOG_DEBUG("[Class] Args popped. Name type: " + std::to_string(nameVal.type));
             
             j2me::core::JavaValue result;
             result.type = j2me::core::JavaValue::REFERENCE;
@@ -31,12 +31,12 @@ void registerClassNatives(j2me::core::NativeRegistry& registry) {
                 auto strObj = (j2me::core::JavaObject*)nameVal.val.ref;
                 std::string resName = getJavaString(strObj);
                 
-                std::cout << "[Class] Requesting resource: " << resName << std::endl;
+                LOG_DEBUG("[Class] Requesting resource: " + resName);
                 
                 // Remove leading slash if present
                 if (resName.size() > 0 && resName[0] == '/') resName = resName.substr(1);
                 
-                std::cout << "[Class] Loading resource: " << resName << std::endl;
+                LOG_DEBUG("[Class] Loading resource: " + resName);
                 
                 auto loader = j2me::core::NativeRegistry::getInstance().getJarLoader();
                 if (loader && loader->hasFile(resName)) {
@@ -48,7 +48,7 @@ void registerClassNatives(j2me::core::NativeRegistry& registry) {
                         // Create ResourceInputStream instance
                         auto resourceInputStreamCls = registry.getInterpreter()->resolveClass("java/io/ResourceInputStream");
                         auto streamObj = j2me::core::HeapManager::getInstance().allocate(resourceInputStreamCls);
-                        
+
                         // Set fields for ResourceInputStream
                         if (streamObj->fields.size() >= 5) {
                             streamObj->fields[0] = 0; // nativeHandle (from InputStream)
@@ -57,26 +57,26 @@ void registerClassNatives(j2me::core::NativeRegistry& registry) {
                             streamObj->fields[3] = 0; // mark
                             streamObj->fields[4] = data->size(); // count
                         } else {
-                            std::cout << "[Class] WARNING: ResourceInputStream object " << streamObj << " has insufficient fields!" << std::endl;
+                            LOG_ERROR("[Class] WARNING: InputStream object has 0 fields! Cannot store streamId.");
                         }
                         
                         result.val.ref = streamObj;
-                        std::cout << "[Class] Resource loaded successfully as ResourceInputStream, Size: " << data->size() << std::endl;
+                        LOG_DEBUG("[Class] Resource loaded successfully, stream ID: " + std::to_string(streamId) + " Size: " + std::to_string(data->size()));
                         
                         // Debug: Print first 16 bytes
-                        // std::cout << "DEBUG_HEADER_PRINT: ";
+                        std::string debugHeader = "DEBUG_HEADER_PRINT: ";
                         for (size_t i = 0; i < std::min((size_t)16, data->size()); i++) {
                             char buf[16];
                             snprintf(buf, sizeof(buf), "%02X ", (*data)[i]);
-                            std::cout << buf;
+                            debugHeader += buf;
                         }
-                        std::cout << std::endl;
+                        LOG_DEBUG(debugHeader);
                     } else {
-                        std::cout << "[Class] Resource not found (data null): " << resName << std::endl;
+                        LOG_DEBUG("[Class] Resource not found (data null): " + resName);
                         j2me::core::Diagnostics::getInstance().onResourceNotFound(resName);
                     }
                 } else {
-                    std::cout << "[Class] Resource not found in JAR: " << resName << std::endl;
+                    LOG_DEBUG("[Class] Resource not found in JAR: " + resName);
                     j2me::core::Diagnostics::getInstance().onResourceNotFound(resName);
                 }
             }

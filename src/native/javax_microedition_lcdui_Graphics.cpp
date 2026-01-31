@@ -4,7 +4,7 @@
 #include "../core/NativeRegistry.hpp"
 #include "../platform/GraphicsContext.hpp"
 #include "../core/StackFrame.hpp"
-#include <iostream>
+#include "../core/Logger.hpp"
 #include <map>
 #include "../core/HeapManager.hpp"
 #include <SDL2/SDL.h> // Need SDL types
@@ -86,22 +86,18 @@ void registerGraphicsNatives(j2me::core::NativeRegistry& registry) {
                              SDL_Surface* srcSurface = it->second;
                              
                              if (!srcSurface) {
-                                 std::cerr << "[Graphics] drawImage: Source surface is NULL for ID " << imgId << std::endl;
+                                 LOG_ERROR("[Graphics] drawImage: Source surface is NULL for ID " + std::to_string(imgId));
                              } else if (isScreen) {
-                                 // Draw to screen
-                                 // std::cout << "[Graphics] drawImage to Screen: src=" << imgId << " pos=" << x << "," << y << " srcSize=" << srcSurface->w << "x" << srcSurface->h << std::endl;
                                  j2me::platform::GraphicsContext::getInstance().drawImage(srcSurface, x, y, anchor);
                              } else if (target) {
-                                 // Draw to offscreen surface
-                                 // std::cout << "[Graphics] drawImage to Offscreen: src=" << imgId << " pos=" << x << "," << y << " srcSize=" << srcSurface->w << "x" << srcSurface->h << std::endl;
                                  j2me::platform::GraphicsContext::getInstance().drawImage(srcSurface, x, y, anchor, target);
                              }
                          } else {
-                             std::cerr << "[Graphics] drawImage: Invalid Image ID " << imgId << std::endl;
+                             LOG_ERROR("[Graphics] drawImage: Invalid Image ID " + std::to_string(imgId));
                          }
                      }
                 } else {
-                    std::cout << "[Graphics] drawImage: Image object has no fields!" << std::endl;
+                    LOG_ERROR("[Graphics] drawImage: Image object has no fields!");
                 }
             }
         }

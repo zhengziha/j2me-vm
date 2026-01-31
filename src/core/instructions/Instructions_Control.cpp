@@ -1,6 +1,6 @@
 #include "../Interpreter.hpp"
 #include "../Opcodes.hpp"
-#include <iostream>
+#include "../Logger.hpp"
 
 namespace j2me {
 namespace core {
@@ -40,7 +40,7 @@ void Interpreter::initControl() {
             for (size_t i = 0; i < padding; i++) codeReader.readU1();
             
             if (codeReader.tell() + 8 > frame->code.size()) {
-                std::cerr << "[ERROR] LOOKUPSWITCH: Insufficient bytes for default/npairs at PC=" << pc << std::endl;
+                LOG_ERROR("[ERROR] LOOKUPSWITCH: Insufficient bytes for default/npairs at PC=" + std::to_string(pc));
                 return false; 
             }
 
@@ -48,12 +48,12 @@ void Interpreter::initControl() {
             int32_t npairs = (int32_t)codeReader.readU4();
             
             if (npairs < 0 || npairs > 65535) { // Sanity check
-                 std::cerr << "[ERROR] LOOKUPSWITCH: Invalid npairs " << npairs << " at PC=" << pc << std::endl;
+                 LOG_ERROR("[ERROR] LOOKUPSWITCH: Invalid npairs " + std::to_string(npairs) + " at PC=" + std::to_string(pc));
                  return false;
             }
 
             if (codeReader.tell() + (size_t)npairs * 8 > frame->code.size()) {
-                 std::cerr << "[ERROR] LOOKUPSWITCH: Insufficient bytes for pairs at PC=" << pc << std::endl;
+                 LOG_ERROR("[ERROR] LOOKUPSWITCH: Insufficient bytes for pairs at PC=" + std::to_string(pc));
                  return false;
             }
 

@@ -6,7 +6,6 @@
 #include "Logger.hpp"
 #include "EventLoop.hpp"
 #include "Diagnostics.hpp"
-#include <iostream>
 #include <sstream>
 #include <cmath>
 #include <cstring>
@@ -150,13 +149,10 @@ bool Interpreter::executeInstruction(std::shared_ptr<JavaThread> thread, std::sh
 
     uint8_t opcode = codeReader.readU1();
     
-    // Debug logging for crash tracking
-    // std::cout << "Exec: " << std::hex << (int)opcode << " PC: " << (codeReader.tell()-1) << std::dec << std::endl;
-
     if (instructionTable[opcode]) {
         return instructionTable[opcode](thread, frame, codeReader, opcode);
     } else {
-        std::cerr << "Unknown Opcode: 0x" << std::hex << (int)opcode << std::dec << std::endl;
+        LOG_ERROR("Unknown Opcode: 0x" + std::to_string(opcode));
         return true;
     }
     return true; // Continue execution
@@ -202,8 +198,8 @@ bool Interpreter::handleException(std::shared_ptr<JavaThread> thread, JavaObject
     while (true) {
         auto frame = thread->currentFrame();
         if (!frame) {
-             // Uncaught! Print the buffered stack trace and return false
-             std::cerr << stackTraceBuffer.str();
+             // Uncaught! Print buffered stack trace and return false
+             LOG_ERROR(stackTraceBuffer.str());
              return false; 
         }
 
@@ -293,7 +289,7 @@ bool Interpreter::handleException(std::shared_ptr<JavaThread> thread, JavaObject
         isTopFrame = false;
         if (thread->isFinished()) {
              // Uncaught! Print the buffered stack trace
-             std::cerr << stackTraceBuffer.str();
+             LOG_ERROR(stackTraceBuffer.str());
              return false; 
         }
     }
@@ -303,7 +299,7 @@ void Interpreter::initInstructionTable() {
     instructionTable.resize(256);
     // Default handler
     for(int i=0; i<256; i++) instructionTable[i] = [](std::shared_ptr<JavaThread>, std::shared_ptr<StackFrame>, util::DataReader&, uint8_t opcode) -> bool { 
-        std::cerr << "Unknown Opcode: 0x" << std::hex << (int)opcode << std::dec << std::endl;
+        LOG_ERROR("Unknown Opcode: 0x" + std::to_string(opcode));
         return true;
     };
 

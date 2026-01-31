@@ -5,8 +5,8 @@
 #include "../core/ThreadManager.hpp"
 #include "../core/RuntimeTypes.hpp"
 #include "../core/Diagnostics.hpp"
+#include "../core/Logger.hpp"
 #include <chrono>
-#include <iostream>
 
 namespace j2me {
 namespace natives {
@@ -17,7 +17,7 @@ void registerThreadNatives(j2me::core::NativeRegistry& registry) {
         [&registry](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             j2me::core::JavaValue thisObj = frame->pop(); // this Thread object
             if (thisObj.val.ref == nullptr) {
-                std::cerr << "NullPointerException in Thread.start0" << std::endl;
+                LOG_ERROR("NullPointerException in Thread.start0");
                 return;
             }
             j2me::core::JavaObject* threadObj = (j2me::core::JavaObject*)thisObj.val.ref;
@@ -48,13 +48,13 @@ void registerThreadNatives(j2me::core::NativeRegistry& registry) {
                  if (found) break;
                  current = current->superClass;
              }
-             
-             if (!found) {
-                 std::cerr << "Could not find run() method in Thread class" << std::endl;
-                 return;
-             }
-             
-             auto newFrame = std::make_shared<j2me::core::StackFrame>(runMethod, methodClassFile);
+              
+              if (!found) {
+                  LOG_ERROR("Could not find run() method in Thread class");
+                  return;
+              }
+              
+              auto newFrame = std::make_shared<j2me::core::StackFrame>(runMethod, methodClassFile);
              // push 'this' as argument 0
              j2me::core::JavaValue thisVal; 
              thisVal.type = j2me::core::JavaValue::REFERENCE; 
@@ -74,7 +74,7 @@ void registerThreadNatives(j2me::core::NativeRegistry& registry) {
              if (start0) {
                  start0(thread, frame);
              } else {
-                 std::cerr << "Native start0 not found" << std::endl;
+                 LOG_ERROR("Native start0 not found");
              }
         }
     );

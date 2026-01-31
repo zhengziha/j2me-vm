@@ -1,7 +1,6 @@
 #include "javax_microedition_lcdui_Display.hpp"
 #include "../core/NativeRegistry.hpp"
 #include "../core/Logger.hpp"
-#include <iostream>
 
 namespace j2me {
 namespace natives {
@@ -22,7 +21,7 @@ void registerDisplayNatives(j2me::core::NativeRegistry& registry) {
         [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             bool mode = frame->pop().val.i != 0;
             frame->pop(); // this
-            std::cout << "[Canvas] setFullScreenMode: " << (mode ? "true" : "false") << std::endl;
+            LOG_DEBUG("[Canvas] setFullScreenMode: " + std::string(mode ? "true" : "false"));
         }
     );
     

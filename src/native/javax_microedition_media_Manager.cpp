@@ -8,11 +8,11 @@
 #include "../loader/JarLoader.hpp"
 #include "../core/Logger.hpp"
 #include "../native/java_lang_String.hpp"
-#include <iostream>
 #include <sstream>
 #include <unordered_map>
 #include <string>
 #include <mutex>
+#include "../core/Logger.hpp"
 
 namespace j2me {
 namespace natives {

@@ -3,9 +3,9 @@
 #include "../core/StackFrame.hpp"
 #include "../core/HeapManager.hpp"
 #include "../core/Interpreter.hpp"
+#include "../core/Logger.hpp"
 #include "../loader/JarLoader.hpp"
 #include "NativeInputStream.hpp"
-#include <iostream>
 #include <string>
 #include <vector>
 
@@ -25,18 +25,18 @@ void registerDataOutputStreamNatives(j2me::core::NativeRegistry& registry) {
             if (thisVal.type == j2me::core::JavaValue::REFERENCE && thisVal.val.ref != nullptr) {
                 j2me::core::JavaObject* dataOutputStreamObj = (j2me::core::JavaObject*)thisVal.val.ref;
                 
-                std::cout << "[DataOutputStream.size()I] BEFORE - object: " << dataOutputStreamObj << std::endl;
+                LOG_DEBUG("[DataOutputStream.size()I] BEFORE - object: " + std::to_string((intptr_t)dataOutputStreamObj));
                 
                 // Assuming field index 1 is the 'written' field (based on the Java class definition)
                 // Field layout: out(OutputStream) at index 0, written(int) at index 1
                 if (dataOutputStreamObj->fields.size() > 1) {
                     result.val.i = (int)dataOutputStreamObj->fields[1];
-                    std::cout << "[DataOutputStream.size()I] AFTER - object: " << dataOutputStreamObj << " size: " << result.val.i << std::endl;
+                    LOG_DEBUG("[DataOutputStream.size()I] AFTER - object: " + std::to_string((intptr_t)dataOutputStreamObj) + " size: " + std::to_string(result.val.i));
                 } else {
-                    std::cout << "[DataOutputStream.size()I] ERROR - object has insufficient fields" << std::endl;
+                    LOG_ERROR("[DataOutputStream.size()I] ERROR - object has insufficient fields");
                 }
             } else {
-                std::cout << "[DataOutputStream.size()I] ERROR - Invalid this object" << std::endl;
+                LOG_ERROR("[DataOutputStream.size()I] ERROR - Invalid this object");
             }
             
             frame->push(result);

@@ -2,8 +2,8 @@
 #include "../core/NativeRegistry.hpp"
 #include "../core/StackFrame.hpp"
 #include "../core/HeapManager.hpp"
+#include "../core/Logger.hpp"
 #include "java_lang_String.hpp"
-#include <iostream>
 
 namespace j2me {
 namespace natives {
@@ -22,15 +22,15 @@ void registerPrintStreamNatives(j2me::core::NativeRegistry& registry) {
                     auto strObj = static_cast<j2me::core::JavaObject*>(strVal.val.ref);
                     if (strObj && strObj->cls) {
                         std::string str = getJavaString(strObj);
-                        std::cout << str << std::endl;
+                        LOG_INFO(str);
                     } else {
-                        std::cout << "[String object]" << std::endl;
+                        LOG_INFO("[String object]");
                     }
                 } else {
-                    std::cout << "null" << std::endl;
+                    LOG_INFO("null");
                 }
             } else {
-                std::cout << std::endl;
+                LOG_INFO("");
             }
         }
     );
@@ -43,17 +43,17 @@ void registerPrintStreamNatives(j2me::core::NativeRegistry& registry) {
             
             if (strVal.type == j2me::core::JavaValue::REFERENCE) {
                 if (!strVal.strVal.empty()) {
-                    std::cout << strVal.strVal;
+                    LOG_INFO(strVal.strVal);
                 } else if (strVal.val.ref != nullptr) {
                     auto strObj = static_cast<j2me::core::JavaObject*>(strVal.val.ref);
                     if (strObj && strObj->cls) {
                         std::string str = getJavaString(strObj);
-                        std::cout << str;
+                        LOG_INFO(str);
                     } else {
-                        std::cout << "[String object]";
+                        LOG_INFO("[String object]");
                     }
                 } else {
-                    std::cout << "null";
+                    LOG_INFO("null");
                 }
             }
         }

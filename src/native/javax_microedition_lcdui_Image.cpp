@@ -7,8 +7,8 @@
 #include "java_lang_String.hpp"
 #include "../platform/stb_image.h"
 #include "../core/Diagnostics.hpp"
+#include "../core/Logger.hpp"
 #include <SDL2/SDL.h>
-#include <iostream>
 #include <map>
 #include <iomanip>
 
@@ -35,32 +35,30 @@ void registerImageNatives(j2me::core::NativeRegistry& registry) {
                 if (loader && loader->hasFile(resName)) {
                     auto data = loader->getFile(resName);
                     if (data) {
-                        std::cout << "[Image] File ["<< resName << "] found. Size: " << data->size() << " bytes." << std::endl;
+                        LOG_DEBUG("[Image] File [" + resName + "] found. Size: " + std::to_string(data->size()) + " bytes.");
                         SDL_Surface* surface = j2me::platform::GraphicsContext::getInstance().createImage(data->data(), data->size());
                         if (surface) {
                             imgId = nextImageId++;
                             imageMap[imgId] = surface;
-                            std::cout << "[Image] Loaded ["<< resName << "] successfully, ID: " << imgId << " Size: " << surface->w << "x" << surface->h << std::endl;
+                            LOG_DEBUG("[Image] Loaded [" + resName + "] successfully, ID: " + std::to_string(imgId) + " Size: " + std::to_string(surface->w) + "x" + std::to_string(surface->h));
                         } else {
-                            std::cerr << "[Image] Failed to decode image: " << resName << std::endl;
+                            LOG_ERROR("[Image] Failed [" + resName + "] to decode image: " + resName);
                             // Print first few bytes for debugging
-                            std::cerr << "Header bytes: ";
-                            const unsigned char* bytes = data->data();
                             std::string headerHex;
+                            const unsigned char* bytes = data->data();
                             for (size_t i = 0; i < std::min((size_t)16, data->size()); ++i) {
                                 char buf[8];
                                 snprintf(buf, sizeof(buf), "%02X", bytes[i]);
                                 headerHex += buf;
-                                std::cerr << std::hex << std::setw(2) << std::setfill('0') << (int)bytes[i] << " ";
                             }
-                            std::cerr << std::dec << std::endl;
+                            LOG_ERROR("[Image] Header bytes: " + headerHex);
                             j2me::core::Diagnostics::getInstance().onImageDecodeFailed(resName, headerHex);
                         }
                     } else {
-                        std::cerr << "[Image] Failed to read file data" << std::endl;
+                        LOG_ERROR("[Image] Failed to read file data");
                     }
                 } else {
-                    std::cerr << "[Image] Image file not found in JAR: " << resName << std::endl;
+                    LOG_ERROR("[Image] Image file not found in JAR: " + resName);
                     j2me::core::Diagnostics::getInstance().onResourceNotFound(resName);
                 }
             }
@@ -89,9 +87,8 @@ void registerImageNatives(j2me::core::NativeRegistry& registry) {
                     if (it != imageMap.end()) {
                         SDL_Surface* surface = it->second;
                         result.val.i = surface->w;
-                        // std::cout << "[Image] getWidth: " << result.val.i << std::endl;
                     } else {
-                        std::cerr << "[Image] getWidth: Invalid Image ID " << imgId << std::endl;
+                        LOG_ERROR("[Image] getWidth: Invalid Image ID " + std::to_string(imgId));
                     }
                 }
             }
@@ -117,9 +114,8 @@ void registerImageNatives(j2me::core::NativeRegistry& registry) {
                     if (it != imageMap.end()) {
                         SDL_Surface* surface = it->second;
                         result.val.i = surface->h;
-                        // std::cout << "[Image] getHeight: " << result.val.i << std::endl;
                     } else {
-                        std::cerr << "[Image] getHeight: Invalid Image ID " << imgId << std::endl;
+                        LOG_ERROR("[Image] getHeight: Invalid Image ID " + std::to_string(imgId));
                     }
                 }
             }
@@ -141,7 +137,7 @@ void registerImageNatives(j2me::core::NativeRegistry& registry) {
             j2me::core::JavaValue thisVal = frame->pop();
             
             if (thisVal.type != j2me::core::JavaValue::REFERENCE || thisVal.val.ref == nullptr) {
-                std::cerr << "[Image] getRGB: this is null" << std::endl;
+                LOG_ERROR("[Image] getRGB: this is null");
                 return;
             }
             j2me::core::JavaObject* imgObj = (j2me::core::JavaObject*)thisVal.val.ref;
@@ -176,12 +172,11 @@ void registerImageNatives(j2me::core::NativeRegistry& registry) {
                     }
                     
                     SDL_UnlockSurface(surface);
-                    // std::cout << "[Image] getRGB executed" << std::endl;
                 } else {
-                    std::cerr << "[Image] getRGB: Invalid Image ID " << imgId << std::endl;
+                    LOG_ERROR("[Image] getRGB: Invalid Image ID " + std::to_string(imgId));
                 }
             } else {
-                 std::cerr << "[Image] getRGB: rgbData is null" << std::endl;
+                 LOG_ERROR("[Image] getRGB: rgbData is null");
             }
         }
     );
@@ -225,12 +220,12 @@ void registerImageNatives(j2me::core::NativeRegistry& registry) {
                     }
                     
                     SDL_UnlockSurface(surface);
-                    std::cout << "[Image] getRGBNative executed" << std::endl;
+                    LOG_DEBUG("[Image] getRGBNative executed");
                 } else {
-                    std::cerr << "[Image] getRGBNative: Invalid Image ID " << imgId << std::endl;
+                    LOG_ERROR("[Image] getRGBNative: Invalid Image ID " + std::to_string(imgId));
                 }
             } else {
-                 std::cerr << "[Image] getRGBNative: rgbData is null" << std::endl;
+                 LOG_ERROR("[Image] getRGBNative: rgbData is null");
             }
         }
     );
@@ -238,7 +233,7 @@ void registerImageNatives(j2me::core::NativeRegistry& registry) {
     // javax/microedition/lcdui/Image.createRGBImageNative([IIIZ)I
     registry.registerNative("javax/microedition/lcdui/Image", "createRGBImageNative", "([IIIZ)I", 
         [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
-            std::cout << "[Image] createRGBImageNative called" << std::endl;
+            LOG_DEBUG("[Image] createRGBImageNative called");
             int processAlpha = frame->pop().val.i;
             int height = frame->pop().val.i;
             int width = frame->pop().val.i;
@@ -252,8 +247,8 @@ void registerImageNatives(j2me::core::NativeRegistry& registry) {
                 auto rgbArray = static_cast<j2me::core::JavaObject*>(rgbDataVal.val.ref);
                 
                 // Validate array size
-                if ((int)rgbArray->fields.size() < width * height) {
-                     std::cerr << "ArrayIndexOutOfBoundsException in createRGBImageNative" << std::endl;
+                if (rgbArray->fields.size() < (size_t)(width * height)) {
+                     LOG_ERROR("ArrayIndexOutOfBoundsException in createRGBImageNative");
                      frame->push(result);
                      return;
                 }
@@ -280,7 +275,7 @@ void registerImageNatives(j2me::core::NativeRegistry& registry) {
                     imageMap[imgId] = surface;
                     result.val.i = imgId;
                     
-                    std::cout << "[Image] Created RGB Image, ID: " << imgId << " Size: " << width << "x" << height << std::endl;
+                    LOG_DEBUG("[Image] Created RGB Image, ID: " + std::to_string(imgId) + " Size: " + std::to_string(width) + "x" + std::to_string(height));
                 }
             }
             frame->push(result);
@@ -289,16 +284,16 @@ void registerImageNatives(j2me::core::NativeRegistry& registry) {
 
     // javax/microedition/lcdui/Image.createMutableImageNative(II)I
     registry.registerNative("javax/microedition/lcdui/Image", "createMutableImageNative", "(II)I", 
-        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread>, std::shared_ptr<j2me::core::StackFrame> frame) {
             int height = frame->pop().val.i;
             int width = frame->pop().val.i;
             
             if (width <= 0) {
-                std::cout << "[Image] Warning: createMutableImageNative called with width=" << width << ", forcing to 240" << std::endl;
+                LOG_DEBUG("[Image] Warning: createMutableImageNative called with width=" + std::to_string(width) + ", forcing to 240");
                 width = 240;
             }
             if (height <= 0) {
-                std::cout << "[Image] Warning: createMutableImageNative called with height=" << height << ", forcing to 320" << std::endl;
+                LOG_DEBUG("[Image] Warning: createMutableImageNative called with height=" + std::to_string(height) + ", forcing to 320");
                 height = 320;
             }
 
@@ -317,9 +312,9 @@ void registerImageNatives(j2me::core::NativeRegistry& registry) {
                 result.val.i = imgId;
                 frame->push(result);
                 
-                std::cout << "[Image] Created Mutable Image, ID: " << imgId << " Size: " << width << "x" << height << std::endl;
+                LOG_DEBUG("[Image] Created Mutable Image, ID: " + std::to_string(imgId) + " Size: " + std::to_string(width) + "x" + std::to_string(height));
             } else {
-                std::cerr << "[Image] Failed to create mutable image: " << SDL_GetError() << std::endl;
+                LOG_ERROR("[Image] Failed to create mutable image: " + std::string(SDL_GetError()));
                 // Return -1 or 0? 0 is probably safer as it might be checked.
                 // Assuming ID 0 is reserved or invalid if nextImageId starts at 1.
                 // Let's verify nextImageId init.
@@ -333,7 +328,7 @@ void registerImageNatives(j2me::core::NativeRegistry& registry) {
 
     // javax/microedition/lcdui/Image.isMutableNative(I)Z
     registry.registerNative("javax/microedition/lcdui/Image", "isMutableNative", "(I)Z", 
-        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread>, std::shared_ptr<j2me::core::StackFrame> frame) {
             int32_t imgId = frame->pop().val.i;
             
             j2me::core::JavaValue result;
@@ -360,7 +355,7 @@ void registerImageNatives(j2me::core::NativeRegistry& registry) {
                 
                 // Validate bounds
                 if (offset < 0 || length < 0 || offset + length > (int)dataObj->fields.size()) {
-                     std::cerr << "IndexOutOfBoundsException in createImageFromData" << std::endl;
+                     LOG_ERROR("IndexOutOfBoundsException in createImageFromData");
                      frame->push(result);
                      return;
                 }
@@ -411,16 +406,14 @@ void registerImageNatives(j2me::core::NativeRegistry& registry) {
                         imageMap[imgId] = surface;
                         
                         result.val.i = imgId;
-                        std::cout << "[Image] Created Immutable Image (from data), ID: " << imgId << " Size: " << w << "x" << h << std::endl;
+                        LOG_DEBUG("[Image] Created Immutable Image (from data), ID: " + std::to_string(imgId) + " Size: " + std::to_string(w) + "x" + std::to_string(h));
                     } else {
-                         std::cerr << "Failed to create SDL surface: " << SDL_GetError() << std::endl;
-                         std::cout << "[Image] Failed to create SDL surface" << std::endl;
+                         LOG_ERROR("Failed to create SDL surface: " + std::string(SDL_GetError()));
                     }
                     
                     stbi_image_free(pixels);
                 } else {
-                    std::cerr << "Failed to decode image data" << std::endl;
-                    std::cout << "[Image] Failed to decode image data (stbi_load_from_memory returned null)" << std::endl;
+                    LOG_ERROR("Failed to decode image data");
                     std::string headerHex;
                     for (int i = 0; i < std::min(16, length); i++) {
                         char buf[8];
@@ -430,8 +423,7 @@ void registerImageNatives(j2me::core::NativeRegistry& registry) {
                     j2me::core::Diagnostics::getInstance().onImageDecodeFailed("<data>", headerHex);
                 }
             } else {
-                 std::cerr << "NullPointerException in createImageFromData" << std::endl;
-                 std::cout << "[Image] NullPointerException in createImageFromData" << std::endl;
+                 LOG_ERROR("NullPointerException in createImageFromData");
             }
             frame->push(result);
         }
@@ -439,7 +431,7 @@ void registerImageNatives(j2me::core::NativeRegistry& registry) {
 
     // javax/microedition/lcdui/Image.getGraphicsNative(I)I
     registry.registerNative("javax/microedition/lcdui/Image", "getGraphicsNative", "(I)I", 
-        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
+        [](std::shared_ptr<j2me::core::JavaThread>, std::shared_ptr<j2me::core::StackFrame> frame) {
             int32_t imgId = frame->pop().val.i;
             // For now, return the same ID, assuming 1:1 mapping between Image and Graphics context for offscreen
             // Real implementation would need a Graphics object tracking this target

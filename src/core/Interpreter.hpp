@@ -9,6 +9,7 @@
 #include <memory>
 #include <map>
 #include <optional>
+#include <mutex>
 
 
 namespace j2me {

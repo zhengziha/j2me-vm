@@ -2,7 +2,7 @@
 #include "../core/NativeRegistry.hpp"
 #include "../core/StackFrame.hpp"
 #include "../core/HeapManager.hpp"
-#include <iostream>
+#include "../core/Logger.hpp"
 #include "../platform/GraphicsContext.hpp"
 #include "java_lang_String.hpp"
 
@@ -81,7 +81,7 @@ void registerFontNatives(j2me::core::NativeRegistry& registry) {
             // But if getFont is native, we must return an object.
             
             // For now, just print error and return null.
-            std::cerr << "Native Font.getFont not fully implemented (cannot allocate)" << std::endl;
+            LOG_ERROR("Native Font.getFont not fully implemented (cannot allocate)");
             
             j2me::core::JavaValue result;
             result.type = j2me::core::JavaValue::REFERENCE;

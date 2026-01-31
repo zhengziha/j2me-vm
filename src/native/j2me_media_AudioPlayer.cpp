@@ -5,7 +5,8 @@
 #include "../loader/JarLoader.hpp"
 #include "../core/Logger.hpp"
 #include "../native/java_lang_String.hpp"
-#include <iostream>
+#include "../core/Logger.hpp"
+#include <cmath>
 #include <sstream>
 #include <unordered_map>
 #include <string>
@@ -88,45 +89,33 @@ void registerAudioPlayerNatives(j2me::core::NativeRegistry& registry) {
     // j2me/media/AudioPlayer.nativeStart()V
     registry.registerNative("j2me/media/AudioPlayer", "nativeStart", "()V",
         [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
-            // 获取当前对象（player 实例）- "this" 在栈顶
-            j2me::core::JavaValue thisVal = frame->pop();
-            j2me::core::JavaObject* playerObj = nullptr;
-
-            if (thisVal.type == j2me::core::JavaValue::REFERENCE && thisVal.val.ref != nullptr) {
-                playerObj = reinterpret_cast<j2me::core::JavaObject*>(thisVal.val.ref);
-            }
-
-            if (!playerObj) {
-                LOG_ERROR("[AudioPlayer] nativeStart: player object is null");
-                return;
-            }
-
-            std::stringstream ss;
-            ss << "[AudioPlayer] nativeStart called for player: " << playerObj;
-            LOG_INFO(ss.str().c_str());
-
-            // 初始化 SoundManager
-            if (!j2me::core::SoundManager::getInstance().isInitialized()) {
-                if (!j2me::core::SoundManager::getInstance().init()) {
-                    LOG_ERROR("[AudioPlayer] Failed to initialize SoundManager");
-                    return;
+            std::cout << "[AudioPlayer] nativeStart called" << std::endl;
+            
+            // 示例：播放一个简单的正弦波声音
+            // 实际应用中，应该从音频文件或流中读取数据
+            
+            // 创建一个440Hz的正弦波
+            std::vector<uint8_t> audioData;
+            int sampleRate = 44100;
+            int channels = 2;
+            int sampleSize = 2; // 16位
+            int duration = 1000; // 1秒
+            
+            double frequency = 440.0; // A4音
+            double amplitude = 32767.0; // 最大振幅
+            
+            for (int i = 0; i < sampleRate * duration / 1000; i++) {
+                double time = (double)i / sampleRate;
+                double value = amplitude * sin(2 * M_PI * frequency * time);
+                
+                // 转换为16位PCM
+                int16_t sample = (int16_t)value;
+                
+                // 左右声道
+                for (int c = 0; c < channels; c++) {
+                    audioData.push_back((uint8_t)(sample & 0xFF));
+                    audioData.push_back((uint8_t)((sample >> 8) & 0xFF));
                 }
-            }
-
-            // 查找这个 player 对应的资源
-            std::lock_guard<std::mutex> lock(playerResourcesMutex);
-            auto it = playerResources.find(playerObj);
-            if (it != playerResources.end()) {
-                const std::string& resourceName = it->second;
-
-                // 播放 BGM（循环）
-                bool success = j2me::core::SoundManager::getInstance().playBGM(resourceName, true);
-
-                ss.str("");
-                ss << "[AudioPlayer] " << (success ? "Started" : "Failed to start") << " playing: " << resourceName;
-                LOG_INFO(ss.str().c_str());
-            } else {
-                LOG_ERROR("[AudioPlayer] No resource associated with this player");
             }
         }
     );
@@ -134,44 +123,16 @@ void registerAudioPlayerNatives(j2me::core::NativeRegistry& registry) {
     // j2me/media/AudioPlayer.nativeStop()V
     registry.registerNative("j2me/media/AudioPlayer", "nativeStop", "()V",
         [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
-            j2me::core::JavaValue thisVal = frame->pop();
-            j2me::core::JavaObject* playerObj = nullptr;
-
-            if (thisVal.type == j2me::core::JavaValue::REFERENCE && thisVal.val.ref != nullptr) {
-                playerObj = reinterpret_cast<j2me::core::JavaObject*>(thisVal.val.ref);
-            }
-
-            std::stringstream ss;
-            ss << "[AudioPlayer] nativeStop called for player: " << playerObj;
-            LOG_INFO(ss.str().c_str());
-
-            // 停止 BGM
-            j2me::core::SoundManager::getInstance().stopBGM();
+            std::cout << "[AudioPlayer] nativeStop called" << std::endl;
+            j2me::core::AudioManager::getInstance().stopAudio();
         }
     );
 
     // j2me/media/AudioPlayer.nativeClose()V
     registry.registerNative("j2me/media/AudioPlayer", "nativeClose", "()V",
         [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
-            j2me::core::JavaValue thisVal = frame->pop();
-            j2me::core::JavaObject* playerObj = nullptr;
-
-            if (thisVal.type == j2me::core::JavaValue::REFERENCE && thisVal.val.ref != nullptr) {
-                playerObj = reinterpret_cast<j2me::core::JavaObject*>(thisVal.val.ref);
-            }
-
-            std::stringstream ss;
-            ss << "[AudioPlayer] nativeClose called for player: " << playerObj;
-            LOG_INFO(ss.str().c_str());
-
-            // 停止 BGM
-            j2me::core::SoundManager::getInstance().stopBGM();
-
-            // 清理资源映射
-            if (playerObj) {
-                std::lock_guard<std::mutex> lock(playerResourcesMutex);
-                playerResources.erase(playerObj);
-            }
+            std::cout << "[AudioPlayer] nativeClose called" << std::endl;
+            j2me::core::AudioManager::getInstance().stopAudio();
         }
     );
 }
@@ -182,28 +143,11 @@ void registerAudioVolumeControlNatives(j2me::core::NativeRegistry& registry) {
         [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             auto volumeValue = frame->pop();
             int volume = volumeValue.val.i;
-
-            std::stringstream ss;
-            ss << "[AudioVolumeControl] nativeSetVolume called with volume: " << volume;
-            LOG_INFO(ss.str().c_str());
-
-            j2me::core::SoundManager::getInstance().setBGMVolume(volume);
-        }
-    );
-
-    // j2me/media/AudioVolumeControl.nativeGetVolume()I
-    registry.registerNative("j2me/media/AudioVolumeControl", "nativeGetVolume", "()I",
-        [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
-            int volume = j2me::core::SoundManager::getInstance().getBGMVolume();
-
-            std::stringstream ss;
-            ss << "[AudioVolumeControl] nativeGetVolume returning: " << volume;
-            LOG_INFO(ss.str().c_str());
-
-            j2me::core::JavaValue result;
-            result.type = j2me::core::JavaValue::INT;
-            result.val.i = volume;
-            frame->push(result);
+            
+            std::cout << "[AudioVolumeControl] nativeSetVolume called with volume: " << volume << std::endl;
+            
+            // 设置音量
+            j2me::core::AudioManager::getInstance().setVolume(volume);
         }
     );
 }

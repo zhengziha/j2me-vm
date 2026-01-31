@@ -6,6 +6,9 @@ CXXFLAGS = -std=c++17 -Wall -Wextra -I./src -IE:/sdl2 -ID:\msys64\mingw64\includ
 LDFLAGS = -LE:/sdl2/lib -LD:\msys64\mingw64\lib
 LIBS = -lSDL2 -lSDL2_mixer -lSDL2_image -lSDL2_ttf -lz -lminizip -mconsole
 
+# Build directory
+BUILD_DIR = build
+
 # Source files (explicit list)
 SOURCES = \
     src/main.cpp \
@@ -20,6 +23,7 @@ SOURCES = \
     src/core/StackFrame.cpp \
     src/core/RuntimeTypes.cpp \
     src/core/Interpreter_ClassLoader.cpp \
+    src/core/AudioManager.cpp \
     src/core/instructions/Instructions_Comparisons.cpp \
     src/core/instructions/Instructions_Constants.cpp \
     src/core/instructions/Instructions_Control.cpp \
@@ -43,9 +47,12 @@ SOURCES = \
     src/native/java_lang_Math.cpp \
     src/native/java_io_PrintStream.cpp \
     src/native/java_io_InputStream.cpp \
+    src/native/java_io_RandomAccessFile.cpp \
+    src/native/java_io_DataOutputStream.cpp \
     src/native/java_util_Timer.cpp \
     src/native/NativeInputStream.cpp \
     src/native/ImageCommon.cpp \
+    src/native/j2me_media_AudioPlayer.cpp \
     src/native/javax_microedition_lcdui_Graphics.cpp \
     src/native/javax_microedition_lcdui_Display.cpp \
     src/native/javax_microedition_lcdui_Image.cpp \
@@ -58,22 +65,29 @@ SOURCES = \
     src/native/javax_microedition_io_Connector.cpp \
     src/util/FileUtils.cpp
 
-# Object files
-OBJECTS = $(SOURCES:.cpp=.o)
+# Object files (in build directory)
+OBJECTS = $(patsubst src/%.cpp,$(BUILD_DIR)/%.o,$(SOURCES))
 
 # Executable name
 TARGET = win\j2me-vm.exe
 
 # Build rules
-all: $(TARGET)
+all: $(BUILD_DIR) $(TARGET)
+
+$(BUILD_DIR):
+	mkdir -p $(BUILD_DIR)/core/instructions
+	mkdir -p $(BUILD_DIR)/loader
+	mkdir -p $(BUILD_DIR)/native
+	mkdir -p $(BUILD_DIR)/platform
+	mkdir -p $(BUILD_DIR)/util
 
 $(TARGET): $(OBJECTS)
 	$(CXX) $(LDFLAGS) -o $@ $^ $(LIBS)
 
-%.o: %.cpp
+$(BUILD_DIR)/%.o: src/%.cpp
 	$(CXX) $(CXXFLAGS) -c -o $@ $<
 
 clean:
-	rm -f $(OBJECTS) $(TARGET)
+	rm -rf $(BUILD_DIR) $(TARGET)
 
 .PHONY: all clean
