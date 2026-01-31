@@ -2,7 +2,7 @@
 #include "../Opcodes.hpp"
 #include "../HeapManager.hpp"
 #include "../ClassFile.hpp"
-#include <iostream>
+#include "../Logger.hpp"
 
 namespace j2me {
 namespace core {
@@ -156,7 +156,7 @@ void Interpreter::initConstants() {
                 }
                 frame->push(val);
             } else {
-                 std::cerr << "Unsupported LDC type at index " << (int)index << std::endl;
+                 LOG_ERROR("Unsupported LDC type at index " + std::to_string(index));
                  frame->push(JavaValue{JavaValue::INT, { .i = 0 }});
             }
             break;
@@ -230,7 +230,7 @@ void Interpreter::initConstants() {
                 }
                 frame->push(val);
             } else {
-                 std::cerr << "Unsupported LDC_W type at index " << (int)index << std::endl;
+                 LOG_ERROR("Unsupported LDC_W type at index " + std::to_string(index));
                  frame->push(JavaValue{JavaValue::INT, { .i = 0 }});
             }
             break;
@@ -249,7 +249,7 @@ void Interpreter::initConstants() {
                 JavaValue val; val.type = JavaValue::DOUBLE; val.val.d = dbl->bytes;
                 frame->push(val);
             } else {
-                 std::cerr << "Unsupported LDC2_W type at index " << (int)index << std::endl;
+                 LOG_ERROR("Unsupported LDC2_W type at index " + std::to_string(index));
             }
             break;
         } while(0);

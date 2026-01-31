@@ -12,27 +12,66 @@
 #include <chrono>
 #include <algorithm>
 
+// some switch buttons
+#define JOY_A     0
+#define JOY_B     1
+#define JOY_X     2
+#define JOY_Y     3
+#define JOY_PLUS  10
+#define JOY_MINUS 11
+#define JOY_LEFT  12
+#define JOY_UP    13
+#define JOY_RIGHT 14
+#define JOY_DOWN  15
+
+#define JOY_PAD_LEFT  16
+#define JOY_PAD_UP  17
+#define JOY_PAD_RIGHT  18
+#define JOY_PAD_DOWN  19
+
 namespace j2me {
 namespace core {
 
 static int mapKey(SDL_Keycode key) {
+     LOG_INFO("mapKey: " + std::to_string(key));
     switch (key) {
+#ifdef __SWITCH__
+        case JOY_A: return -5;
+        case JOY_B: return -5;
+        case JOY_X: return -6;
+        case JOY_Y: return -7;
+
+        case JOY_UP:return -1;
+        case JOY_LEFT: return -2;
+        case JOY_RIGHT: return -3;
+        case JOY_DOWN: return -4;
+
+        case JOY_PAD_LEFT: return 50;
+        case JOY_PAD_UP: return 52;
+        case JOY_PAD_RIGHT: return 54;
+        case JOY_PAD_DOWN: return 56;
+
+        case JOY_MINUS: return -6; // Soft 1 (Left Soft)
+        case JOY_PLUS: return -7; // Soft 2 (Right Soft)
+#else
         case SDLK_UP: return -1;
         case SDLK_DOWN: return -2;
         case SDLK_LEFT: return -3;
         case SDLK_RIGHT: return -4;
         case SDLK_RETURN: return -5;
         case SDLK_SPACE: return -5;
+     
         case SDLK_0: return 48;
         case SDLK_1: return 49;
         case SDLK_2: return 50;
         case SDLK_3: return 51;
-        case SDLK_4: return 52;
+        case SDLK_4: return 52; 
         case SDLK_5: return 53;
         case SDLK_6: return 54;
         case SDLK_7: return 55;
         case SDLK_8: return 56;
         case SDLK_9: return 57;
+
         case SDLK_q: return 49;
         case SDLK_w: return 50;
         case SDLK_e: return 51;
@@ -42,9 +81,10 @@ static int mapKey(SDL_Keycode key) {
         case SDLK_z: return 55;
         case SDLK_x: return 56;
         case SDLK_c: return 57;
-        case SDLK_F1: return -6; // Soft 1 (Left Soft)
-        case SDLK_F2: return -7; // Soft 2 (Right Soft)
-        // case SDLK_8: return 42; // STAR
+        case SDLK_F1: return -6;// Soft 1 (Left Soft)
+        case SDLK_F2: return -7;// Soft 2 (Right Soft)
+#endif
+        case SDLK_8: return 42; // STAR
         default: return 0;
     }
 }
@@ -63,10 +103,17 @@ static int keyStateIndexForKeyCode(int keyCode) {
 void EventLoop::pollSDL() {
     SDL_Event e;
     while (SDL_PollEvent(&e) != 0) {
+        int keyCode = 0;
         if (e.type == SDL_QUIT) {
             requestExit("manual: SDL_QUIT");
+#ifdef __SWITCH__
+        } else if (e.type == SDL_JOYBUTTONDOWN) {
+                keyCode = mapKey(e.jbutton.button);
+#else
         } else if (e.type == SDL_KEYDOWN) {
-            int keyCode = mapKey(e.key.keysym.sym);
+                keyCode = mapKey(e.key.keysym.sym);
+#endif
+            LOG_INFO("keyCode: " + std::to_string(keyCode));
             if (keyCode != 0) {
                 std::lock_guard<std::mutex> lock(queueMutex);
                 eventQueue.push({KeyEvent::PRESSED, keyCode});
@@ -78,8 +125,14 @@ void EventLoop::pollSDL() {
                     keyStates |= (1 << idx);
                 }
             }
+#ifdef __SWITCH__
+        } else if (e.type == SDL_JOYBUTTONUP) {
+                keyCode = mapKey(e.jbutton.button);
+#else
         } else if (e.type == SDL_KEYUP) {
-            int keyCode = mapKey(e.key.keysym.sym);
+                keyCode = mapKey(e.key.keysym.sym);
+#endif
+            LOG_INFO("keyCode: " + std::to_string(keyCode));
             if (keyCode != 0) {
                 std::lock_guard<std::mutex> lock(queueMutex);
                 eventQueue.push({KeyEvent::RELEASED, keyCode});

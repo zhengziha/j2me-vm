@@ -2,6 +2,7 @@
 #include "RuntimeTypes.hpp"
 #include "HeapManager.hpp"
 #include "Interpreter.hpp"
+#include "Logger.hpp"
 #include "../native/java_lang_Class.hpp"
 #include "../native/java_lang_Thread.hpp"
 #include "../native/java_lang_String.hpp"
@@ -28,7 +29,6 @@
 #include "../native/javax_microedition_io_Connector.hpp"
 #include "../native/java_io_RandomAccessFile.hpp"
 #include "../native/java_lang_Class.hpp"
-#include <iostream>
 
 namespace j2me {
 namespace natives {
@@ -238,14 +238,14 @@ NativeRegistry::NativeRegistry() {
         JavaValue thisVal = frame->pop();
         JavaObject* thisObj = (JavaObject*)thisVal.val.ref;
         if (thisObj) {
-            std::cerr << "DEBUG: StringBuilder.initNative() called, fields.size() = " << thisObj->fields.size() << std::endl;
+            LOG_DEBUG("DEBUG: StringBuilder.initNative() called, fields.size() = " + std::to_string(thisObj->fields.size()));
             std::string* str = new std::string();
             // Store pointer in first field (ensure size)
             if (thisObj->fields.size() < 1) thisObj->fields.resize(1);
             thisObj->fields[0] = (int64_t)str;
-            std::cerr << "DEBUG: StringBuilder.initNative() completed, fields.size() = " << thisObj->fields.size() << std::endl;
+            LOG_DEBUG("DEBUG: StringBuilder.initNative() completed, fields.size() = " + std::to_string(thisObj->fields.size()));
         } else {
-            std::cerr << "DEBUG: StringBuilder.initNative() called with null thisObj!" << std::endl;
+            LOG_DEBUG("DEBUG: StringBuilder.initNative() called with null thisObj!");
         }
     });
 
@@ -470,11 +470,10 @@ NativeFunction NativeRegistry::getNative(const std::string& className, const std
     auto it = registry.find(key);
     if (it != registry.end()) {
         if (!it->second) {
-             std::cerr << "[NativeRegistry] FATAL: Found key but function is empty: " << key << std::endl;
+             LOG_ERROR("[NativeRegistry] FATAL: Found key but function is empty: " + key);
         }
         return it->second;
     }
-    // std::cerr << "[NativeRegistry] Native not found: " << key << std::endl;
     return nullptr;
 }
 

@@ -1,7 +1,6 @@
 #include "Interpreter.hpp"
 #include "ClassParser.hpp"
 #include "Logger.hpp"
-#include <iostream>
 
 namespace j2me {
 namespace core {
@@ -11,9 +10,8 @@ std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& classNam
     // 检查类是否已加载
     auto it = loadedClasses.find(className);
     if (it != loadedClasses.end()) {
-        // std::cerr << "Already loaded: " << className << std::endl;
         if (className == "java/lang/StringBuilder") {
-            std::cerr << "DEBUG: StringBuilder already loaded from cache" << std::endl;
+            LOG_DEBUG("DEBUG: StringBuilder already loaded from cache");
         }
         return it->second;
     }
@@ -24,7 +22,7 @@ std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& classNam
     std::string path = className + ".class";
     
     if (className == "java/lang/StringBuilder") {
-        std::cerr << "DEBUG: Checking for StringBuilder.class, jarLoader.hasFile=" << jarLoader.hasFile(path) << std::endl;
+        LOG_DEBUG("DEBUG: Checking for StringBuilder.class, jarLoader.hasFile=" + std::string(jarLoader.hasFile(path) ? "true" : "false"));
     }
     
     // Check if file exists
@@ -210,7 +208,7 @@ std::shared_ptr<JavaClass> Interpreter::resolveClass(const std::string& classNam
         if (className == "java/lang/StringBuilder"
             && !jarLoader.hasFile("java/lang/StringBuilder.class")
             && (!libraryLoader || !libraryLoader->hasFile("java/lang/StringBuilder.class"))) {
-             std::cerr << "DEBUG: Creating mock StringBuilder class (both loaders missing)" << std::endl;
+             LOG_DEBUG("DEBUG: Creating mock StringBuilder class (both loaders missing)");
              LOG_DEBUG("[Interpreter] Creating mock StringBuilder class");
              auto dummy = std::make_shared<ClassFile>();
              auto javaClass = std::make_shared<JavaClass>(dummy);

@@ -4,10 +4,10 @@
 #include "../core/HeapManager.hpp"
 #include "../core/Interpreter.hpp"
 #include "../core/Diagnostics.hpp"
+#include "../core/Logger.hpp"
 #include "../loader/JarLoader.hpp"
 #include "java_lang_String.hpp"
 #include "NativeInputStream.hpp"
-#include <iostream>
 #include <string>
 
 namespace j2me {
@@ -17,7 +17,7 @@ void registerRandomAccessFileNatives(j2me::core::NativeRegistry& registry) {
     
     registry.registerNative("java/io/RandomAccessFile", "openNative", "(Ljava/lang/String;Ljava/lang/String;)V", 
         [&registry](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
-            std::cout << "[RandomAccessFile] openNative called" << std::endl;
+            LOG_DEBUG("[RandomAccessFile] openNative called");
             
             j2me::core::JavaValue modeVal = frame->pop();
             j2me::core::JavaValue nameVal = frame->pop();
@@ -27,7 +27,7 @@ void registerRandomAccessFileNatives(j2me::core::NativeRegistry& registry) {
                 auto nameStr = (j2me::core::JavaObject*)nameVal.val.ref;
                 std::string name = getJavaString(nameStr);
                 
-                std::cout << "[RandomAccessFile] Opening resource: " << name << std::endl;
+                LOG_DEBUG("[RandomAccessFile] Opening resource: " + name);
                 
                 auto loader = j2me::core::NativeRegistry::getInstance().getJarLoader();
                 if (loader && loader->hasFile(name)) {
@@ -42,13 +42,13 @@ void registerRandomAccessFileNatives(j2me::core::NativeRegistry& registry) {
                             }
                         }
                         
-                        std::cout << "[RandomAccessFile] Opened successfully, stream ID: " << streamId << " Size: " << data->size() << std::endl;
+                        LOG_DEBUG("[RandomAccessFile] Opened successfully, stream ID: " + std::to_string(streamId) + " Size: " + std::to_string(data->size()));
                     } else {
-                        std::cout << "[RandomAccessFile] Resource not found (data null): " << name << std::endl;
+                        LOG_DEBUG("[RandomAccessFile] Resource not found (data null): " + name);
                         j2me::core::Diagnostics::getInstance().onResourceNotFound(name);
                     }
                 } else {
-                    std::cout << "[RandomAccessFile] Resource not found in JAR: " << name << std::endl;
+                    LOG_DEBUG("[RandomAccessFile] Resource not found in JAR: " + name);
                     j2me::core::Diagnostics::getInstance().onResourceNotFound(name);
                 }
             }
@@ -57,7 +57,7 @@ void registerRandomAccessFileNatives(j2me::core::NativeRegistry& registry) {
     
     registry.registerNative("java/io/RandomAccessFile", "closeNative", "()V", 
         [&registry](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
-            std::cout << "[RandomAccessFile] closeNative called" << std::endl;
+            LOG_DEBUG("[RandomAccessFile] closeNative called");
             
             j2me::core::JavaValue thisVal = frame->pop();
             
@@ -147,7 +147,7 @@ void registerRandomAccessFileNatives(j2me::core::NativeRegistry& registry) {
             j2me::core::JavaValue bVal = frame->pop();
             j2me::core::JavaValue thisVal = frame->pop();
             
-            std::cout << "[RandomAccessFile] writeNative called (write not supported for JAR resources)" << std::endl;
+            LOG_DEBUG("[RandomAccessFile] writeNative called (write not supported for JAR resources)");
         }
     );
     
@@ -158,7 +158,7 @@ void registerRandomAccessFileNatives(j2me::core::NativeRegistry& registry) {
             j2me::core::JavaValue bufVal = frame->pop();
             j2me::core::JavaValue thisVal = frame->pop();
             
-            std::cout << "[RandomAccessFile] writeNative called (write not supported for JAR resources)" << std::endl;
+            LOG_DEBUG("[RandomAccessFile] writeNative called (write not supported for JAR resources)");
         }
     );
     
@@ -167,7 +167,7 @@ void registerRandomAccessFileNatives(j2me::core::NativeRegistry& registry) {
             j2me::core::JavaValue posVal = frame->pop();
             j2me::core::JavaValue thisVal = frame->pop();
             
-            std::cout << "[RandomAccessFile] seekNative called, position: " << posVal.val.l << std::endl;
+            LOG_DEBUG("[RandomAccessFile] seekNative called, position: " + std::to_string(posVal.val.l));
             
             if (thisVal.type == j2me::core::JavaValue::REFERENCE && thisVal.val.ref != nullptr) {
                 auto thisObj = (j2me::core::JavaObject*)thisVal.val.ref;

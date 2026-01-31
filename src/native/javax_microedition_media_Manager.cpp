@@ -3,7 +3,7 @@
 #include "../core/StackFrame.hpp"
 #include "../core/HeapManager.hpp"
 #include "../core/Interpreter.hpp"
-#include <iostream>
+#include "../core/Logger.hpp"
 
 namespace j2me {
 namespace natives {
@@ -37,7 +37,7 @@ void registerMediaNatives(j2me::core::NativeRegistry& registry) {
                 }
             }
             
-            std::cerr << "Failed to create AudioPlayer (Stream)" << std::endl;
+            LOG_ERROR("[Media] Failed to create AudioPlayer (Stream)");
             j2me::core::JavaValue result;
             result.type = j2me::core::JavaValue::REFERENCE;
             result.val.ref = nullptr;
@@ -59,7 +59,7 @@ void registerMediaNatives(j2me::core::NativeRegistry& registry) {
                     }
 
                     auto playerObj = j2me::core::HeapManager::getInstance().allocate(playerCls);
-                    std::cout << "[Media] Created AudioPlayer instance: " << playerObj << std::endl;
+                    LOG_DEBUG("[Media] Created AudioPlayer instance: " + std::to_string((intptr_t)playerObj));
                     j2me::core::JavaValue result;
                     result.type = j2me::core::JavaValue::REFERENCE;
                     result.val.ref = playerObj;
@@ -68,7 +68,7 @@ void registerMediaNatives(j2me::core::NativeRegistry& registry) {
                 }
             }
             
-            std::cerr << "Failed to create AudioPlayer (Locator)" << std::endl;
+            LOG_ERROR("[Media] Failed to create AudioPlayer (Locator)");
             j2me::core::JavaValue result;
             result.type = j2me::core::JavaValue::REFERENCE;
             result.val.ref = nullptr;

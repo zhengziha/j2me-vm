@@ -375,9 +375,9 @@ void J2MEVM::vmLoop() {
     int loopCount = 0;
     while (!eventLoop.shouldExit() && appletMainLoop()) {
         loopCount++;
-        if (loopCount % 100 == 0) {
-            LOG_INFO("Switch main loop iteration: " + std::to_string(loopCount));
-        }
+        // if (loopCount % 100 == 0) {
+        //     LOG_INFO("Switch main loop iteration: " + std::to_string(loopCount));
+        // }
 #else
     while (!eventLoop.shouldExit()) {
 #endif

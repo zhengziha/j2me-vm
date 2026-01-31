@@ -3,6 +3,10 @@
 #include <chrono>
 #include <cstdlib>
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_mixer.h>
+#ifdef __SWITCH__
+#include <SDL2/SDL_joystick.h>
+#endif
 #include <algorithm>
 #include <string>
 #include <vector>
@@ -20,13 +24,28 @@ int main(int argc, char* argv[]);
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <shellapi.h>
 // 取消定义可能与 LogLevel 冲突的宏
 #undef ERROR
 #undef NONE
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
-    int argc = 1;
-    char* argv[] = {"j2me-vm.exe", nullptr};
-    return main(argc, argv);
+    int argc = 0;
+    LPWSTR* argvW = CommandLineToArgvW(GetCommandLineW(), &argc);
+    
+    std::vector<char*> argv;
+    std::vector<std::string> argvStrings;
+    
+    for (int i = 0; i < argc; i++) {
+        int size = WideCharToMultiByte(CP_UTF8, 0, argvW[i], -1, nullptr, 0, nullptr, nullptr);
+        std::string arg(size - 1, 0);
+        WideCharToMultiByte(CP_UTF8, 0, argvW[i], -1, &arg[0], size, nullptr, nullptr);
+        argvStrings.push_back(arg);
+        argv.push_back(&argvStrings.back()[0]);
+    }
+    
+    LocalFree(argvW);
+    
+    return main(argc, argv.data());
 }
 #endif
 
@@ -139,7 +158,7 @@ std::string parseMidletClassName(const std::string& manifestContent) {
         size_t end = className.find_last_not_of(" \t\r\n");
         if (end != std::string::npos) className = className.substr(0, end + 1);
         std::replace(className.begin(), className.end(), '.', '/');
-        std::cerr << "DEBUG: Returning main class: '" << className << ".class'" << std::endl;
+        LOG_DEBUG("Returning main class: '" + className + ".class'");
         return className + ".class";
     }
     
@@ -158,7 +177,7 @@ std::string parseMidletClassName(const std::string& manifestContent) {
             }
         }
     }
-    std::cerr << "DEBUG: No main class found, returning empty string" << std::endl;
+    LOG_DEBUG("No main class found, returning empty string");
     return "";
 }
 
@@ -190,14 +209,16 @@ static int parseAutoKeyToken(const std::string& t) {
 }
 
 int main(int argc, char* argv[]) {
+#ifndef __SWITCH__
     if (argc < 2) {
-        std::cout << "Usage: j2me-vm [--debug] [--log-level LEVEL] [--timeout-ms MS] [--auto-key [SEQ]] [--no-auto-key] [--auto-key-delay-ms MS] <path_to_jar_or_class>" << std::endl;
-        std::cout << "  --debug: Enable debug mode (equivalent to --log-level debug)" << std::endl;
-        std::cout << "  LEVEL: debug, info, error, none (default: info)" << std::endl;
-        std::cout << "  MS: auto exit after MS milliseconds (0 disables, minimum: 15000)" << std::endl;
-        std::cout << "  SEQ: comma-separated keys, e.g. soft1,fire or fire (default: soft1,fire when enabled)" << std::endl;
+        LOG_INFO("Usage: j2me-vm [--debug] [--log-level LEVEL] [--timeout-ms MS] [--auto-key [SEQ]] [--no-auto-key] [--auto-key-delay-ms MS] <path_to_jar_or_class>");
+        LOG_INFO("  --debug: Enable debug mode (equivalent to --log-level debug)");
+        LOG_INFO("  LEVEL: debug, info, error, none (default: info)");
+        LOG_INFO("  MS: auto exit after MS milliseconds (0 disables, minimum: 15000)");
+        LOG_INFO("  SEQ: comma-separated keys, e.g. soft1,fire or fire (default: soft1,fire when enabled)");
         return 1;
     }
+#endif
     // 解析命令行参数
     // Parse command line arguments
     j2me::core::VMConfig config;
@@ -214,15 +235,15 @@ int main(int argc, char* argv[]) {
 
     int64_t timeoutMs = 0;
     constexpr int64_t MIN_TIMEOUT_MS = 15000;
-    bool autoKeyForcedOn = true;
+    bool autoKeyForcedOn = false;
     bool autoKeyForcedOff = false;
     std::string autoKeySeq;
     config.autoKeyDelayMs = 5000;
     
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
-        std::cerr << "DEBUG: Processing arg[" << i << "] = '" << arg << "', starts with '-': " << (arg[0] == '-' ? "true" : "false") << std::endl;
-        std::cerr << "DEBUG: config.filePath = '" << config.filePath << "', config.mainMethodArgs.size() = " << config.mainMethodArgs.size() << std::endl;
+        LOG_DEBUG("Processing arg[" + std::to_string(i) + "] = '" + arg + "', starts with '-': " + std::string(arg[0] == '-' ? "true" : "false"));
+        LOG_DEBUG("config.filePath = '" + config.filePath + "', config.mainMethodArgs.size() = " + std::to_string(config.mainMethodArgs.size()));
         if (arg == "--debug") {
             config.logLevel = j2me::core::LogLevel::DEBUG;
         } else if (arg == "--log-level" && i + 1 < argc) {
@@ -236,7 +257,7 @@ int main(int argc, char* argv[]) {
             } else if (levelStr == "none") {
                 config.logLevel = j2me::core::LogLevel::NONE;
             } else {
-                std::cerr << "Invalid log level: " << levelStr << std::endl;
+                LOG_ERROR("Invalid log level: " + levelStr);
                 return 1;
             }
         } else if (arg == "--timeout-ms" && i + 1 < argc) {
@@ -267,7 +288,7 @@ int main(int argc, char* argv[]) {
     }
 
     if (config.filePath.empty()) {
-        std::cerr << "Error: No file specified" << std::endl;
+        LOG_ERROR("Error: No file specified");
         return 1;
     }
 
@@ -296,9 +317,9 @@ int main(int argc, char* argv[]) {
     
     // 检查是否为 .class 文件
     // Check if it's a .class file
-    std::cerr << "DEBUG: Checking if '" << config.filePath << "' is a .class file" << std::endl;
+    LOG_DEBUG("DEBUG: Checking if '" + config.filePath + "' is a .class file");
     config.isClass = j2me::util::FileUtils::isClassFile(config.filePath);
-    std::cerr << "DEBUG: isClassFile result: " << (config.isClass ? "true" : "false") << std::endl;
+    LOG_DEBUG("DEBUG: isClassFile result: " + std::string(config.isClass ? "true" : "false"));
     
     // 加载 Loader
     // Load Loaders
@@ -343,10 +364,10 @@ int main(int argc, char* argv[]) {
         LOG_ERROR("Warning: rt.jar not found. Library classes might be missing.");
     }
     
-    std::cerr << "DEBUG: isClass = " << (config.isClass ? "true" : "false") << std::endl;
+    LOG_DEBUG("isClass = " + std::string(config.isClass ? "true" : "false"));
     
     if (config.isClass) {
-        std::cerr << "DEBUG: Entering .class mode" << std::endl;
+        LOG_DEBUG("Entering .class mode");
         config.classData = j2me::util::FileUtils::readFile(config.filePath);
         if (!config.classData) {
             LOG_ERROR("Failed to read .class file: " + config.filePath);
@@ -365,10 +386,10 @@ int main(int argc, char* argv[]) {
         }
         std::replace(className.begin(), className.end(), '.', '/');
         config.mainClassName = className;
-        std::cerr << "DEBUG: Set mainClassName to: " << config.mainClassName << std::endl;
+        LOG_DEBUG("DEBUG: Set mainClassName to: " + config.mainClassName);
         
     } else {
-        std::cerr << "DEBUG: Entering JAR mode" << std::endl;
+        LOG_DEBUG("DEBUG: Entering JAR mode");
         // JAR 模式
         // JAR Mode
         LOG_INFO("Loading JAR: " + config.filePath);
@@ -380,9 +401,9 @@ int main(int argc, char* argv[]) {
         auto manifest = config.appLoader->getManifest();
         if (manifest) {
             LOG_INFO("Manifest found:\n" + *manifest);
-            std::cerr << "DEBUG: About to call parseMidletClassName" << std::endl;
+            LOG_DEBUG("DEBUG: About to call parseMidletClassName");
             std::string midletClass = parseMidletClassName(*manifest);
-            std::cerr << "DEBUG: parseMidletClassName returned: '" << midletClass << "'" << std::endl;
+            LOG_DEBUG("DEBUG: parseMidletClassName returned: '" + midletClass + "'");
             if (!midletClass.empty()) {
                 config.mainClassName = midletClass;
                 LOG_INFO("Found main class from manifest: " + config.mainClassName);
@@ -412,14 +433,26 @@ int main(int argc, char* argv[]) {
     // 初始化SDL和窗口（仅当需要时）
     SDL_Window* window = nullptr;
     if (needsWindow) {
-        if (SDL_Init(SDL_INIT_VIDEO) < 0) {
-            LOG_ERROR("SDL initialization failed: " + std::string(SDL_GetError()));
-            return 1;
-        }
-        
         #ifdef __SWITCH__
         romfsInit();
         LOG_INFO("Initialized romfs");
+        if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_JOYSTICK) < 0) {
+        #else
+        if (SDL_Init(SDL_INIT_VIDEO) < 0) {
+        #endif
+            LOG_ERROR("SDL initialization failed: " + std::string(SDL_GetError()));
+            return 1;
+        }
+            // 打开声音
+        Mix_Init(MIX_INIT_MP3|MIX_INIT_MID|MIX_INIT_FLAC|MIX_INIT_MOD|MIX_INIT_OGG);
+
+        #ifdef __SWITCH__
+        LOG_INFO("Joysticks detected: " + std::to_string(SDL_NumJoysticks()));
+        for (int i = 0; i < SDL_NumJoysticks(); i++) {
+            if (SDL_JoystickOpen(i) != nullptr) {
+                LOG_INFO("Joystick " + std::to_string(i) + " opened");
+            }
+        }
         #endif
 
         window = SDL_CreateWindow("J2ME VM", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 240, 320, SDL_WINDOW_SHOWN);
@@ -444,10 +477,10 @@ int main(int argc, char* argv[]) {
         LOG_INFO("Calling vm.run()");
         result = vm.run(config);
         LOG_INFO("VM run completed with result: " + std::to_string(result));
-        std::cout << "[INFO] VM run completed with result: " << result << std::endl;
+        LOG_INFO("[INFO] VM run completed with result: " + std::to_string(result));
     } catch (const std::exception& e) {
         LOG_ERROR("VM crashed with exception: " + std::string(e.what()));
-        std::cerr << "[ERROR] VM crashed with exception: " << e.what() << std::endl;
+        LOG_ERROR("[ERROR] VM crashed with exception: " + std::string(e.what()));
         // 尝试将错误信息写入文件
         std::ofstream errorFile("j2me-vm-error.log");
         if (errorFile.is_open()) {
@@ -456,7 +489,6 @@ int main(int argc, char* argv[]) {
         }
     } catch (...) {
         LOG_ERROR("VM crashed with unknown exception");
-        std::cerr << "[ERROR] VM crashed with unknown exception" << std::endl;
         // 尝试将错误信息写入文件
         std::ofstream errorFile("j2me-vm-error.log");
         if (errorFile.is_open()) {

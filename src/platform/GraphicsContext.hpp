@@ -5,7 +5,6 @@
 // #define STB_IMAGE_IMPLEMENTATION // Removed from header!
 #include "stb_image.h"
 #include <memory>
-#include <iostream>
 #include <mutex>
 #include <cstdint>
 #include <chrono>
@@ -13,6 +12,7 @@
 #include <limits>
 #include <string>
 #include <cmath>
+#include "../core/Logger.hpp"
 
 namespace j2me {
 namespace platform {
@@ -31,90 +31,90 @@ public:
         
         // 创建渲染器
         // Create Renderer
-        printf("Creating renderer with logical size: %dx%d\n", logicalWidth, logicalHeight);
+        LOG_DEBUG("Creating renderer with logical size: " + std::to_string(logicalWidth) + "x" + std::to_string(logicalHeight));
         renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
         if (!renderer) {
-            printf("SDL_CreateRenderer Error: %s\n", SDL_GetError());
+            LOG_DEBUG("SDL_CreateRenderer Error: " + std::string(SDL_GetError()));
             // 回退到软件渲染
-            printf("Falling back to software renderer\n");
+            LOG_DEBUG("Falling back to software renderer");
             renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
         }
 
         if (renderer) {
-            printf("Renderer created successfully\n");
+            LOG_DEBUG("Renderer created successfully");
              // 我们不设置逻辑大小，所以 SDL_RenderCopy 会拉伸以填充窗口
              // We do NOT set logical size, so SDL_RenderCopy will stretch to fill window
              // 创建流式纹理，用于将后端缓冲区上传到 GPU
              // Create Texture for display (Source size is logical size)
-             printf("Creating texture with format RGBA32 and size: %dx%d\n", logicalWidth, logicalHeight);
+             LOG_DEBUG("Creating texture with format RGBA32 and size: " + std::to_string(logicalWidth) + "x" + std::to_string(logicalHeight));
              texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STREAMING, logicalWidth, logicalHeight);
              if (texture) {
-                 printf("Texture created successfully\n");
+                 LOG_DEBUG("Texture created successfully");
                  SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_NONE);
              } else {
-                 printf("SDL_CreateTexture Error: %s\n", SDL_GetError());
+                 LOG_DEBUG("SDL_CreateTexture Error: " + std::string(SDL_GetError()));
              }
         }
         
         // 后端缓冲区 (绘图目标) - 保持在软件中
         // Back Buffer (Drawing Target) - Keep in Software
-        printf("Creating back buffer surface with size: %dx%d\n", logicalWidth, logicalHeight);
+        LOG_DEBUG("Creating back buffer surface with size: " + std::to_string(logicalWidth) + "x" + std::to_string(logicalHeight));
         surface = SDL_CreateRGBSurfaceWithFormat(0, logicalWidth, logicalHeight, 32, SDL_PIXELFORMAT_RGBA32);
         if (!surface) {
-            printf("SDL_CreateRGBSurfaceWithFormat Error (back): %s\n", SDL_GetError());
+            LOG_DEBUG("SDL_CreateRGBSurfaceWithFormat Error (back): " + std::string(SDL_GetError()));
         } else {
-            printf("Back buffer surface created successfully\n");
+            LOG_DEBUG("Back buffer surface created successfully");
         }
         
         // 前端缓冲区 (显示目标) - 保持在软件中
         // Front Buffer (Display Target) - Keep in Software
-        printf("Creating display surface with size: %dx%d\n", logicalWidth, logicalHeight);
+        LOG_DEBUG("Creating display surface with size: " + std::to_string(logicalWidth) + "x" + std::to_string(logicalHeight));
         displaySurface = SDL_CreateRGBSurfaceWithFormat(0, logicalWidth, logicalHeight, 32, SDL_PIXELFORMAT_RGBA32);
         if (!displaySurface) {
-            printf("SDL_CreateRGBSurfaceWithFormat Error (display): %s\n", SDL_GetError());
+            LOG_DEBUG("SDL_CreateRGBSurfaceWithFormat Error (display): " + std::string(SDL_GetError()));
         } else {
-            printf("Display surface created successfully\n");
+            LOG_DEBUG("Display surface created successfully");
         }
         
         // 填充白色背景
         // Fill white
         if (surface) {
-            SDL_FillRect(surface, nullptr, SDL_MapRGBA(surface->format, 255, 255, 255, 255));
-            printf("Back buffer filled with white\n");
+            SDL_FillRect(surface, nullptr, SDL_MapRGBA(surface->format, 255,255,255,255));
+            LOG_DEBUG("Back buffer filled with white");
         }
         if (displaySurface) {
             SDL_FillRect(displaySurface, nullptr, SDL_MapRGBA(displaySurface->format, 255, 255, 255, 255));
-            printf("Display surface filled with white\n");
+            LOG_DEBUG("Display surface filled with white");
         }
         
         // 初始显示
         // Initial Present
-        printf("Performing initial update\n");
+        LOG_DEBUG("Performing initial update");
         updateNoLock();
-        printf("Initial update completed\n");
+        LOG_DEBUG("Initial update completed");
 
         // 初始化 TTF 字体引擎
         // Init TTF
-        printf("Initializing TTF...\n");
+        LOG_DEBUG("Initializing TTF...");
         if (TTF_Init() == -1) {
-            std::cerr << "TTF_Init: " << TTF_GetError() << std::endl;
-            printf("TTF_Init failed: %s\n", TTF_GetError());
+            LOG_ERROR("TTF_Init: " + std::string(TTF_GetError()));
+            LOG_DEBUG("TTF_Init failed: " + std::string(TTF_GetError()));
         } else {
-            printf("TTF_Init succeeded!\n");
+            LOG_DEBUG("TTF_Init succeeded!");
             auto tryOpen = [](const char* path, int pt) -> TTF_Font* {
-                printf("Trying to open font: %s, size: %d\n", path, pt);
+                LOG_DEBUG("Trying to open font: " + std::string(path) + ", size: " + std::to_string(pt));
                 TTF_Font* f = TTF_OpenFont(path, pt);
                 if (f) {
-                    printf("Successfully opened font: %s\n", path);
+                    LOG_INFO("Successfully opened font: " + std::string(path));
                 } else {
-                    printf("Failed to open font: %s, error: %s\n", path, TTF_GetError());
+                    LOG_DEBUG("Failed to open font: " + std::string(path) + ", error: " + std::string(TTF_GetError()));
                 }
                 return f;
             };
 
             // 在 Windows 系统上添加系统字体目录的搜索路径
             #ifdef _WIN32
-            printf("Searching for Windows system fonts...\n");
+            LOG_DEBUG("Searching for Windows system fonts...");
             const char* windowsFonts[] = {
                 "C:\\Windows\\Fonts\\SimSun.ttc",     // 宋体
                 "C:\\Windows\\Fonts\\SimHei.ttf",     // 黑体
@@ -129,14 +129,17 @@ public:
                 if (fontMedium && fontSmall && fontLarge) break;
             }
             #else
-            printf("Not on Windows, skipping system font search...\n");
+            LOG_DEBUG("Not on Windows, skipping system font search...");
             #endif
 
-            printf("Searching for other fonts...\n");
+            LOG_DEBUG("Searching for other fonts...");
             const char* paths[] = {
                 "/System/Library/Fonts/Hiragino Sans GB.ttc",
-                "fonts/s60snr.ttf",
+                "fonts/simhei.ttf",
+                "fonts/SIMSUN.ttc",
+                "fonts/MSYH.ttc",
                 "fonts/Tahoma.ttf",
+                "fonts/s60snr.ttf",
                 "/Library/Fonts/Arial.ttf",
             };
 
@@ -155,14 +158,14 @@ public:
             font = fontMedium;
 
             if (!font) {
-                std::cerr << "TTF_OpenFont failed: " << TTF_GetError() << std::endl;
-                printf("TTF_OpenFont failed: %s\n", TTF_GetError());
+                LOG_ERROR("TTF_OpenFont failed: " + std::string(TTF_GetError()));
+                LOG_DEBUG("TTF_OpenFont failed: " + std::string(TTF_GetError()));
             } else {
-                printf("Fonts loaded successfully!\n");
-                printf("fontMedium: %p\n", fontMedium);
-                printf("fontSmall: %p\n", fontSmall);
-                printf("fontLarge: %p\n", fontLarge);
-                printf("font: %p\n", font);
+                LOG_INFO("Fonts loaded successfully!");
+                LOG_INFO("fontMedium: " + std::to_string((uintptr_t)fontMedium));
+                LOG_INFO("fontSmall: " + std::to_string((uintptr_t)fontSmall));
+                LOG_INFO("fontLarge: " + std::to_string((uintptr_t)fontLarge));
+                LOG_INFO("font: " + std::to_string((uintptr_t)font));
             }
         }
     }
@@ -1089,27 +1092,27 @@ private:
         if (renderer && texture && displaySurface) {
              // 更新纹理
              if (SDL_UpdateTexture(texture, nullptr, displaySurface->pixels, displaySurface->pitch) < 0) {
-                 printf("SDL_UpdateTexture Error: %s\n", SDL_GetError());
+                 LOG_DEBUG("SDL_UpdateTexture Error: " + std::string(SDL_GetError()));
              }
              // 清除渲染器
              if (SDL_RenderClear(renderer) < 0) {
-                 printf("SDL_RenderClear Error: %s\n", SDL_GetError());
+                 LOG_DEBUG("SDL_RenderClear Error: " + std::string(SDL_GetError()));
              }
              // 复制纹理到渲染器 (自动缩放以填充窗口)
              if (SDL_RenderCopy(renderer, texture, nullptr, nullptr) < 0) {
-                 printf("SDL_RenderCopy Error: %s\n", SDL_GetError());
+                 LOG_DEBUG("SDL_RenderCopy Error: " + std::string(SDL_GetError()));
              }
              // 显示
              SDL_RenderPresent(renderer);
         } else {
             if (!renderer) {
-                printf("Renderer not initialized\n");
+                LOG_DEBUG("Renderer not initialized");
             }
             if (!texture) {
-                printf("Texture not initialized\n");
+                LOG_DEBUG("Texture not initialized");
             }
             if (!displaySurface) {
-                printf("Display surface not initialized\n");
+                LOG_DEBUG("Display surface not initialized");
             }
         }
     }

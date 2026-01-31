@@ -6,7 +6,6 @@
 #include "../NativeRegistry.hpp"
 #include "../Logger.hpp"
 #include "../../native/java_lang_String.hpp"
-#include <iostream>
 #include <cstring>
 #include <algorithm>
 
@@ -105,7 +104,7 @@ void Interpreter::initReferences() {
                 // Throw NullPointerException
                 // TODO: Create NPE object properly
                 // For now, print error and throw runtime error to stop VM
-                std::cerr << "Error: ATHROW with null exception object (NullPointerException)" << std::endl;
+                LOG_ERROR("Error: ATHROW with null exception object (NullPointerException)");
                 throw std::runtime_error("NullPointerException in ATHROW");
             }
             
@@ -448,7 +447,7 @@ void Interpreter::initReferences() {
                  }
                  break;
             }
-            std::cerr << "Unsupported GETSTATIC index: " << index << std::endl;
+            LOG_ERROR("Unsupported GETSTATIC index: " + std::to_string(index));
             break;
         } while(0);
         return true;
@@ -501,7 +500,7 @@ void Interpreter::initReferences() {
                  }
                  break;
             }
-            std::cerr << "Unsupported PUTSTATIC index: " << index << std::endl;
+            LOG_ERROR("Unsupported PUTSTATIC index: " + std::to_string(index));
             break;
         } while(0);
         return true;
@@ -629,7 +628,7 @@ void Interpreter::initReferences() {
                         if (nativeFunc) {
                             nativeFunc(thread, frame);
                         } else {
-                            std::cerr << "UnsatisfiedLinkError: " << className->bytes << "." << name->bytes << descriptor->bytes << std::endl;
+                            LOG_ERROR("UnsatisfiedLinkError: " + className->bytes + "." + name->bytes + descriptor->bytes);
                              throw std::runtime_error("UnsatisfiedLinkError: " + className->bytes + "." + name->bytes + descriptor->bytes);
                          }
                      } else {
@@ -665,7 +664,7 @@ void Interpreter::initReferences() {
                 if (nativeFunc) {
                      nativeFunc(thread, frame);
                 } else {
-                    std::cerr << "Method not found: " << className->bytes << "." << name->bytes << std::endl;
+                    LOG_ERROR("Method not found: " + className->bytes + "." + name->bytes);
                      throw std::runtime_error("Method not found: " + className->bytes + "." + name->bytes);
                 }
              }
@@ -718,9 +717,9 @@ void Interpreter::initReferences() {
                 if (name->bytes == "println" && !args.empty()) {
                     auto& arg = args[argCount-1]; 
                     if (arg.type == JavaValue::REFERENCE && !arg.strVal.empty()) {
-                        std::cout << "JVM OUTPUT: " << arg.strVal << std::endl;
+                        LOG_INFO("JVM OUTPUT: " + arg.strVal);
                     } else if (arg.type == JavaValue::INT) {
-                         std::cout << "JVM OUTPUT: " << arg.val.i << std::endl;
+                         LOG_INFO("JVM OUTPUT: " + std::to_string(arg.val.i));
                     }
                 } else if (name->bytes == "toString") {
                     JavaValue ret;
@@ -820,7 +819,7 @@ void Interpreter::initReferences() {
                     if (nativeFunc) {
                        nativeFunc(thread, frame);
                     } else {
-                        std::cerr << "UnsatisfiedLinkError (virtual): " << methodClass->name << "." << name->bytes << descriptor->bytes << std::endl;
+                        LOG_ERROR("UnsatisfiedLinkError (virtual): " + methodClass->name + "." + name->bytes + descriptor->bytes);
                     }
                 } else {
                     auto newFrame = std::make_shared<StackFrame>(*method, methodClass->rawFile);
@@ -888,8 +887,7 @@ void Interpreter::initReferences() {
                     }
                 }
                 
-                std::cerr << "[ERROR] NullPointerException in INVOKEINTERFACE: " 
-                          << interfaceName << "." << name->bytes << descriptor->bytes << std::endl;
+                LOG_ERROR("[ERROR] NullPointerException in INVOKEINTERFACE: " + interfaceName + "." + name->bytes + descriptor->bytes);
                           
                 throw std::runtime_error("NullPointerException");
             }
@@ -916,7 +914,7 @@ void Interpreter::initReferences() {
                              if (nativeFunc) {
                                  nativeFunc(thread, frame);
                              } else {
-                                 std::cerr << "UnsatisfiedLinkError (interface): " << currentClass->name << "." << name->bytes << descriptor->bytes << std::endl;
+                                 LOG_ERROR("UnsatisfiedLinkError (interface): " + currentClass->name + "." + name->bytes + descriptor->bytes);
                              }
                         } else {
                             auto newFrame = std::make_shared<StackFrame>(m, currentClass->rawFile);
@@ -948,7 +946,7 @@ void Interpreter::initReferences() {
                      currentClass = resolveClass(superClassName->bytes);
                  }
              }
-             if (!found) std::cerr << "Interface Method not found: " << name->bytes << std::endl;
+             if (!found) LOG_ERROR("Interface Method not found: " + name->bytes);
              break;
         } while(0);
         return true;
