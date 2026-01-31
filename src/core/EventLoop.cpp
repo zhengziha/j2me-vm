@@ -33,7 +33,7 @@ namespace j2me {
 namespace core {
 
 static int mapKey(SDL_Keycode key) {
-     LOG_INFO("mapKey: " + std::to_string(key));
+    //  LOG_INFO("mapKey: " + std::to_string(key));
     switch (key) {
 #ifdef __SWITCH__
         case JOY_A: return -5;
