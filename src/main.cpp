@@ -222,7 +222,7 @@ int main(int argc, char* argv[]) {
     // 解析命令行参数
     // Parse command line arguments
     j2me::core::VMConfig config;
-    config.logLevel = j2me::core::LogLevel::INFO;
+    config.logLevel = j2me::core::LogLevel::DEBUG;
 
 #ifdef __SWITCH__
     LOG_INFO("Initializing romfs");
@@ -455,7 +455,12 @@ int main(int argc, char* argv[]) {
         }
         #endif
 
-        window = SDL_CreateWindow("J2ME VM", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 240, 320, SDL_WINDOW_SHOWN);
+        #ifdef __SWITCH__
+        // 在 Switch 上使用全屏窗口
+        window = SDL_CreateWindow("J2ME VM", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 0, 0, SDL_WINDOW_FULLSCREEN_DESKTOP | SDL_WINDOW_SHOWN);
+        #else
+        window = SDL_CreateWindow("J2ME VM", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, 480, 640, SDL_WINDOW_SHOWN);
+        #endif
         if (!window) {
             LOG_ERROR("Window creation failed: " + std::string(SDL_GetError()));
             SDL_Quit();

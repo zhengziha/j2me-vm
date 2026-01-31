@@ -42,8 +42,6 @@ public:
 
         if (renderer) {
             LOG_DEBUG("Renderer created successfully");
-             // 我们不设置逻辑大小，所以 SDL_RenderCopy 会拉伸以填充窗口
-             // We do NOT set logical size, so SDL_RenderCopy will stretch to fill window
              // 创建流式纹理，用于将后端缓冲区上传到 GPU
              // Create Texture for display (Source size is logical size)
              LOG_DEBUG("Creating texture with format RGBA32 and size: " + std::to_string(logicalWidth) + "x" + std::to_string(logicalHeight));
@@ -1098,8 +1096,38 @@ private:
              if (SDL_RenderClear(renderer) < 0) {
                  LOG_DEBUG("SDL_RenderClear Error: " + std::string(SDL_GetError()));
              }
-             // 复制纹理到渲染器 (自动缩放以填充窗口)
-             if (SDL_RenderCopy(renderer, texture, nullptr, nullptr) < 0) {
+             
+             // 计算保持宽高比的目标矩形
+             // Calculate destination rect while maintaining aspect ratio
+             SDL_Rect dstRect;
+             int windowWidth, windowHeight;
+             SDL_GetWindowSize(window, &windowWidth, &windowHeight);
+             
+             int textureWidth = displaySurface->w;
+             int textureHeight = displaySurface->h;
+             
+             LOG_DEBUG("Window size: " + std::to_string(windowWidth) + "x" + std::to_string(windowHeight));
+             LOG_DEBUG("Texture size: " + std::to_string(textureWidth) + "x" + std::to_string(textureHeight));
+             
+             // 计算缩放比例
+             // Calculate scale factors
+             float scaleX = (float)windowWidth / textureWidth;
+             float scaleY = (float)windowHeight / textureHeight;
+             float scale = std::min(scaleX, scaleY);
+             
+             LOG_DEBUG("Scale X: " + std::to_string(scaleX) + ", Scale Y: " + std::to_string(scaleY) + ", Scale: " + std::to_string(scale));
+             
+             // 计算居中的目标矩形
+             // Calculate centered destination rect
+             dstRect.w = (int)(textureWidth * scale);
+             dstRect.h = (int)(textureHeight * scale);
+             dstRect.x = (windowWidth - dstRect.w) / 2;
+             dstRect.y = (windowHeight - dstRect.h) / 2;
+             
+             LOG_DEBUG("Dst rect: x=" + std::to_string(dstRect.x) + ", y=" + std::to_string(dstRect.y) + ", w=" + std::to_string(dstRect.w) + ", h=" + std::to_string(dstRect.h));
+             
+             // 复制纹理到渲染器 (保持宽高比)
+             if (SDL_RenderCopy(renderer, texture, nullptr, &dstRect) < 0) {
                  LOG_DEBUG("SDL_RenderCopy Error: " + std::string(SDL_GetError()));
              }
              // 显示
