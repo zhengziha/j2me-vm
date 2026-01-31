@@ -246,31 +246,150 @@ void registerMediaNatives(j2me::core::NativeRegistry& registry) {
             std::vector<uint8_t> audioData;
             std::string resourcePath = "audio_from_stream";
 
-            if (streamObj && streamObj->fields.size() > 0) {
-                int streamId = streamObj->fields[0];
-                auto* stream = j2me::core::HeapManager::getInstance().getStream(streamId);
+            if (streamObj && streamObj->cls) {
+                std::string streamClassName = streamObj->cls->name;
+                ss.str("");
+                ss << "[Media] InputStream class name: " << streamClassName;
+                LOG_INFO(ss.str().c_str());
 
-                if (stream) {
-                    // 获取流数据
-                    const uint8_t* data = stream->getData();
-                    size_t size = stream->getSize();
-
-                    // 如果流有路径信息，使用它作为资源名
-                    if (!stream->getFilePath().empty()) {
-                        resourcePath = stream->getFilePath();
-                    }
-
-                    // 复制数据到 vector
-                    audioData.assign(data, data + size);
-
-                    ss.str("");
-                    ss << "[Media] Read " << audioData.size() << " bytes from InputStream, path: " << resourcePath;
-                    LOG_INFO(ss.str().c_str());
-                } else {
-                    ss.str("");
-                    ss << "[Media] Failed to get stream with ID: " << streamId;
-                    LOG_ERROR(ss.str().c_str());
+                // 打印所有字段的值，用于调试
+                std::stringstream debugSs;
+                debugSs << "[Media] InputStream fields: ";
+                for (size_t i = 0; i < streamObj->fields.size(); i++) {
+                    debugSs << "[" << i << "]=" << streamObj->fields[i] << " ";
                 }
+                LOG_INFO(debugSs.str().c_str());
+
+                // 根据不同的 InputStream 类型处理数据
+                if (streamClassName == "java/io/ByteArrayInputStream") {
+                    // ByteArrayInputStream 有两种模式：
+                    // 1. 纯 Java 模式：buf 字段是 Java 字节数组对象引用
+                    // 2. Native 模式：buf 为 null，使用 NativeInputStream
+                    
+                    // ByteArrayInputStream 的字段布局：buf (fields[0]), pos (fields[1]), mark (fields[2]), count (fields[3])
+                    if (streamObj->fields.size() >= 4) {
+                        int64_t bufRef = streamObj->fields[0];
+                        int pos = (int)streamObj->fields[1];
+                        int count = (int)streamObj->fields[3];
+
+                        if (bufRef != 0) {
+                            // 纯 Java 模式：从 Java 字节数组读取数据
+                            j2me::core::JavaObject* bufArrayObj = reinterpret_cast<j2me::core::JavaObject*>(bufRef);
+                            if (bufArrayObj) {
+                                // 从 pos 到 count 读取数据
+                                int dataSize = count - pos;
+                                if (dataSize > 0) {
+                                    audioData.reserve(dataSize);
+                                    for (int i = pos; i < count; i++) {
+                                        if (i < (int)bufArrayObj->fields.size()) {
+                                            audioData.push_back((uint8_t)bufArrayObj->fields[i]);
+                                        }
+                                    }
+                                    ss.str("");
+                                    ss << "[Media] Read " << audioData.size() << " bytes from ByteArrayInputStream (Java mode)";
+                                    LOG_INFO(ss.str().c_str());
+                                }
+                            }
+                        } else {
+                            // Native 模式：尝试从 NativeInputStream 读取数据
+                            // 尝试所有可能的字段位置，找到有效的流ID
+                            j2me::natives::NativeInputStream* stream = nullptr;
+                            for (size_t i = 0; i < streamObj->fields.size(); i++) {
+                                int candidateId = (int)streamObj->fields[i];
+                                if (candidateId > 0) {
+                                    stream = j2me::core::HeapManager::getInstance().getStream(candidateId);
+                                    if (stream) {
+                                        break;
+                                    }
+                                }
+                            }
+
+                            if (stream) {
+                                const uint8_t* data = stream->getData();
+                                size_t size = stream->getSize();
+                                audioData.assign(data, data + size);
+
+                                if (!stream->getFilePath().empty()) {
+                                    resourcePath = stream->getFilePath();
+                                }
+
+                                ss.str("");
+                                ss << "[Media] Read " << audioData.size() << " bytes from ByteArrayInputStream (Native mode)";
+                                LOG_INFO(ss.str().c_str());
+                            }
+                        }
+                    }
+                } else if (streamClassName == "java/io/ResourceInputStream") {
+                    // ResourceInputStream 使用 NativeInputStream
+                    // 字段布局：nativeHandle (fields[0]), streamId (fields[1]), pos (fields[2]), mark (fields[3]), count (fields[4])
+                    if (streamObj->fields.size() > 1) {
+                        int streamId = (int)streamObj->fields[1];
+                        auto stream = j2me::core::HeapManager::getInstance().getStream(streamId);
+
+                        if (stream) {
+                            const uint8_t* data = stream->getData();
+                            size_t size = stream->getSize();
+                            audioData.assign(data, data + size);
+
+                            if (!stream->getFilePath().empty()) {
+                                resourcePath = stream->getFilePath();
+                            }
+
+                            ss.str("");
+                            ss << "[Media] Read " << audioData.size() << " bytes from ResourceInputStream, path: " << resourcePath;
+                            LOG_INFO(ss.str().c_str());
+                        } else {
+                            ss.str("");
+                            ss << "[Media] Failed to get stream for ResourceInputStream with ID: " << streamId;
+                            LOG_ERROR(ss.str().c_str());
+                        }
+                    }
+                } else {
+                    // 其他类型的 InputStream，尝试通用的 NativeInputStream 处理
+                    j2me::natives::NativeInputStream* stream = nullptr;
+                    
+                    // 尝试所有可能的字段位置，找到有效的流ID
+                    for (size_t i = 0; i < streamObj->fields.size(); i++) {
+                        int candidateId = (int)streamObj->fields[i];
+                        if (candidateId > 0) {
+                            stream = j2me::core::HeapManager::getInstance().getStream(candidateId);
+                            if (stream) {
+                                break;
+                            }
+                        }
+                    }
+                    
+                    // 如果没有找到有效的流 ID，尝试所有可能的流
+                    if (!stream) {
+                        auto& heapManager = j2me::core::HeapManager::getInstance();
+                        for (int i = 1; i <= 100; i++) {
+                            stream = heapManager.getStream(i);
+                            if (stream) {
+                                break;
+                            }
+                        }
+                    }
+                    
+                    if (stream) {
+                        const uint8_t* data = stream->getData();
+                        size_t size = stream->getSize();
+                        audioData.assign(data, data + size);
+
+                        if (!stream->getFilePath().empty()) {
+                            resourcePath = stream->getFilePath();
+                        }
+
+                        ss.str("");
+                        ss << "[Media] Read " << audioData.size() << " bytes from generic InputStream, path: " << resourcePath;
+                        LOG_INFO(ss.str().c_str());
+                    } else {
+                        ss.str("");
+                        ss << "[Media] Failed to find valid stream for InputStream type: " << streamClassName;
+                        LOG_ERROR(ss.str().c_str());
+                    }
+                }
+            } else {
+                LOG_ERROR("[Media] Invalid InputStream object");
             }
 
             auto interpreter = registry.getInterpreter();

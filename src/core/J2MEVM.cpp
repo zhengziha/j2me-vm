@@ -280,9 +280,7 @@ void J2MEVM::findAndRunInit() {
                      EventLoop::getInstance().pollSDL();
                      EventLoop::getInstance().dispatchEvents(interpreter.get());
                      TimerManager::getInstance().tick(interpreter.get());
-                     EventLoop::getInstance().render(interpreter.get());
-                     EventLoop::getInstance().checkPaintFinished();
-                     EventLoop::getInstance().updateDisplay();
+                     EventLoop::getInstance().processRepaints(interpreter.get());
 
                      auto t = ThreadManager::getInstance().nextThread();
                      if (t) interpreter->execute(t, 10000);
@@ -332,9 +330,7 @@ void J2MEVM::findAndRunStartApp() {
                             EventLoop::getInstance().pollSDL();
                             EventLoop::getInstance().dispatchEvents(interpreter.get());
                             TimerManager::getInstance().tick(interpreter.get());
-                            EventLoop::getInstance().render(interpreter.get());
-                            EventLoop::getInstance().checkPaintFinished();
-                            EventLoop::getInstance().updateDisplay();
+                            EventLoop::getInstance().processRepaints(interpreter.get());
                             auto t = ThreadManager::getInstance().nextThread();
                             if (t) interpreter->execute(t, 10000);
                             ThreadManager::getInstance().removeFinishedThreads();
@@ -363,7 +359,7 @@ void J2MEVM::findAndRunStartApp() {
 void J2MEVM::vmLoop() {
     LOG_INFO("Entering VM Event Loop...");
     EventLoop& eventLoop = EventLoop::getInstance();
-    
+
     using clock = std::chrono::steady_clock;
     auto lastFrameTime = clock::now();
     const auto FRAME_INTERVAL = std::chrono::milliseconds(33); // ~30 FPS
@@ -387,22 +383,31 @@ void J2MEVM::vmLoop() {
 #endif
         try {
             auto now = clock::now();
-            
-            // 限制渲染、输入轮询和事件分发的频率为 30 FPS
-            // Limit Rendering, Input Polling AND Event Dispatch to 30 FPS
+
+            // 限制输入轮询和事件分发的频率为 30 FPS
+            // J2ME 规范：重绘由 repaint() 触发，不是轮询式
+            // Limit input polling and event dispatch to 30 FPS
+            // J2ME spec: Repaint is triggered by repaint(), not polling
             if (now - lastFrameTime >= FRAME_INTERVAL) {
                 eventLoop.pollSDL();
-                // 将 dispatchEvents 移至此处以限制按键事件频率
-                // Move dispatchEvents here to limit key event frequency
                 eventLoop.dispatchEvents(interpreter.get());
-                eventLoop.render(interpreter.get());
                 lastFrameTime = now;
             }
 
-            eventLoop.checkPaintFinished();
-            // 在 commit() 后立即更新显示，确保新内容尽快显示
-            // Update display immediately after commit() to show new content ASAP
-            eventLoop.updateDisplay();
+            // J2ME 规范：处理重绘请求 (由 repaint() 触发)
+            // J2ME spec: Process repaint requests (triggered by repaint())
+            // 同时提供连续渲染支持，因为某些游戏依赖此行为
+            // Also provide continuous rendering support as some games depend on it
+            eventLoop.processRepaints(interpreter.get());
+
+            // 连续渲染：如果没有显式 repaint 请求，定期调用 paint 以支持依赖此行为的游戏
+            // Continuous rendering: Call paint periodically if no explicit repaint request, for games that depend on it
+            static auto lastContinuousPaintTime = clock::now();
+            if (now - lastContinuousPaintTime >= FRAME_INTERVAL) {
+                eventLoop.continuousPaint(interpreter.get());
+                lastContinuousPaintTime = now;
+            }
+
             TimerManager::getInstance().tick(interpreter.get());
 
             if (j2me::core::Logger::getInstance().getLevel() == j2me::core::LogLevel::DEBUG) {
@@ -538,8 +543,16 @@ void J2MEVM::vmLoop() {
                 // Execute a batch of instructions
                 // 每批 20000 条指令提供良好的粒度
                 // 20000 instructions per batch provides good granularity
-                interpreter->execute(thread, 5000); 
+                interpreter->execute(thread, 5000);
             } else {
+                static int noThreadCount = 0;
+                static int64_t lastLogTime = 0;
+                auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::steady_clock::now().time_since_epoch()).count();
+                if (now - lastLogTime >= 1000) {  // Log every 1 second
+                    LOG_INFO("[vmLoop] No threads to run (total count: " + std::to_string(++noThreadCount) + ")");
+                    lastLogTime = now;
+                }
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
             }
             ThreadManager::getInstance().removeFinishedThreads();

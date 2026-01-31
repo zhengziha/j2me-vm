@@ -60,12 +60,12 @@ static int mapKey(SDL_Keycode key) {
         case SDLK_RIGHT: return -4;
         case SDLK_RETURN: return -5;
         case SDLK_SPACE: return -5;
-     
+
         case SDLK_0: return 48;
         case SDLK_1: return 49;
         case SDLK_2: return 50;
         case SDLK_3: return 51;
-        case SDLK_4: return 52; 
+        case SDLK_4: return 52;
         case SDLK_5: return 53;
         case SDLK_6: return 54;
         case SDLK_7: return 55;
@@ -84,7 +84,7 @@ static int mapKey(SDL_Keycode key) {
         case SDLK_F1: return -6;// Soft 1 (Left Soft)
         case SDLK_F2: return -7;// Soft 2 (Right Soft)
 #endif
-        case SDLK_8: return 42; // STAR
+//        case SDLK_8: return 42; // STAR
         default: return 0;
     }
 }
@@ -113,7 +113,7 @@ void EventLoop::pollSDL() {
         } else if (e.type == SDL_KEYDOWN) {
                 keyCode = mapKey(e.key.keysym.sym);
 #endif
-            LOG_INFO("keyCode: " + std::to_string(keyCode));
+            // LOG_INFO("keyCode: " + std::to_string(keyCode));
             if (keyCode != 0) {
                 std::lock_guard<std::mutex> lock(queueMutex);
                 eventQueue.push({KeyEvent::PRESSED, keyCode});
@@ -132,7 +132,7 @@ void EventLoop::pollSDL() {
         } else if (e.type == SDL_KEYUP) {
                 keyCode = mapKey(e.key.keysym.sym);
 #endif
-            LOG_INFO("keyCode: " + std::to_string(keyCode));
+            // LOG_INFO("keyCode: " + std::to_string(keyCode));
             if (keyCode != 0) {
                 std::lock_guard<std::mutex> lock(queueMutex);
                 eventQueue.push({KeyEvent::RELEASED, keyCode});
@@ -164,9 +164,6 @@ void EventLoop::pollSDL() {
             autoKeyEvents.erase(autoKeyEvents.begin());
         }
     }
-
-    // update() 移除 - 现在在 checkPaintFinished() 和 vmLoop() 中单独调用
-    // update() removed - now called separately in checkPaintFinished() and vmLoop()
 }
 
 void EventLoop::scheduleAutoKeys(const std::vector<int>& keyCodes, int64_t startDelayMs, int64_t keyPressMs, int64_t betweenKeysMs) {
@@ -268,138 +265,108 @@ void EventLoop::dispatchEvents(Interpreter* interpreter) {
     }
 }
 
-void EventLoop::render(Interpreter* interpreter) {
-    j2me::core::JavaObject* displayable = j2me::natives::getCurrentDisplayable();
-    
-    if (displayable) {
-        static std::shared_ptr<j2me::core::JavaClass> graphicsCls;
-        if (!graphicsCls) {
-            graphicsCls = interpreter->resolveClass("javax/microedition/lcdui/Graphics");
-        }
-        
-        if (graphicsCls) {
-            // 分配 Graphics 对象
-            // Allocate Graphics object
-            j2me::core::JavaObject* g = j2me::core::HeapManager::getInstance().allocate(graphicsCls);
-            
-            // 初始化 Graphics 对象字段 (Clip, Color)
-            // Initialize Graphics object fields
-            j2me::platform::GraphicsContext& gc = j2me::platform::GraphicsContext::getInstance();
-            gc.resetClip(); // 重置 SDL 裁剪区域
-            
-            int w = gc.getWidth();
-            int h = gc.getHeight();
-            
-            auto setIntField = [&](const std::string& name, int val) {
-                 auto it = graphicsCls->fieldOffsets.find(name + "|I");
-                 if (it == graphicsCls->fieldOffsets.end()) it = graphicsCls->fieldOffsets.find(name);
-                 if (it != graphicsCls->fieldOffsets.end()) {
-                     g->fields[it->second] = val;
-                 }
-            };
-            
-            setIntField("clipX", 0);
-            setIntField("clipY", 0);
-            setIntField("clipWidth", w);
-            setIntField("clipHeight", h);
-            setIntField("color", 0); // Black
-            
-            // 查找 paint 方法
-            // Find paint method
-            auto currentCls = displayable->cls;
-            while (currentCls) {
-                bool found = false;
-                for (const auto& method : currentCls->rawFile->methods) {
-                    auto name = std::dynamic_pointer_cast<j2me::core::ConstantUtf8>(currentCls->rawFile->constant_pool[method.name_index]);
-                    if (name->bytes == "paint") {
-                        // std::cout << "[EventLoop] Invoking paint() for class " << currentCls->name << std::endl;
-                        auto frame = std::make_shared<j2me::core::StackFrame>(method, currentCls->rawFile);
-                        
-                        // 压入 'this' (Canvas)
-                        // Push 'this' (Canvas)
-                        j2me::core::JavaValue vThis; vThis.type = j2me::core::JavaValue::REFERENCE; vThis.val.ref = displayable;
-                        frame->setLocal(0, vThis);
-                        
-                        // 压入 'Graphics'
-                        // Push 'Graphics'
-                        j2me::core::JavaValue vG; vG.type = j2me::core::JavaValue::REFERENCE; vG.val.ref = g;
-                        frame->setLocal(1, vG);
-                        
-                        // 检查是否已经在绘制
-                        // Check if already painting
-                        if (!paintingThread.expired()) {
-                            auto ptr = paintingThread.lock();
-                            if (ptr && !ptr->isFinished()) {
-                                // 已经在绘制，跳过
-                                // Already painting, skip
-                                found = true;
-                                break;
-                            }
-                        }
+// J2ME 规范：处理重绘请求
+// Process repaint requests according to J2ME specification
+void EventLoop::processRepaints(Interpreter* interpreter) {
+    using namespace j2me::natives;
 
-                        // 启动绘制线程
-                        // 注意：不清空后缓冲，让 paint() 自己负责清空
-                        // Do not clear back buffer here, let paint() handle clearing
-                        // j2me::platform::GraphicsContext::getInstance().beginFrame();
-                        lastPaintCommittedDrawCount = j2me::platform::GraphicsContext::getInstance().getDrawCount();
-                        lastPaintPartialCommitMs = 0;
-                        auto thread = std::make_shared<JavaThread>(frame);
-                        paintingThread = thread;
-                        isPainting = true;
-                        ThreadManager::getInstance().addThread(thread);
+    RepaintRequest& request = getRepaintRequest();
+    if (!request.pending) return;
 
-                        found = true;
-                        break;
-                    }
-                }
-                if (found) break;
-                currentCls = currentCls->superClass;
-            }
-        }
-    }
-}
+    LOG_DEBUG("[EventLoop] Processing repaint request, pending=true");
 
-void EventLoop::checkPaintFinished() {
-    auto& gc = j2me::platform::GraphicsContext::getInstance();
-    if (isPainting) {
-        if (paintingThread.expired()) {
-            // 线程已销毁，意味着绘制完成
-            // Thread destroyed, meaning paint finished
-            gc.commit();
-            // update() 现在由 vmLoop 在 checkPaintFinished() 之后调用
-            // update() is now called by vmLoop after checkPaintFinished()
-            j2me::core::Diagnostics::getInstance().onPaintCommit();
-            isPainting = false;
-        } else {
-            auto ptr = paintingThread.lock();
-            if (ptr && ptr->isFinished()) {
-                // 线程存在但已完成
-                // Thread exists but finished
-                gc.commit();
-                // update() 现在由 vmLoop 在 checkPaintFinished() 之后调用
-                // update() is now called by vmLoop after checkPaintFinished()
-                j2me::core::Diagnostics::getInstance().onPaintCommit();
-                isPainting = false;
-            } else if (ptr && !ptr->isFinished()) {
-                uint64_t drawCount = gc.getDrawCount();
-                int64_t nowMs = gc.getNowMs();
-                if (lastPaintPartialCommitMs == 0) lastPaintPartialCommitMs = nowMs;
-                int64_t lastDrawMs = gc.getLastDrawMs();
-                if (drawCount > lastPaintCommittedDrawCount && ((nowMs - lastDrawMs) >= 12 || (nowMs - lastPaintPartialCommitMs) >= 200)) {
-                    gc.commit();
-                    // update() 现在由 vmLoop 在 checkPaintFinished() 之后调用
-                    // update() is now called by vmLoop after checkPaintFinished()
-                    j2me::core::Diagnostics::getInstance().onPaintCommit();
-                    lastPaintCommittedDrawCount = drawCount;
-                    lastPaintPartialCommitMs = nowMs;
-                }
-            }
-        }
-    }
-}
+    // 调用 serviceRepaints 执行重绘
+    serviceRepaints(interpreter);
 
-void EventLoop::updateDisplay() {
+    // 重绘完成后更新显示
     j2me::platform::GraphicsContext::getInstance().update();
+
+    LOG_DEBUG("[EventLoop] Repaint completed");
+}
+
+// 连续渲染：支持依赖此行为的游戏
+// Continuous rendering: Support games that depend on this behavior
+void EventLoop::continuousPaint(Interpreter* interpreter) {
+    using namespace j2me::natives;
+
+    j2me::core::JavaObject* displayable = getCurrentDisplayable();
+    if (!displayable || !displayable->cls) return;
+
+    // 检查是否有显式的 repaint 请求 (由游戏调用 repaint() 触发)
+    // Check if there's an explicit repaint request (triggered by game calling repaint())
+    RepaintRequest& request = getRepaintRequest();
+
+    // 如果有显式请求，让 processRepaints 处理，避免重复绘制
+    // If there's an explicit request, let processRepaints handle it to avoid duplicate painting
+    if (request.pending) return;
+
+    // 没有显式请求时，提供连续渲染支持
+    // When there's no explicit request, provide continuous rendering support
+    static std::shared_ptr<j2me::core::JavaClass> graphicsCls;
+    if (!graphicsCls) {
+        graphicsCls = interpreter->resolveClass("javax/microedition/lcdui/Graphics");
+    }
+
+    if (graphicsCls) {
+        auto& gc = j2me::platform::GraphicsContext::getInstance();
+        gc.beginFrame(); // 清空后缓冲区 / Clear back buffer
+
+        // 分配 Graphics 对象 / Allocate Graphics object
+        j2me::core::JavaObject* g = j2me::core::HeapManager::getInstance().allocate(graphicsCls);
+
+        // 初始化 Graphics 对象字段 / Initialize Graphics object fields
+        gc.resetClip();
+        int w = gc.getWidth();
+        int h = gc.getHeight();
+
+        auto setIntField = [&](const std::string& name, int val) {
+            auto it = graphicsCls->fieldOffsets.find(name + "|I");
+            if (it == graphicsCls->fieldOffsets.end()) it = graphicsCls->fieldOffsets.find(name);
+            if (it != graphicsCls->fieldOffsets.end()) {
+                g->fields[it->second] = val;
+            }
+        };
+
+        setIntField("clipX", 0);
+        setIntField("clipY", 0);
+        setIntField("clipWidth", w);
+        setIntField("clipHeight", h);
+        setIntField("color", 0); // Black
+
+        // 查找并调用 paint 方法 / Find and call paint method
+        auto currentCls = displayable->cls;
+        bool paintFound = false;
+        while (currentCls) {
+            for (const auto& method : currentCls->rawFile->methods) {
+                auto name = std::dynamic_pointer_cast<j2me::core::ConstantUtf8>(currentCls->rawFile->constant_pool[method.name_index]);
+                if (name->bytes == "paint") {
+                    auto frame = std::make_shared<j2me::core::StackFrame>(method, currentCls->rawFile);
+
+                    j2me::core::JavaValue vThis;
+                    vThis.type = j2me::core::JavaValue::REFERENCE;
+                    vThis.val.ref = displayable;
+                    frame->setLocal(0, vThis);
+
+                    j2me::core::JavaValue vG;
+                    vG.type = j2me::core::JavaValue::REFERENCE;
+                    vG.val.ref = g;
+                    frame->setLocal(1, vG);
+
+                    // 执行 paint 方法 / Execute paint method
+                    auto paintThread = std::make_shared<core::JavaThread>(frame);
+                    interpreter->execute(paintThread, 100000);
+                    paintFound = true;
+                    break;
+                }
+            }
+            if (paintFound) break;
+            currentCls = currentCls->superClass;
+        }
+
+        // paint 完成后提交并显示 / Commit and update after paint completes
+        gc.commit();
+        gc.update();
+    }
 }
 
 } // namespace core

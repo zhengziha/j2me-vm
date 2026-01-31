@@ -40,20 +40,20 @@ void registerPrintStreamNatives(j2me::core::NativeRegistry& registry) {
         [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             j2me::core::JavaValue strVal = frame->pop();
             frame->pop(); // this
-            
+            // 这里是java层的输出，不应该使用Logger，应该使用std::cout
             if (strVal.type == j2me::core::JavaValue::REFERENCE) {
                 if (!strVal.strVal.empty()) {
-                    LOG_INFO(strVal.strVal);
+                    std::cout << strVal.strVal << std::endl;
                 } else if (strVal.val.ref != nullptr) {
                     auto strObj = static_cast<j2me::core::JavaObject*>(strVal.val.ref);
                     if (strObj && strObj->cls) {
                         std::string str = getJavaString(strObj);
-                        LOG_INFO(str);
+                        std::cout << str << std::endl;
                     } else {
-                        LOG_INFO("[String object]");
+                        std::cout << "[String object]" << std::endl;
                     }
                 } else {
-                    LOG_INFO("null");
+                    std::cout << "null" << std::endl;
                 }
             }
         }

@@ -4,8 +4,8 @@
 #include "../core/HeapManager.hpp"
 #include "../core/Interpreter.hpp"
 #include "../core/Diagnostics.hpp"
+#include "../core/Logger.hpp"
 #include "NativeInputStream.hpp"
-#include <iostream>
 #include <string>
 
 namespace j2me {
@@ -30,13 +30,13 @@ void registerResourceInputStreamNatives(j2me::core::NativeRegistry& registry) {
                     if (stream) {
                         result.val.i = stream->read();
                     } else {
-                        std::cout << "[ResourceInputStream.nativeRead()I] ERROR - stream not found for id: " << streamId << std::endl;
+                        LOG_ERROR("[ResourceInputStream.nativeRead()I] ERROR - stream not found for id: " + std::to_string(streamId));
                     }
                 } else {
-                    std::cout << "[ResourceInputStream.nativeRead()I] ERROR - streamObj has no fields" << std::endl;
+                    LOG_ERROR("[ResourceInputStream.nativeRead()I] ERROR - streamObj has no fields");
                 }
             } else {
-                std::cout << "[ResourceInputStream.nativeRead()I] ERROR - Invalid this object" << std::endl;
+                LOG_ERROR("[ResourceInputStream.nativeRead()I] ERROR - Invalid this object");
             }
             
             frame->push(result);
@@ -71,7 +71,7 @@ void registerResourceInputStreamNatives(j2me::core::NativeRegistry& registry) {
 
                     if (stream && arrayObj != nullptr) {
                         if (off < 0 || len < 0 || off + len > (int)arrayLen) {
-                            std::cout << "[ResourceInputStream.nativeRead([BII)I] ERROR - Invalid parameters: off: " << off << " len: " << len << " arrayLen: " << arrayLen << std::endl;
+                            std::stringstream ss; ss << "[ResourceInputStream.nativeRead([BII)I] ERROR - Invalid parameters: off: " << off << " len: " << len << " arrayLen: " << arrayLen; LOG_ERROR(ss.str().c_str());
                         } else if (len == 0) {
                             result.val.i = 0;
                         } else {
@@ -86,13 +86,13 @@ void registerResourceInputStreamNatives(j2me::core::NativeRegistry& registry) {
                             }
                         }
                     } else {
-                        std::cout << "[ResourceInputStream.nativeRead([BII)I] ERROR - stream or array object not found" << std::endl;
+                        LOG_ERROR("[ResourceInputStream.nativeRead([BII)I] ERROR - stream or array object not found");
                     }
                 } else {
-                    std::cout << "[ResourceInputStream.nativeRead([BII)I] ERROR - streamObj has no fields" << std::endl;
+                    LOG_ERROR("[ResourceInputStream.nativeRead([BII)I] ERROR - streamObj has no fields");
                 }
             } else {
-                std::cout << "[ResourceInputStream.nativeRead([BII)I] ERROR - Invalid this or array object" << std::endl;
+                LOG_ERROR("[ResourceInputStream.nativeRead([BII)I] ERROR - Invalid this or array object");
             }
             
             frame->push(result);
@@ -118,13 +118,13 @@ void registerResourceInputStreamNatives(j2me::core::NativeRegistry& registry) {
                     if (stream) {
                         result.val.l = stream->skip(n);
                     } else {
-                        std::cout << "[ResourceInputStream.nativeSkip(J)J] ERROR - stream not found for id: " << streamId << std::endl;
+                        LOG_ERROR("[ResourceInputStream.nativeSkip(J)J] ERROR - stream not found for id: " + std::to_string(streamId));
                     }
                 } else {
-                    std::cout << "[ResourceInputStream.nativeSkip(J)J] ERROR - streamObj has no fields" << std::endl;
+                    LOG_ERROR("[ResourceInputStream.nativeSkip(J)J] ERROR - streamObj has no fields");
                 }
             } else {
-                std::cout << "[ResourceInputStream.nativeSkip(J)J] ERROR - Invalid this object" << std::endl;
+                LOG_ERROR("[ResourceInputStream.nativeSkip(J)J] ERROR - Invalid this object");
             }
             
             frame->push(result);
@@ -146,13 +146,13 @@ void registerResourceInputStreamNatives(j2me::core::NativeRegistry& registry) {
                     if (stream) {
                         stream->mark(readlimit);
                     } else {
-                        std::cout << "[ResourceInputStream.nativeMark(I)V] ERROR - stream not found for id: " << streamId << std::endl;
+                        LOG_ERROR("[ResourceInputStream.nativeMark(I)V] ERROR - stream not found for id: " + std::to_string(streamId));
                     }
                 } else {
-                    std::cout << "[ResourceInputStream.nativeMark(I)V] ERROR - streamObj has no fields" << std::endl;
+                    LOG_ERROR("[ResourceInputStream.nativeMark(I)V] ERROR - streamObj has no fields");
                 }
             } else {
-                std::cout << "[ResourceInputStream.nativeMark(I)V] ERROR - Invalid this object" << std::endl;
+                LOG_ERROR("[ResourceInputStream.nativeMark(I)V] ERROR - Invalid this object");
             }
         }
     );
@@ -171,13 +171,13 @@ void registerResourceInputStreamNatives(j2me::core::NativeRegistry& registry) {
                     if (stream) {
                         stream->reset();
                     } else {
-                        std::cout << "[ResourceInputStream.nativeReset()V] ERROR - stream not found for id: " << streamId << std::endl;
+                        LOG_ERROR("[ResourceInputStream.nativeReset()V] ERROR - stream not found for id: " + std::to_string(streamId));
                     }
                 } else {
-                    std::cout << "[ResourceInputStream.nativeReset()V] ERROR - streamObj has no fields" << std::endl;
+                    LOG_ERROR("[ResourceInputStream.nativeReset()V] ERROR - streamObj has no fields");
                 }
             } else {
-                std::cout << "[ResourceInputStream.nativeReset()V] ERROR - Invalid this object" << std::endl;
+                LOG_ERROR("[ResourceInputStream.nativeReset()V] ERROR - Invalid this object");
             }
         }
     );
@@ -193,10 +193,10 @@ void registerResourceInputStreamNatives(j2me::core::NativeRegistry& registry) {
                     int streamId = (int)streamObj->fields[1];
                     j2me::core::HeapManager::getInstance().removeStream(streamId);
                 } else {
-                    std::cout << "[ResourceInputStream.nativeClose()V] ERROR - streamObj has no fields" << std::endl;
+                    LOG_ERROR("[ResourceInputStream.nativeClose()V] ERROR - streamObj has no fields");
                 }
             } else {
-                std::cout << "[ResourceInputStream.nativeClose()V] ERROR - Invalid this object" << std::endl;
+                LOG_ERROR("[ResourceInputStream.nativeClose()V] ERROR - Invalid this object");
             }
         }
     );

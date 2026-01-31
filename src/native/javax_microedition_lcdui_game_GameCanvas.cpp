@@ -6,6 +6,7 @@
 #include "../core/EventLoop.hpp"
 #include "../core/StackFrame.hpp"
 #include "../core/Diagnostics.hpp"
+#include "../core/Logger.hpp"
 #include <iostream>
 #include <SDL2/SDL.h>
 
@@ -28,7 +29,7 @@ void registerGameCanvasNatives(j2me::core::NativeRegistry& registry) {
     );
 
     // javax/microedition/lcdui/game/GameCanvas.flushGraphicsNative(Ljavax/microedition/lcdui/Image;IIII)V
-    registry.registerNative("javax/microedition/lcdui/game/GameCanvas", "flushGraphicsNative", "(Ljavax/microedition/lcdui/Image;IIII)V", 
+    registry.registerNative("javax/microedition/lcdui/game/GameCanvas", "flushGraphicsNative", "(Ljavax/microedition/lcdui/Image;IIII)V",
         [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
             int h = frame->pop().val.i;
             int w = frame->pop().val.i;
@@ -38,7 +39,7 @@ void registerGameCanvasNatives(j2me::core::NativeRegistry& registry) {
             frame->pop(); // this
 
             j2me::core::Diagnostics::getInstance().onGameCanvasFlush();
-            
+
             if (imgVal.val.ref != nullptr) {
                 j2me::core::JavaObject* imgObj = (j2me::core::JavaObject*)imgVal.val.ref;
                 if (imgObj->fields.size() > 0) {
@@ -46,36 +47,12 @@ void registerGameCanvasNatives(j2me::core::NativeRegistry& registry) {
                      auto it = imageMap.find(imgId);
                      if (it != imageMap.end()) {
                          SDL_Surface* srcSurface = it->second;
-                         
-                         // Draw srcSurface to Screen
-                         // Note: x, y, w, h are region on SCREEN to update?
-                         // Or source region?
-                         // MIDP docs: flushGraphics(x, y, width, height) flushes the specified region of the offscreen buffer to the display.
-                         // It means: copy rect (x,y,w,h) from offscreen to (x,y) on screen.
-                         
-                         // We assume offscreen buffer is same size as screen (or handled by GraphicsContext).
-                         // GraphicsContext::drawImage usually draws the whole image at (x,y).
-                         // But here we want to blit a region.
-                         
-                         // Since our GraphicsContext::drawImage is simple (whole image), let's use it for now if x=0, y=0.
-                         // But for partial updates, we might need a better API.
-                         // However, SDL_BlitSurface supports source and dest rects.
-                         // GraphicsContext doesn't expose BlitSurface directly.
-                         // But we can add a method or just rely on drawImage for now.
-                         
-                         // Let's modify GraphicsContext to support drawing parts or just draw the whole thing if typically used for double buffering.
-                         // Usually GameCanvas is full screen.
-                         
-                         // Debug log
-                         static int frameCount = 0;
-                         if (frameCount++ % 60 == 0) {
-                             // std::cout << "[GameCanvas] flushGraphicsNative called" << std::endl;
-                         }
-                         
+
                          // Use drawRegion to support partial flush
                          // flushGraphics(x, y, w, h) copies region (x,y,w,h) from buffer to screen at (x,y)
                          j2me::platform::GraphicsContext::getInstance().drawRegion(srcSurface, x, y, w, h, 0, x, y, 20); // TOP|LEFT = 20
                          j2me::platform::GraphicsContext::getInstance().commit();
+                         j2me::platform::GraphicsContext::getInstance().update();
 
                      }
                 }

@@ -37,6 +37,11 @@ public class ResourceInputStream extends InputStream {
         if (len <= 0) {
             return 0;
         }
+        // 只读取实际可用的数据量
+        int available = count - pos;
+        if (len > available) {
+            len = available;
+        }
         int bytesRead = nativeRead(b, off, len);
         if (bytesRead > 0) {
             pos += bytesRead;
@@ -84,7 +89,7 @@ public class ResourceInputStream extends InputStream {
         return true;
     }
 
-    // Native methods for using NativeInputStream
+    // Native methods for accessing underlying resources
     private native int nativeRead();
     private native int nativeRead(byte b[], int off, int len);
     private native long nativeSkip(long n);

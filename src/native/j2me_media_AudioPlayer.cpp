@@ -89,7 +89,7 @@ void registerAudioPlayerNatives(j2me::core::NativeRegistry& registry) {
     // j2me/media/AudioPlayer.nativeStart()V
     registry.registerNative("j2me/media/AudioPlayer", "nativeStart", "()V",
         [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
-            std::cout << "[AudioPlayer] nativeStart called" << std::endl;
+            LOG_INFO("[AudioPlayer] nativeStart called");
             
             // 示例：播放一个简单的正弦波声音
             // 实际应用中，应该从音频文件或流中读取数据
@@ -123,16 +123,18 @@ void registerAudioPlayerNatives(j2me::core::NativeRegistry& registry) {
     // j2me/media/AudioPlayer.nativeStop()V
     registry.registerNative("j2me/media/AudioPlayer", "nativeStop", "()V",
         [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
-            std::cout << "[AudioPlayer] nativeStop called" << std::endl;
-            j2me::core::AudioManager::getInstance().stopAudio();
+            LOG_INFO("[AudioPlayer] nativeStop called");
+            j2me::core::SoundManager::getInstance().stopAllSFX();
+            j2me::core::SoundManager::getInstance().stopBGM();
         }
     );
 
     // j2me/media/AudioPlayer.nativeClose()V
     registry.registerNative("j2me/media/AudioPlayer", "nativeClose", "()V",
         [](std::shared_ptr<j2me::core::JavaThread> thread, std::shared_ptr<j2me::core::StackFrame> frame) {
-            std::cout << "[AudioPlayer] nativeClose called" << std::endl;
-            j2me::core::AudioManager::getInstance().stopAudio();
+            LOG_INFO("[AudioPlayer] nativeClose called");
+            j2me::core::SoundManager::getInstance().stopAllSFX();
+            j2me::core::SoundManager::getInstance().stopBGM();
         }
     );
 }
@@ -144,10 +146,10 @@ void registerAudioVolumeControlNatives(j2me::core::NativeRegistry& registry) {
             auto volumeValue = frame->pop();
             int volume = volumeValue.val.i;
             
-            std::cout << "[AudioVolumeControl] nativeSetVolume called with volume: " << volume << std::endl;
+            std::stringstream ss; ss << "[AudioVolumeControl] nativeSetVolume called with volume: " << volume; LOG_INFO(ss.str().c_str());
             
             // 设置音量
-            j2me::core::AudioManager::getInstance().setVolume(volume);
+            j2me::core::SoundManager::getInstance().setMasterVolume(volume);
         }
     );
 }

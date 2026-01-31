@@ -54,7 +54,8 @@ public class PrintStream extends OutputStream {
     }
 
     public void println(String x) {
-        printlnNative(x == null ? "null" : x);
+        print(x == null ? "null" : x);
+        println();
     }
 
     public void println(Object x) {
@@ -77,5 +78,4 @@ public class PrintStream extends OutputStream {
     }
     
     private native void printNative(String s);
-    private native void printlnNative(String s);
 }

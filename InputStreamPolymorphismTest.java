@@ -1,0 +1,1 @@
+import java.io.*; public class InputStreamPolymorphismTest { public static void main(String[] args) { System.out.println("Test start"); System.out.println("Hello world"); System.out.println("Test end"); } }

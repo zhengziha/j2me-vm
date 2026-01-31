@@ -13,6 +13,12 @@ if(NOT SDL2_TTF_LIB)
     message(FATAL_ERROR "SDL2_ttf not found!")
 endif()
 
+# Find SDL2_mixer
+find_library(SDL2_MIXER_LIB SDL2_mixer)
+if(NOT SDL2_MIXER_LIB)
+    message(FATAL_ERROR "SDL2_mixer not found!")
+endif()
+
 # Find libzip
 find_package(libzip REQUIRED)
 

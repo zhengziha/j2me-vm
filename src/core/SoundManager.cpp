@@ -185,6 +185,11 @@ bool BGMPlayer::getAudioData(uint8_t* stream, int len) {
         int bytesToCopy = std::min(len, bytesAvailable);
 
         if (bytesToCopy > 0) {
+            // 检查数据边界
+            if (position + bytesToCopy > currentBGM.data.size()) {
+                bytesToCopy = currentBGM.data.size() - position;
+            }
+            
             std::memcpy(stream, currentBGM.data.data() + position, bytesToCopy);
             position += bytesToCopy;
 
@@ -348,6 +353,14 @@ bool SoundManager::init() {
         return true;
     }
 
+    // 初始化 SDL 音频子系统
+    if (SDL_InitSubSystem(SDL_INIT_AUDIO) < 0) {
+        std::stringstream ss;
+        ss << "Failed to initialize SDL audio: " << SDL_GetError();
+        LOG_ERROR(ss.str().c_str());
+        return false;
+    }
+
     // 设置音频格式
     SDL_AudioSpec desiredSpec;
     SDL_zero(desiredSpec);
@@ -364,6 +377,7 @@ bool SoundManager::init() {
         std::stringstream ss;
         ss << "Failed to open audio device: " << SDL_GetError();
         LOG_ERROR(ss.str().c_str());
+        SDL_QuitSubSystem(SDL_INIT_AUDIO);
         return false;
     }
 
@@ -387,6 +401,9 @@ void SoundManager::shutdown() {
         SDL_CloseAudioDevice(audioDevice);
         audioDevice = 0;
     }
+
+    // 清理 SDL 音频子系统
+    SDL_QuitSubSystem(SDL_INIT_AUDIO);
 
     clearCache();
 
@@ -617,6 +634,7 @@ const uint8_t* WAVLoader::findChunk(const uint8_t* data, size_t size, const char
 
 bool WAVLoader::parse(const std::vector<uint8_t>& wavData, AudioResource& resource) {
     if (wavData.size() < sizeof(WAVHeader)) {
+        LOG_ERROR("WAV file too small: missing header");
         return false;
     }
 
@@ -645,6 +663,13 @@ bool WAVLoader::parse(const std::vector<uint8_t>& wavData, AudioResource& resour
 
     if (!dataStart) {
         LOG_ERROR("No data chunk found in WAV file");
+        return false;
+    }
+
+    // 检查数据边界
+    size_t dataEnd = (dataStart - wavData.data()) + dataSize;
+    if (dataEnd > wavData.size()) {
+        LOG_ERROR("WAV data chunk exceeds file size");
         return false;
     }
 

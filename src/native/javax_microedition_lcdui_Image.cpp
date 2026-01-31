@@ -248,7 +248,7 @@ void registerImageNatives(j2me::core::NativeRegistry& registry) {
                 
                 // Validate array size
                 if (rgbArray->fields.size() < (size_t)(width * height)) {
-                     LOG_ERROR("ArrayIndexOutOfBoundsException in createRGBImageNative");
+                     LOG_ERROR("[Image] ArrayIndexOutOfBoundsException in createRGBImageNative");
                      frame->push(result);
                      return;
                 }
@@ -355,7 +355,7 @@ void registerImageNatives(j2me::core::NativeRegistry& registry) {
                 
                 // Validate bounds
                 if (offset < 0 || length < 0 || offset + length > (int)dataObj->fields.size()) {
-                     LOG_ERROR("IndexOutOfBoundsException in createImageFromData");
+                     LOG_ERROR("[Image] IndexOutOfBoundsException in createImageFromData");
                      frame->push(result);
                      return;
                 }
@@ -408,12 +408,12 @@ void registerImageNatives(j2me::core::NativeRegistry& registry) {
                         result.val.i = imgId;
                         LOG_DEBUG("[Image] Created Immutable Image (from data), ID: " + std::to_string(imgId) + " Size: " + std::to_string(w) + "x" + std::to_string(h));
                     } else {
-                         LOG_ERROR("Failed to create SDL surface: " + std::string(SDL_GetError()));
+                         LOG_ERROR("[Image] Failed to create SDL surface: " + std::string(SDL_GetError()));
                     }
                     
                     stbi_image_free(pixels);
                 } else {
-                    LOG_ERROR("Failed to decode image data");
+                    LOG_ERROR("[Image] Failed to decode image data");
                     std::string headerHex;
                     for (int i = 0; i < std::min(16, length); i++) {
                         char buf[8];
@@ -423,7 +423,7 @@ void registerImageNatives(j2me::core::NativeRegistry& registry) {
                     j2me::core::Diagnostics::getInstance().onImageDecodeFailed("<data>", headerHex);
                 }
             } else {
-                 LOG_ERROR("NullPointerException in createImageFromData");
+                 LOG_ERROR("[Image] NullPointerException in createImageFromData");
             }
             frame->push(result);
         }

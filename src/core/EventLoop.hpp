@@ -32,20 +32,19 @@ public:
 
     // Called by Main Thread
     // 由主线程调用: 轮询 SDL 事件并将按键事件放入队列
-    void pollSDL(); 
-    
+    void pollSDL();
+
     // Called by VM Thread
     // 由虚拟机线程调用: 分发事件到 Java 层 (调用 keyPressed/keyReleased)
     void dispatchEvents(Interpreter* interpreter);
-    
-    // 渲染画面 (调用当前 Displayable 的 paint 方法)
-    void render(Interpreter* interpreter);
-    
-    // 检查绘制线程是否完成，并提交帧缓冲区
-    void checkPaintFinished();
 
-    // 更新显示（将前缓冲区内容显示到屏幕）
-    void updateDisplay();
+    // 处理重绘请求 (J2ME 规范)
+    // Process repaint requests (J2ME specification)
+    void processRepaints(Interpreter* interpreter);
+
+    // 连续渲染：定期调用 paint (支持依赖此行为的游戏)
+    // Continuous rendering: Call paint periodically (for games that depend on this behavior)
+    void continuousPaint(Interpreter* interpreter);
 
     void requestExit(const std::string& reason);
     std::string getExitReason() const;
@@ -54,7 +53,7 @@ public:
 
     // 检查是否收到退出请求
     bool shouldExit() const { return quit; }
-    
+
     // 获取当前按键状态位掩码 (用于 GameCanvas)
     int getKeyStates() const { return keyStates; }
 
@@ -64,11 +63,11 @@ public:
         getInstance().dispatchEvents(interpreter);
     }
     static void renderStatic(Interpreter* interpreter) {
-        getInstance().render(interpreter);
+        getInstance().processRepaints(interpreter);
     }
     static void runSingleStep(Interpreter* interpreter) {
         getInstance().dispatchEvents(interpreter);
-        getInstance().render(interpreter);
+        getInstance().processRepaints(interpreter);
     }
 
 private:
@@ -86,13 +85,6 @@ private:
     mutable std::mutex exitMutex;
     std::string exitReason;
     std::vector<AutoKeyEvent> autoKeyEvents;
-    
-    // Track current painting thread to avoid flooding
-    // 跟踪当前的绘制线程，避免绘制请求堆积
-    std::weak_ptr<JavaThread> paintingThread;
-    bool isPainting = false; // 是否正在绘制中
-    uint64_t lastPaintCommittedDrawCount = 0;
-    int64_t lastPaintPartialCommitMs = 0;
 };
 
 } // namespace core

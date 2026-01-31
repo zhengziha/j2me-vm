@@ -50,3 +50,6 @@ cmake-build-debug
 *.bmp
 temp_pal/
 temp_manifest/
+midi*
+*.mid
+stubs_build/

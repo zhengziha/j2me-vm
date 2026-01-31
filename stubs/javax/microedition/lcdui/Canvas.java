@@ -57,13 +57,16 @@ public abstract class Canvas extends Displayable {
     }
 
     public final void repaint(int x, int y, int width, int height) {
-        // In a real VM, this would schedule a paint event
-        // For now, we can perhaps just call paint directly or rely on the VM loop to call it
+        repaintNative(x, y, width, height);
     }
 
+    private native void repaintNative(int x, int y, int width, int height);
+
     public final void serviceRepaints() {
-        // Blocks until all pending repaints are done
+        serviceRepaintsNative();
     }
+
+    private native void serviceRepaintsNative();
 
     public void setFullScreenMode(boolean mode) {
     }
