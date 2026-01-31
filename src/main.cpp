@@ -225,6 +225,7 @@ int main(int argc, char* argv[]) {
     config.logLevel = j2me::core::LogLevel::INFO;
 
 #ifdef __SWITCH__
+    config.logLevel = j2me::core::LogLevel::ERROR;
     LOG_INFO("Initializing romfs");
     romfsInit();
     LOG_INFO("Changing directory to romfs:/");

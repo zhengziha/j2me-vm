@@ -1,3 +1,3 @@
-@REM E:\devkitPro\msys2\usr\bin\bash.exe -c "cd /e/devkitPro/examples/j2me-vm && export DEVKITPRO=/e/devkitPro && export PATH=/e/devkitPro/devkitA64/bin:/e/devkitPro/portlibs/switch/bin:/e/devkitPro/msys2/usr/bin:\$PATH && make -f Makefile-ns clean && make -f Makefile-ns -B 2>&1 | tail -50"
+@REM E:\devkitPro\msys2\usr\bin\bash.exe -c "cd /e/devkitPro/examples/j2me-vm && export DEVKITPRO=/e/devkitPro && export PATH=/e/devkitPro/devkitA64/bin:/e/devkitPro/portlibs/switch/bin:/e/devkitPro/msys2/usr/bin:\$PATH && make -f Makefile-ns clean && make -f Makefile-ns 2>&1 | tail -50"
 
-E:\devkitPro\msys2\usr\bin\bash.exe -c "cd /e/devkitPro/examples/j2me-vm && export DEVKITPRO=/e/devkitPro && export PATH=/e/devkitPro/devkitA64/bin:/e/devkitPro/portlibs/switch/bin:/e/devkitPro/msys2/usr/bin:\$PATH && make -f Makefile-ns -B 2>&1 | tail -50"
+E:\devkitPro\msys2\usr\bin\bash.exe -c "cd /e/devkitPro/examples/j2me-vm && export DEVKITPRO=/e/devkitPro && export PATH=/e/devkitPro/devkitA64/bin:/e/devkitPro/portlibs/switch/bin:/e/devkitPro/msys2/usr/bin:\$PATH && make -f Makefile-ns 2>&1 | tail -50"
