@@ -7,7 +7,7 @@ LDFLAGS = -LE:/sdl2/lib -LD:\msys64\mingw64\lib
 LIBS = -lSDL2 -lSDL2_mixer -lSDL2_image -lSDL2_ttf -lz -lminizip -mconsole
 
 # Build directory
-BUILD_DIR = build
+BUILD_DIR = build-windows
 
 # Source files (explicit list)
 SOURCES = \
